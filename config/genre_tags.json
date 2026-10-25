@@ -1,0 +1,96 @@
+{
+  "рок": ["rusrock", "rock", "alternative", "punk", "folkrock", "hardrock", "postpunk", "posthardcore"],
+  "рока": ["rusrock", "rock", "alternative", "punk", "folkrock", "hardrock", "postpunk", "posthardcore"],
+  "року": ["rusrock", "rock", "alternative", "punk", "folkrock", "hardrock", "postpunk", "posthardcore"],
+  "русский рок": ["rusrock"],
+  "русского рока": ["rusrock"],
+  "русрок": ["rusrock"],
+  "роцк": ["rusrock"],
+  "зарубежный рок": ["rock"],
+
+  "метал": ["classicmetal", "epicmetal", "alternativemetal", "numetal", "metal", "folkmetal", "hardcore", "posthardcore"],
+  "металл": ["classicmetal", "epicmetal", "alternativemetal", "numetal", "metal", "folkmetal"],
+  "металла": ["classicmetal", "epicmetal", "alternativemetal", "numetal", "metal", "folkmetal"],
+  "тяжмет": ["classicmetal", "epicmetal", "alternativemetal", "numetal", "metal"],
+
+  "поп": ["pop", "ruspop", "dance"],
+  "попа": ["pop", "ruspop", "dance"],
+  "попу": ["pop", "ruspop", "dance"],
+  "попса": ["pop", "ruspop", "dance"],
+  "попсу": ["pop", "ruspop", "dance"],
+  "попсы": ["pop", "ruspop", "dance"],
+  "попсятина": ["pop", "ruspop", "dance"],
+  "попсятину": ["pop", "ruspop", "dance"],
+  "попсовое": ["pop", "ruspop", "dance"],
+  "поп музыка": ["pop", "ruspop"],
+  "поп-музыка": ["pop", "ruspop"],
+
+  "эстрада": ["rusestrada"],
+  "эстраду": ["rusestrada"],
+  "русская эстрада": ["rusestrada"],
+
+  "альтернатива": ["alternative", "alternativemetal", "local-indie"],
+  "альтернативу": ["alternative", "alternativemetal", "local-indie"],
+  "альт": ["alternative", "alternativemetal", "local-indie"],
+
+  "рэп": ["rap", "rusrap", "foreignrap"],
+  "рэпа": ["rap", "rusrap", "foreignrap"],
+  "реп": ["rap", "rusrap", "foreignrap"],
+  "рэпчик": ["rap", "rusrap"],
+  "хип-хоп": ["rap", "rusrap", "foreignrap"],
+  "хип хоп": ["rap", "rusrap", "foreignrap"],
+
+  "инди": ["indie", "local-indie"],
+  "инди рок": ["indie", "local-indie"],
+
+  "джаз": ["jazz", "soul"],
+  "джаза": ["jazz", "soul"],
+  "соул": ["soul"],
+  "блюз": ["jazz", "soul"],
+
+  "классика": ["classical", "newage"],
+  "классику": ["classical", "newage"],
+  "нью-эйдж": ["newage"],
+  "нью эйдж": ["newage"],
+
+  "фолк": ["folk", "folkrock", "folkmetal", "folkgenre", "latinfolk"],
+  "фолк рок": ["folkrock"],
+  "фолк-рок": ["folkrock"],
+
+  "шансон": ["shanson"],
+  "шансона": ["shanson"],
+  "блатняк": ["shanson"],
+
+  "ска": ["ska"],
+
+  "пост-рок": ["postpunk", "posthardcore"],
+  "пост рок": ["postpunk", "posthardcore"],
+  "построк": ["postpunk", "posthardcore"],
+  "пост-панк": ["postpunk"],
+  "пост панк": ["postpunk"],
+
+  "индастриал": ["industrial"],
+
+  "хардкор": ["hardcore", "posthardcore"],
+  "хард": ["hardcore", "posthardcore"],
+
+  "рнб": ["rnb"],
+  "ар-н-би": ["rnb"],
+  "фанк": ["funk"],
+
+  "регги": ["reggaeton", "latinfolk"],
+  "рэгги": ["reggaeton", "latinfolk"],
+  "латина": ["reggaeton", "latinfolk"],
+
+  "электроника": ["electronics", "edmgenre", "dance", "techno", "house", "trance", "dubstep"],
+  "электро": ["electronics", "edmgenre", "dance", "techno", "house", "trance"],
+  "хаус": ["house"],
+  "транс": ["trance"],
+  "техно": ["techno"],
+  "дабстеп": ["dubstep"],
+
+  "драм": ["dnb"],
+  "драм-н-бейс": ["dnb"],
+  "днб": ["dnb"],
+  "drum and bass": ["dnb"]
+}

@@ -1,0 +1,32 @@
+{
+  "радио ваня": {
+    "name": "Радио Ваня",
+    "url": "https://icecast-radiovanya.cdnvideo.ru/radiovanya",
+    "genre": "pop"
+  },
+  "русское радио": {
+    "name": "Русское Радио",
+    "url": "https://rusradio.hostingradio.ru/rusradio96.aacp",
+    "genre": "pop"
+  },
+  "европа плюс": {
+    "name": "Европа Плюс",
+    "url": "https://ep128.hostingradio.ru:8030/ep128",
+    "genre": "pop"
+  },
+  "energy": {
+    "name": "Radio Energy",
+    "url": "https://energy.hostingradio.ru/energy96.aacp",
+    "genre": "dance"
+  },
+  "авторадио": {
+    "name": "Авторадио",
+    "url": "https://avtoradio.hostingradio.ru/avtoradio96.aacp",
+    "genre": "pop"
+  },
+  "дорожное": {
+    "name": "Дорожное Радио",
+    "url": "https://dorognoe.hostingradio.ru:8000/radio",
+    "genre": "pop"
+  }
+}

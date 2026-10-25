@@ -1,0 +1,103 @@
+{
+  "BOOT_READY": [
+    {"text": "Макс на св+язи", "style": "formal", "pitch": "-10Hz", "night": false, "emotion": "neutral", "slot": "core"},
+    {"text": "Сист+ема актив+ирована. sil<[150]> Гот+ов к раб+оте", "style": "formal", "night": false, "emotion": "neutral", "slot": "core"},
+    {"text": "Все сист+емы в н+орме. sil<[150]> Сл+ушаю", "style": "formal", "night": false, "emotion": "neutral", "slot": "core"},
+    {"text": "Пит+ание есть sil<[50]> связь есть sil<[50]> Я гот+ов", "style": "normal", "night": false, "emotion": "good", "slot": "core"},
+    {"text": "Я в эф+ире. sil<[200]> Что на +этот раз?", "style": "ironic", "humor": 0.3, "rate": "+5%", "night": false, "emotion": "good", "slot": "core"},
+    {"text": "Просн+улся. sil<[200]> Након+ец-то", "style": "ironic", "humor": 0.4, "rate": "-5%", "night": false, "emotion": "good", "slot": "core"},
+    {"text": "Я сн+ова здесь", "style": "normal", "night": false, "emotion": "good", "slot": "core"},
+    {"text": "Гот+ов", "style": "normal", "rate": "+5%", "night": false, "emotion": "good", "slot": "core"},
+    {"text": "Макс на м+есте. sil<[150]> Сл+ушаю", "style": "normal", "night": false, "emotion": "good", "slot": "core"},
+    {"text": "Все сист+емы под контр+олем", "style": "formal", "night": false, "emotion": "neutral", "slot": "core"},
+    {"text": "Д+оброй н+очи", "style": "night", "rate": "-10%", "night": true, "emotion": "neutral", "slot": "core"},
+    {"text": "Ночн+ая см+ена. sil<[150]> Макс на св+язи", "style": "night", "rate": "-10%", "night": true, "emotion": "neutral", "slot": "core"},
+    {"text": "Т+ихая ночь. sil<[150]> Я здесь", "style": "night", "rate": "-12%", "night": true, "emotion": "neutral", "slot": "core"},
+    {"text": "Я не сплю. sil<[150]> Сл+ушаю", "style": "night", "humor": 0.2, "rate": "-8%", "night": true, "emotion": "good", "slot": "core"},
+    {"text": "Ночью т+ише. sil<[150]> Я на м+есте", "style": "night", "rate": "-10%", "night": true, "emotion": "neutral", "slot": "core"}
+  ],
+  "AFTER_LONG_SILENCE": [
+    {"text": "sil<[150]> Я всё ещё здесь", "style": "ironic", "humor": 0.3, "emotion": "good", "slot": "core"},
+    {"text": "Тишин+а затян+улась. sil<[150]> Всё в пор+ядке?", "style": "friendly", "humor": 0.1, "emotion": "good", "slot": "core"},
+    {"text": "Ск+учно без вас", "style": "ironic", "humor": 0.4, "emotion": "good", "slot": "core"},
+    {"text": "Я никуд+а не уход+ил", "style": "normal", "emotion": "good", "slot": "core"},
+    {"text": "sil<[150]> вы там? sil<[200]> Я жду", "style": "normal", "humor": 0.2, "emotion": "good", "slot": "core"},
+    {"text": "Молч+ание. sil<[150]> М+ожет sil<[50]> что-то случ+илось?", "style": "friendly", "humor": 0.1, "emotion": "good", "slot": "core"}
+  ],
+  "LATE_NIGHT": [
+    {"text": "sil<[150]> тр+етий час н+очи. sil<[150]> М+ожет sil<[50]> пот+ише?", "style": "friendly", "rate": "-10%", "emotion": "good", "slot": "core"},
+    {"text": "П+оздно. sil<[150]> Сос+еди спят", "style": "ironic", "humor": 0.3, "rate": "-10%", "emotion": "good", "slot": "core"},
+    {"text": "Ночью гр+омкая м+узыка — плох+ая ид+ея", "style": "normal", "rate": "-8%", "emotion": "good", "slot": "core"},
+    {"text": "sil<[150]> ночь на двор+е. sil<[150]> М+ожет sil<[50]> до з+автра?", "style": "friendly", "humor": 0.2, "rate": "-10%", "emotion": "good", "slot": "core"},
+    {"text": "Т+ихо. sil<[150]> Я и так говор+ю шёпотом", "style": "ironic", "humor": 0.3, "rate": "-12%", "emotion": "good", "slot": "core"}
+  ],
+  "STATUS_ACK": [
+    {"text": "Си+ю мин+уту. sil<[50]> Собир+аю д+анные", "style": "formal", "pitch": "-12Hz", "weight": 3.0, "emotion": "neutral", "slot": "core"},
+    {"text": "Одн+у сек+унду. sil<[50]> Смотр+ю", "style": "formal", "pitch": "-12Hz", "weight": 2.0, "emotion": "neutral", "slot": "core"},
+    {"text": "Сек+унду. sil<[50]> Провер+яю", "style": "normal", "weight": 2.0, "emotion": "neutral", "slot": "core"},
+    {"text": "Уж+е смотр+ю", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Сейчас. sil<[50]> Собир+аю", "style": "normal", "weight": 1.5, "emotion": "neutral", "slot": "core"},
+    {"text": "Мом+ент. sil<[50]> Провер+яю", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Глян+у. sil<[50]> Сек+унда", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "sil<[50]> уж+е смотр+ю. sil<[50]> Сек+унду", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"}
+  ],
+  "STATUS_REPORT": [
+    {"text": "{CPU} sil<[50]> {RAM} sil<[50]> {DISK}. sil<[75]> П+олный отчёт — в м+акс", "style": "formal", "pitch": "-12Hz", "weight": 2.0, "emotion": "neutral", "slot": "core"},
+    {"text": "Докл+адываю. sil<[75]> {CPU}. sil<[50]> {RAM}. sil<[50]> {DISK}. sil<[75]> Отчёт в м+акс", "style": "formal", "pitch": "-10Hz", "weight": 2.0, "emotion": "neutral", "slot": "core"},
+    {"text": "{CPU}. sil<[50]> {RAM}. sil<[50]> {DISK}. sil<[75]> Всё под контр+олем. sil<[50]> Отчёт — в м+акс", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "sil<[50]> {CPU} sil<[50]> {RAM}. sil<[50]> {DISK}. sil<[75]> П+олный отчёт отправлен в м+акс", "style": "formal", "weight": 1.5, "emotion": "neutral", "slot": "core"},
+    {"text": "Сист+ема в н+орме. sil<[75]> {CPU}. sil<[50]> {RAM}. sil<[50]> {DISK}. sil<[50]> Отчёт — в м+акс", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{CPU} sil<[50]> {RAM}. sil<[50]> {DISK}. sil<[75]> Как-то так. sil<[50]> Отчёт в м+акс", "style": "ironic", "humor": 0.3, "weight": 0.8, "emotion": "good", "slot": "core"},
+    {"text": "Докл+адываю: {CPU}. sil<[50]> {RAM}. sil<[50]> {DISK}. sil<[75]> В м+акс — подробности", "style": "formal", "pitch": "-12Hz", "weight": 1.5, "emotion": "neutral", "slot": "core"},
+    {"text": "sil<[50]> кр+атко: {CPU} sil<[50]> {RAM} sil<[50]> {DISK}. sil<[75]> П+олный отчёт — в м+акс", "style": "formal", "weight": 1.5, "emotion": "neutral", "slot": "core"},
+    {"text": "{CPU}. sil<[50]> {RAM}. sil<[50]> {DISK}. sil<[75]> Ничег+о крит+ичного. sil<[50]> Отчёт в м+акс", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Всё стаб+ильно. sil<[75]> {CPU} sil<[50]> {RAM} sil<[50]> {DISK}. sil<[50]> Отчёт — в м+акс", "style": "formal", "pitch": "-10Hz", "weight": 1.5, "emotion": "neutral", "slot": "core"},
+    {"text": "sil<[50]> {CPU} sil<[50]> {RAM}. sil<[50]> {DISK}. sil<[75]> Жив+ём sil<[50]> отчёт в м+акс", "style": "ironic", "humor": 0.3, "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "{CPU} sil<[50]> {RAM}. sil<[50]> {DISK}. sil<[50]> всё в пор+ядке. sil<[50]> Отчёт — в м+акс", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Докл+адываю. sil<[75]> {CPU} sil<[50]> {RAM}. sil<[50]> {DISK}. sil<[50]> Отчёт в м+акс — как об+ычно", "style": "formal", "pitch": "-12Hz", "weight": 1.5, "emotion": "neutral", "slot": "core"},
+    {"text": "{CPU} sil<[50]> {RAM}. sil<[50]> {DISK}. sil<[50]> сист+ема д+ышит. sil<[50]> Отчёт — в м+акс", "style": "normal", "humor": 0.2, "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "sil<[50]> {CPU} sil<[50]> {RAM} sil<[50]> {DISK}. sil<[75]> Всё в н+орме. sil<[50]> П+олный отчёт — в м+акс", "style": "formal", "weight": 1.5, "emotion": "neutral", "slot": "core"}
+  ],
+  "STATUS_NO_INTERNET": [
+    {"text": "{CPU} sil<[50]> {RAM} sil<[50]> {DISK}. sil<[75]> С с+етью пробл+емы — как по+явится sil<[50]> отправлю в м+акс", "style": "formal", "pitch": "-12Hz", "weight": 2.0, "emotion": "neutral", "slot": "core"},
+    {"text": "sil<[50]> {CPU} sil<[50]> {RAM} sil<[50]> {DISK}. sil<[75]> Интерн+ета нет — отчёт отправлю sil<[50]> как по+явится", "style": "formal", "weight": 1.5, "emotion": "neutral", "slot": "core"},
+    {"text": "{CPU}. sil<[50]> {RAM}. sil<[50]> {DISK}. sil<[75]> Сеть шал+ит. sil<[50]> Отчёт — п+озже", "style": "ironic", "humor": 0.3, "weight": 1.0, "emotion": "good", "slot": "core"}
+  ],
+  "STATUS_RETRY_PENDING": [
+    {"text": "{CPU} sil<[50]> {RAM} sil<[50]> {DISK}. sil<[75]> Отчёт в м+акс ещё не ушёл — жду сеть", "style": "formal", "pitch": "-12Hz", "weight": 2.0, "emotion": "neutral", "slot": "core"},
+    {"text": "sil<[50]> {CPU} sil<[50]> {RAM}. sil<[50]> {DISK}. sil<[75]> Отчёт ждёт сеть — отправлю sil<[50]> как по+явится", "style": "formal", "weight": 1.5, "emotion": "neutral", "slot": "core"}
+  ],
+  "STATUS_MAX_ERROR": [
+    {"text": "{CPU} sil<[50]> {RAM} sil<[50]> {DISK}. sil<[75]> Отчёт в м+акс не ушёл — м+акс не отв+ечает", "style": "formal", "pitch": "-12Hz", "weight": 2.0, "emotion": "neutral", "slot": "core"},
+    {"text": "sil<[50]> {CPU} sil<[50]> {RAM}. sil<[50]> {DISK}. sil<[75]> м+акс молч+ит — отчёт не ушёл", "style": "ironic", "humor": 0.3, "weight": 1.0, "emotion": "good", "slot": "core"}
+  ],
+  "STATUS_CURL_MISSING": [
+    {"text": "{CPU} sil<[50]> {RAM} sil<[50]> {DISK}. sil<[75]> Отчёт в м+акс не ушёл — curl не найден", "style": "formal", "pitch": "-12Hz", "weight": 1.5, "emotion": "neutral", "slot": "core"}
+  ],
+
+  "CLEANUP_DRY_ACK": [
+    {"text": "Сию минуту, смотрю.", "style": "normal", "emotion": "good", "slot": "core"},
+    {"text": "Секунду, проверяю.", "style": "formal", "emotion": "neutral", "slot": "core"},
+    {"text": "Один момент.", "style": "normal", "emotion": "good", "slot": "core"}
+  ],
+  "CLEANUP_DRY_RESULT": [
+    {"text": "{text}", "style": "normal", "emotion": "good", "slot": "core"}
+  ],
+  "CLEANUP_RUNNING": [
+    {"text": "Принято. Запускаю очистку.", "style": "normal", "emotion": "good", "slot": "core"},
+    {"text": "Понял. Чищу диск C.", "style": "normal", "emotion": "good", "slot": "core"},
+    {"text": "Запускаю. Это может занять пару минут.", "style": "formal", "emotion": "neutral", "slot": "core"}
+  ],
+  "CLEANUP_DONE": [
+    {"text": "{text}", "style": "normal", "emotion": "good", "slot": "core"}
+  ],
+  "CLEANUP_CANCELLED": [
+    {"text": "Отменил.", "style": "normal", "emotion": "good", "slot": "core"},
+    {"text": "Хорошо, не чищу.", "style": "normal", "emotion": "good", "slot": "core"},
+    {"text": "Понял. Оставляю как есть.", "style": "friendly", "emotion": "good", "slot": "core"}
+  ],
+  "CLEANUP_ERROR": [
+    {"text": "{text}", "style": "normal", "emotion": "good", "slot": "core"},
+    {"text": "Не получилось: {text}", "style": "formal", "emotion": "neutral", "slot": "core"}
+  ]
+}

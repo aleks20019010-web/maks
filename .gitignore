@@ -1,0 +1,48 @@
+# ===== Секреты =====
+config/secrets.json
+config/token.txt
+config/yandex_key.txt
+config/yandex_folder.txt
+.env
+*.key
+
+# ===== Данные =====
+data/
+!data/.gitkeep
+memory/data/
+
+# ===== Модели =====
+models/
+
+# ===== Кэш =====
+cache/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# ===== Логи =====
+logs/
+*.log
+
+# ===== Архив =====
+_archive/
+
+# ===== Временные =====
+*.tmp
+*.bak
+*.swp
+*~
+_tts_*.mp3
+
+# ===== IDE =====
+.vscode/
+.idea/
+
+# ===== OS =====
+Thumbs.db
+.DS_Storeconfig/weather_key.txt
+
+# �������
+config/weather_key.txt

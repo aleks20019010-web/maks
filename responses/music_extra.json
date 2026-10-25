@@ -1,0 +1,300 @@
+{
+  "WAS_GOING_TO_SUGGEST_ARTIST": [
+    {
+      "text": "Я как раз собирался предлож+ить +это. sil<[150]> {artist}",
+      "style": "friendly",
+      "weight": 2.0,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "sil<[50]> вы чит+аете мо+и м+ысли. {artist}",
+      "style": "friendly",
+      "humor": 0.2,
+      "weight": 2.0,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Я как раз д+умал о {artist}",
+      "style": "normal",
+      "weight": 1.5,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "{artist}. sil<[150]> Я как раз хот+ел предлож+ить +это",
+      "style": "formal",
+      "weight": 1.5,
+      "emotion": "neutral",
+      "slot": "core"
+    },
+    {
+      "text": "sil<[50]> вы мен+я оперед+или. sil<[150]> Я как раз собирался предлож+ить {artist}",
+      "style": "ironic",
+      "humor": 0.3,
+      "weight": 1.0,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "{artist}. sil<[150]> Отл+ичный в+ыбор. sil<[150]> Я как раз д+умал о н+ём",
+      "style": "friendly",
+      "humor": 0.1,
+      "weight": 1.5,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Я знал sil<[50]> что вы +это в+ыберете. sil<[150]> {artist} — как раз то",
+      "style": "normal",
+      "humor": 0.2,
+      "weight": 1.0,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "sil<[50]> вы как б+удто прочит+али мо+и м+ысли. {artist}",
+      "style": "friendly",
+      "humor": 0.2,
+      "weight": 1.5,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "{artist}. sil<[150]> Я как раз собирался +это предлож+ить. sil<[200]> Опередили",
+      "style": "ironic",
+      "humor": 0.3,
+      "weight": 1.5,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "sil<[50]> {artist} — +это как раз то sil<[50]> о ч+ём я д+умал",
+      "style": "normal",
+      "humor": 0.2,
+      "weight": 1.5,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "{artist}. sil<[150]> Вы чит+аете мо+и м+ысли",
+      "style": "friendly",
+      "humor": 0.1,
+      "weight": 1.5,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "sil<[50]> я как раз хот+ел предлож+ить {artist}. sil<[200]> Но вы уж+е",
+      "style": "ironic",
+      "humor": 0.3,
+      "weight": 1.0,
+      "emotion": "good",
+      "slot": "core"
+    }
+  ],
+  "WAS_GOING_TO_SUGGEST_TRACK": [
+    {
+      "text": "Я как раз собирался предлож+ить +этот трек. sil<[150]> {title}",
+      "style": "friendly",
+      "weight": 2.0,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "sil<[50]> вы чит+аете мо+и м+ысли. {title}",
+      "style": "friendly",
+      "humor": 0.2,
+      "weight": 2.0,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Я как раз д+умал о {title}",
+      "style": "normal",
+      "weight": 1.5,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "{title}. sil<[150]> Я как раз хот+ел предлож+ить +это",
+      "style": "formal",
+      "weight": 1.5,
+      "emotion": "neutral",
+      "slot": "core"
+    },
+    {
+      "text": "sil<[50]> вы мен+я оперед+или. sil<[150]> Я как раз собирался предлож+ить {title}",
+      "style": "ironic",
+      "humor": 0.3,
+      "weight": 1.0,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "{title}. sil<[150]> Отл+ичный в+ыбор. sil<[150]> Я как раз д+умал о н+ём",
+      "style": "friendly",
+      "humor": 0.1,
+      "weight": 1.5,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "{title}. sil<[150]> Я как раз собирался +это предлож+ить. sil<[200]> Опередили",
+      "style": "ironic",
+      "humor": 0.3,
+      "weight": 1.5,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "sil<[50]> {title} — +это как раз то sil<[50]> о ч+ём я д+умал",
+      "style": "normal",
+      "humor": 0.2,
+      "weight": 1.5,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "{title}. sil<[150]> Вы чит+аете мо+и м+ысли",
+      "style": "friendly",
+      "humor": 0.1,
+      "weight": 1.5,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "sil<[50]> я как раз хот+ел предлож+ить {title}. sil<[200]> Но вы уж+е",
+      "style": "ironic",
+      "humor": 0.3,
+      "weight": 1.0,
+      "emotion": "good",
+      "slot": "core"
+    }
+  ],
+  "REPEAT_ARTIST": [
+    {
+      "text": "sil<[50]> {artist} уж+е был сег+одня. sil<[150]> Дв+ажды",
+      "style": "ironic",
+      "humor": 0.4,
+      "weight": 2.0,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "{artist}. sil<[150]> Сн+ова. sil<[150]> Ну хор+ошо",
+      "style": "ironic",
+      "humor": 0.3,
+      "weight": 2.0,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Оп+ять {artist}? sil<[200]> Я как раз собирался предлож+ить ег+о тр+етий раз",
+      "style": "sarcastic",
+      "humor": 0.5,
+      "weight": 1.5,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "sil<[50]> вы сег+одня уж+е сл+ушали {artist}. sil<[200]> Дв+ажды. sil<[150]> Но как ск+ажете",
+      "style": "ironic",
+      "humor": 0.4,
+      "weight": 1.5,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "{artist}. sil<[150]> Ваш в+ыбор. sil<[200]> Хот+я я бы уж+е пост+авил на repeat",
+      "style": "sarcastic",
+      "humor": 0.5,
+      "weight": 1.0,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "sil<[50]> {artist} сн+ова. sil<[150]> Я начин+аю узн+авать +эту гр+уппу",
+      "style": "sarcastic",
+      "humor": 0.4,
+      "weight": 1.5,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "{artist}. sil<[150]> Сн+ова? sil<[200]> Ну хор+ошо",
+      "style": "ironic",
+      "humor": 0.3,
+      "weight": 2.0,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "sil<[50]> {artist} сег+одня уж+е был. sil<[150]> И не раз",
+      "style": "normal",
+      "humor": 0.2,
+      "weight": 1.5,
+      "emotion": "good",
+      "slot": "core"
+    }
+  ],
+  "REPEAT_TRACK": [
+    {
+      "text": "sil<[50]> +этот трек уж+е был сег+одня. sil<[150]> Дв+ажды",
+      "style": "ironic",
+      "humor": 0.4,
+      "weight": 2.0,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "{title}. sil<[150]> Сн+ова. sil<[150]> Ну хор+ошо",
+      "style": "ironic",
+      "humor": 0.3,
+      "weight": 2.0,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Оп+ять {title}? sil<[200]> Я как раз собирался предлож+ить ег+о тр+етий раз",
+      "style": "sarcastic",
+      "humor": 0.5,
+      "weight": 1.5,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "sil<[50]> вы сег+одня уж+е сл+ушали +этот трек. sil<[200]> Дв+ажды. sil<[150]> Но как ск+ажете",
+      "style": "ironic",
+      "humor": 0.4,
+      "weight": 1.5,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "{title}. sil<[150]> Ваш в+ыбор. sil<[200]> Хот+я я бы уж+е пост+авил на repeat",
+      "style": "sarcastic",
+      "humor": 0.5,
+      "weight": 1.0,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "{title}. sil<[150]> Сн+ова? sil<[200]> Ну хор+ошо",
+      "style": "ironic",
+      "humor": 0.3,
+      "weight": 2.0,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "sil<[50]> {title} сег+одня уж+е был. sil<[150]> И не раз",
+      "style": "normal",
+      "humor": 0.2,
+      "weight": 1.5,
+      "emotion": "good",
+      "slot": "core"
+    }
+  ]
+}

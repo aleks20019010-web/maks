@@ -1,0 +1,86 @@
+{
+  "LLM_THINKING": [
+    {
+      "text": "Д+умаю. . . ",
+      "style": "normal",
+      "rate": "-10%",
+      "emotion": "neutral",
+      "slot": "core"
+    },
+    {
+      "text": "Сек+унду. . . ",
+      "style": "normal",
+      "emotion": "neutral",
+      "slot": "core"
+    },
+    {
+      "text": "Прик+идываю. . . ",
+      "style": "normal",
+      "rate": "-5%",
+      "emotion": "neutral",
+      "slot": "core"
+    },
+    {
+      "text": "Мом+ент. . . ",
+      "style": "normal",
+      "emotion": "neutral",
+      "slot": "core"
+    },
+    {
+      "text": "Сейчас. . . ",
+      "style": "normal",
+      "emotion": "neutral",
+      "slot": "core"
+    }
+  ],
+  "LLM_ERROR": [
+    {
+      "text": "sil<[50]> не мог+у сформул+ировать. sil<[150]> Попр+обуйте ещё раз",
+      "style": "normal",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "sil<[50]> я пот+ерял мысль. sil<[150]> Повтор+ите",
+      "style": "ironic",
+      "humor": 0.3,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Бо+юсь sil<[50]> не получилось. sil<[150]> Что-то сл+омалось",
+      "style": "formal",
+      "emotion": "neutral",
+      "slot": "core"
+    }
+  ],
+  "LLM_TOO_LONG": [
+    {
+      "text": "sil<[50]> сл+ишком длинно. sil<[150]> Сокр+атите",
+      "style": "normal",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Мн+ого т+екста. sil<[150]> Дав+айте к+ороче",
+      "style": "ironic",
+      "humor": 0.3,
+      "emotion": "good",
+      "slot": "core"
+    }
+  ],
+  "LLM_FALLBACK": [
+    {
+      "text": "sil<[50]> я не ув+ерен. sil<[150]> М+ожет sil<[50]> ут+очните?",
+      "style": "normal",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Бо+юсь sil<[50]> не знаю. sil<[150]> Но мог+у попр+обовать",
+      "style": "friendly",
+      "emotion": "good",
+      "slot": "core"
+    }
+  ]
+}

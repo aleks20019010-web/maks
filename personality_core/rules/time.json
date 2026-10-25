@@ -1,0 +1,42 @@
+[
+  {
+    "name": "time_night_play_artist",
+    "intent": "PLAY_ARTIST",
+    "priority": 80,
+    "require": [{"field": "hour", "op": "in", "value": [23, 0, 1, 2, 3, 4, 5]}],
+    "phrase_set": "PLAY_ARTIST_NIGHT",
+    "cooldown_sec": 0
+  },
+  {
+    "name": "time_night_stop",
+    "intent": "STOP",
+    "priority": 80,
+    "require": [{"field": "hour", "op": "in", "value": [23, 0, 1, 2, 3, 4, 5]}],
+    "phrase_set": "STOP_NIGHT",
+    "cooldown_sec": 0
+  },
+  {
+    "name": "time_morning_greeting",
+    "intent": "HELLO",
+    "priority": 80,
+    "require": [{"field": "time_of_day", "op": "==", "value": "morning"}],
+    "phrase_set": "MORNING_GREETING",
+    "cooldown_sec": 300
+  },
+  {
+    "name": "time_evening_greeting",
+    "intent": "HELLO",
+    "priority": 80,
+    "require": [{"field": "time_of_day", "op": "==", "value": "evening"}],
+    "phrase_set": "EVENING_GREETING",
+    "cooldown_sec": 300
+  },
+  {
+    "name": "time_night_greeting",
+    "intent": "HELLO",
+    "priority": 80,
+    "require": [{"field": "hour", "op": "in", "value": [23, 0, 1, 2, 3, 4, 5]}],
+    "phrase_set": "NIGHT_GREETING",
+    "cooldown_sec": 300
+  }
+]

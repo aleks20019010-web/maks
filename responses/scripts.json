@@ -1,0 +1,58 @@
+{
+  "SCRIPT_START": [
+    {
+      "text": "Запуск+аю {script}",
+      "style": "normal",
+      "emotion": "good"
+    },
+    {
+      "text": "{script}. sil<[150]> Пошёл",
+      "style": "normal",
+      "emotion": "good"
+    },
+    {
+      "text": "sil<[50]> {script} запущен",
+      "style": "formal",
+      "emotion": "neutral"
+    },
+    {
+      "text": "Выполн+яю {script}",
+      "style": "formal",
+      "emotion": "neutral"
+    }
+  ],
+  "SCRIPT_DONE": [
+    {
+      "text": "{script} зав+ершён",
+      "style": "normal",
+      "emotion": "good"
+    },
+    {
+      "text": "Гот+ово. sil<[150]> {script} в+ыполнен",
+      "style": "formal",
+      "emotion": "neutral"
+    },
+    {
+      "text": "sil<[50]> {script} зак+ончен",
+      "style": "normal",
+      "emotion": "good"
+    }
+  ],
+  "SCRIPT_ERROR": [
+    {
+      "text": "sil<[50]> {script} упал. sil<[150]> Что-то не так",
+      "style": "normal",
+      "emotion": "good"
+    },
+    {
+      "text": "Ош+ибка в {script}",
+      "style": "formal",
+      "emotion": "neutral"
+    },
+    {
+      "text": "{script} не пошёл. sil<[150]> Пров+ерьте",
+      "style": "friendly",
+      "emotion": "good"
+    }
+  ]
+}

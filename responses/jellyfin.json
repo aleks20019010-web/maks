@@ -1,0 +1,111 @@
+{
+  "JELLYFIN_FOUND_MOVIE": [
+    {"text": "sil<[50]> нашёл фильм «{title}». sil<[150]> Включ+аю на {device}", "style": "normal", "emotion": "good", "slot": "core"},
+    {"text": "{title}. sil<[150]> Фильм. sil<[150]> Включ+аю", "style": "normal", "emotion": "good", "slot": "core"},
+    {"text": "Нашёл «{title}» в фильмах. sil<[150]> Запуск+аю на {device}", "style": "formal", "emotion": "neutral", "slot": "core"},
+    {"text": "{title}. sil<[150]> Кинопросм+отр. sil<[150]> При+ятного", "style": "friendly", "humor": 0.2, "emotion": "good", "slot": "core"},
+    {"text": "Фильм «{title}». sil<[150]> Включ+аю на {device}", "style": "normal", "emotion": "good", "slot": "core"},
+    {"text": "Есть «{title}». sil<[150]> Ст+авлю на {device}", "style": "normal", "emotion": "good", "slot": "core"},
+    {"text": "{title}. sil<[150]> Как пожел+аете. sil<[150]> Уж+е на {device}", "style": "friendly", "emotion": "good", "slot": "core"},
+    {"text": "Нашёл. sil<[150]> «{title}». sil<[150]> Ваш {device} гот+ов", "style": "formal", "emotion": "neutral", "slot": "core"},
+    {"text": "sil<[50]> «{title}» у нас есть. sil<[150]> Включ+аю на {device}", "style": "normal", "emotion": "good", "slot": "core"},
+    {"text": "{title}. sil<[150]> Фильм найден. sil<[150]> Запуск+аю", "style": "formal", "emotion": "neutral", "slot": "core"},
+    {"text": "Есть так+ой фильм. sil<[150]> «{title}» на {device}", "style": "normal", "emotion": "good", "slot": "core"},
+    {"text": "sil<[50]> кинопросм+отр начин+ается. sil<[150]> «{title}» на {device}", "style": "friendly", "humor": 0.2, "emotion": "good", "slot": "core"},
+    {"text": "{title}. sil<[150]> Нашёл. sil<[150]> Включ+аю на {device}", "style": "normal", "emotion": "good", "slot": "core"}
+  ],
+  "JELLYFIN_FOUND_SERIES": [
+    {"text": "sil<[50]> +это сери+ал «{title}». sil<[150]> Включ+аю на {device}", "style": "normal", "emotion": "good", "slot": "core"},
+    {"text": "{title}. sil<[150]> Сери+ал. sil<[150]> Запуск+аю", "style": "normal", "emotion": "good", "slot": "core"},
+    {"text": "Нашёл «{title}» в сери+алах. sil<[150]> Включ+аю на {device}", "style": "formal", "emotion": "neutral", "slot": "core"},
+    {"text": "{title}. sil<[150]> Сери+ал. sil<[200]> С как+ой сер+ии продолж+ить?", "style": "friendly", "emotion": "good", "slot": "core"},
+    {"text": "Сери+ал «{title}». sil<[150]> Ст+авлю на {device}", "style": "normal", "emotion": "good", "slot": "core"},
+    {"text": "Есть. sil<[150]> «{title}». sil<[150]> Включ+аю", "style": "normal", "emotion": "good", "slot": "core"},
+    {"text": "{title}. sil<[150]> Мараф+он? sil<[200]> Включ+аю на {device}", "style": "friendly", "humor": 0.2, "emotion": "good", "slot": "core"},
+    {"text": "Нашёл. sil<[150]> «{title}». sil<[150]> Запуск+аю на {device}", "style": "formal", "emotion": "neutral", "slot": "core"},
+    {"text": "sil<[50]> сери+ал «{title}» у нас есть. sil<[150]> Включ+аю на {device}", "style": "normal", "emotion": "good", "slot": "core"},
+    {"text": "{title}. sil<[150]> Сери+ал найден. sil<[150]> Запуск+аю", "style": "formal", "emotion": "neutral", "slot": "core"},
+    {"text": "Есть так+ой сери+ал. sil<[150]> «{title}» на {device}", "style": "normal", "emotion": "good", "slot": "core"},
+    {"text": "sil<[50]> мараф+он начин+ается. sil<[150]> «{title}» на {device}", "style": "friendly", "humor": 0.3, "emotion": "good", "slot": "core"},
+    {"text": "{title}. sil<[150]> Нашёл. sil<[150]> Включ+аю на {device}", "style": "normal", "emotion": "good", "slot": "core"}
+  ],
+  "JELLYFIN_FOUND_MUSIC": [
+    {"text": "sil<[50]> в фильмах и сери+алах не нашёл. sil<[200]> Но есть гр+уппа «{query}». sil<[150]> Включ+аю м+узыку", "style": "normal", "emotion": "good", "slot": "core"},
+    {"text": "«{query}» — +это не фильм. sil<[150]> М+узыка. sil<[150]> Включ+аю", "style": "normal", "emotion": "good", "slot": "core"},
+    {"text": "Кин+о с так+им назв+анием нет. sil<[200]> Но есть м+узыка «{query}». sil<[150]> Ст+авлю", "style": "friendly", "emotion": "good", "slot": "core"},
+    {"text": "sil<[50]> нашёл т+олько м+узыку «{query}». sil<[200]> Фильма с так+им назв+анием нет", "style": "normal", "emotion": "good", "slot": "core"},
+    {"text": "«{query}». sil<[150]> Не фильм. sil<[150]> М+узыка. sil<[150]> Включ+аю", "style": "normal", "humor": 0.1, "emotion": "good", "slot": "core"},
+    {"text": "В кинот+еке п+усто. sil<[200]> Но в м+узыке — есть «{query}». sil<[150]> Включ+аю", "style": "friendly", "emotion": "good", "slot": "core"},
+    {"text": "Фильма нет sil<[50]> зат+о есть гр+уппа «{query}». sil<[150]> Игр+аю", "style": "friendly", "humor": 0.2, "emotion": "good", "slot": "core"},
+    {"text": "sil<[50]> киноп+оиск молч+ит. sil<[200]> М+узыка — игр+ает. sil<[150]> Включ+аю «{query}»", "style": "ironic", "humor": 0.3, "emotion": "good", "slot": "core"},
+    {"text": "«{query}» — +это м+узыка. sil<[150]> Не кино. sil<[150]> Включ+аю", "style": "normal", "emotion": "good", "slot": "core"},
+    {"text": "sil<[50]> кин+о не нашёл. sil<[200]> Но м+узыка есть. sil<[150]> «{query}»", "style": "normal", "emotion": "good", "slot": "core"},
+    {"text": "В фильмах п+усто. sil<[150]> А вот в м+узыке — «{query}». sil<[150]> Включ+аю", "style": "friendly", "emotion": "good", "slot": "core"},
+    {"text": "«{query}». sil<[150]> Кино — нет. sil<[150]> М+узыка — да. sil<[150]> Включ+аю", "style": "normal", "humor": 0.1, "emotion": "good", "slot": "core"},
+    {"text": "sil<[50]> +это не фильм. sil<[200]> +Это м+узыка. sil<[150]> И он+а у нас есть", "style": "normal", "emotion": "good", "slot": "core"}
+  ],
+  "JELLYFIN_NOT_FOUND": [
+    {"text": "sil<[50]> ни фильма sil<[50]> ни сери+ала sil<[50]> ни гр+уппы «{query}» не нашёл", "style": "normal", "emotion": "good", "slot": "core"},
+    {"text": "Ничег+о нет. sil<[200]> И в кин+о sil<[50]> и в м+узыке — п+усто", "style": "friendly", "humor": 0.2, "emotion": "good", "slot": "core"},
+    {"text": "«{query}» — не нашёл. sil<[150]> Ни в фильмах sil<[50]> ни в м+узыке", "style": "formal", "emotion": "neutral", "slot": "core"},
+    {"text": "П+усто. sil<[150]> М+ожет sil<[50]> уточн+ите назв+ание?", "style": "friendly", "emotion": "good", "slot": "core"},
+    {"text": "Не нашёл «{query}». sil<[150]> Ни в кинот+еке sil<[50]> ни в м+узыке", "style": "normal", "emotion": "good", "slot": "core"},
+    {"text": "Ничег+о. sil<[150]> Ни фильма sil<[50]> ни п+есни. sil<[200]> Прост+ите", "style": "friendly", "humor": 0.1, "emotion": "good", "slot": "core"},
+    {"text": "sil<[50]> «{query}» нигде нет. sil<[200]> Я провер+ял", "style": "normal", "emotion": "good", "slot": "core"},
+    {"text": "«{query}» — п+усто. sil<[150]> И в кино sil<[50]> и в м+узыке", "style": "formal", "emotion": "neutral", "slot": "core"},
+    {"text": "sil<[50]> +это где-то в друг+ом м+есте. sil<[150]> Но не у мен+я", "style": "ironic", "humor": 0.3, "emotion": "good", "slot": "core"},
+    {"text": "«{query}». sil<[150]> Нет нигде. sil<[200]> Даже не знаю sil<[50]> что и сказ+ать", "style": "ironic", "humor": 0.3, "emotion": "good", "slot": "core"}
+  ],
+  "JELLYFIN_DEVICE_NOT_FOUND": [
+    {"text": "sil<[50]> не в+ижу устр+ойство «{device}». sil<[150]> Он+о включен+о?", "style": "normal", "emotion": "good", "slot": "core"},
+    {"text": "{device} не в с+ети. sil<[150]> Пров+ерьте sil<[50]> пож+алуйста", "style": "formal", "emotion": "neutral", "slot": "core"},
+    {"text": "sil<[50]> {device} сейч+ас недост+упен. sil<[200]> М+ожет sil<[50]> включ+ить на ноутб+уке?", "style": "friendly", "emotion": "good", "slot": "core"},
+    {"text": "Устр+ойство «{device}» не найдено. sil<[50]> он+о вообщ+е подкл+ючено?", "style": "normal", "emotion": "good", "slot": "core"},
+    {"text": "Не мог+у достуч+аться до «{device}»", "style": "formal", "emotion": "neutral", "slot": "core"},
+    {"text": "{device} молч+ит. sil<[150]> Не отвеч+ает", "style": "ironic", "humor": 0.2, "emotion": "good", "slot": "core"},
+    {"text": "sil<[50]> «{device}» не в+идно. sil<[150]> М+ожет sil<[50]> он спит?", "style": "normal", "humor": 0.1, "emotion": "good", "slot": "core"},
+    {"text": "{device}. sil<[150]> Нет так+ого. sil<[200]> Пров+ерьте подкл+ючение", "style": "formal", "emotion": "neutral", "slot": "core"},
+    {"text": "sil<[50]> устр+ойство «{device}» недост+упно. sil<[150]> Я не винов+ат", "style": "ironic", "humor": 0.3, "emotion": "good", "slot": "core"},
+    {"text": "«{device}» не отвеч+ает. sil<[150]> М+ожет sil<[50]> перезагруз+ить?", "style": "friendly", "emotion": "good", "slot": "core"}
+  ],
+  "JELLYFIN_API_ERROR": [
+    {"text": "sil<[50]> Jellyfin не отвеч+ает. sil<[150]> Что-то с с+ервером", "style": "normal", "emotion": "good", "slot": "core"},
+    {"text": "Ош+ибка св+язи с Jellyfin. sil<[150]> Пров+ерю п+озже", "style": "formal", "emotion": "neutral", "slot": "core"},
+    {"text": "sil<[50]> Jellyfin сейч+ас недост+упен. sil<[200]> М+ожет sil<[50]> перезапуст+ить?", "style": "friendly", "emotion": "good", "slot": "core"},
+    {"text": "Медиас+ервер молч+ит. sil<[150]> Я не винов+ат", "style": "ironic", "humor": 0.3, "emotion": "good", "slot": "core"},
+    {"text": "Связь с Jellyfin потер+яна", "style": "normal", "emotion": "good", "slot": "core"},
+    {"text": "Jellyfin не отвеч+ает. sil<[150]> Пров+ерьте с+ервер", "style": "formal", "emotion": "neutral", "slot": "core"},
+    {"text": "sil<[50]> Jellyfin приг+орюнился. sil<[200]> М+ожет sil<[50]> перезапуст+им?", "style": "ironic", "humor": 0.4, "emotion": "good", "slot": "core"},
+    {"text": "Медиас+ервер не отвеч+ает. sil<[150]> Что-то с ним не так", "style": "normal", "emotion": "good", "slot": "core"},
+    {"text": "sil<[50]> Jellyfin молч+ит. sil<[150]> Как парт+изан", "style": "ironic", "humor": 0.4, "emotion": "good", "slot": "core"},
+    {"text": "Связи с Jellyfin нет. sil<[150]> Пров+ерьте сеть", "style": "formal", "emotion": "neutral", "slot": "core"}
+  ],
+
+  "JELLYFIN_STATUS": [
+    {"text": "{text}", "style": "normal", "emotion": "good", "slot": "core"}
+  ],
+  "JELLYFIN_NOW_PLAYING": [
+    {"text": "Сейчас смотрят: {text}", "style": "normal", "emotion": "good", "slot": "core"}
+  ],
+  "JELLYFIN_WHATS_PLAYING": [
+    {"text": "{text}", "style": "normal", "emotion": "good", "slot": "core"}
+  ],
+  "JELLYFIN_PAUSE": [
+    {"text": "{text}", "style": "normal", "emotion": "good", "slot": "core"}
+  ],
+  "JELLYFIN_RESUME": [
+    {"text": "{text}", "style": "normal", "emotion": "good", "slot": "core"}
+  ],
+  "JELLYFIN_STOP": [
+    {"text": "{text}", "style": "normal", "emotion": "good", "slot": "core"}
+  ],
+  "JELLYFIN_FIND": [
+    {"text": "{text}", "style": "normal", "emotion": "good", "slot": "core"}
+  ],
+  "JELLYFIN_PLAY": [
+    {"text": "{text}", "style": "normal", "emotion": "good", "slot": "core"}
+  ],
+  "JELLYFIN_NO_SESSIONS": [
+    {"text": "Никто не смотрит. Тишина в эфире.", "style": "normal", "emotion": "good", "slot": "core"}
+  ]
+}

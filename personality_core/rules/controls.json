@@ -1,0 +1,65 @@
+[
+  {
+    "name": "controls_next_default",
+    "intent": "NEXT",
+    "priority": 10,
+    "phrase_set": "NEXT_TRACK",
+    "cooldown_sec": 0
+  },
+  {
+    "name": "controls_pause_default",
+    "intent": "PAUSE",
+    "priority": 10,
+    "phrase_set": "PAUSE",
+    "cooldown_sec": 0
+  },
+  {
+    "name": "controls_resume_default",
+    "intent": "RESUME",
+    "priority": 10,
+    "phrase_set": "RESUME",
+    "cooldown_sec": 0
+  },
+  {
+    "name": "controls_stop_default",
+    "intent": "STOP",
+    "priority": 10,
+    "phrase_set": "STOP",
+    "cooldown_sec": 0
+  },
+  {
+    "name": "controls_volume_up_default",
+    "intent": "VOLUME_UP",
+    "priority": 10,
+    "phrase_set": "VOLUME_UP",
+    "cooldown_sec": 0
+  },
+  {
+    "name": "controls_volume_down_default",
+    "intent": "VOLUME_DOWN",
+    "priority": 10,
+    "phrase_set": "VOLUME_DOWN",
+    "cooldown_sec": 0
+  },
+  {
+    "name": "controls_volume_max",
+    "intent": "VOLUME_MAX",
+    "priority": 10,
+    "phrase_set": "VOLUME_MAX",
+    "cooldown_sec": 0
+  },
+  {
+    "name": "controls_now_playing_default",
+    "intent": "NOW_PLAYING",
+    "priority": 10,
+    "phrase_set": "NOW_PLAYING",
+    "cooldown_sec": 0
+  },
+  {
+    "name": "controls_no_track_playing",
+    "intent": "NO_TRACK_PLAYING",
+    "priority": 10,
+    "phrase_set": "NO_TRACK_PLAYING",
+    "cooldown_sec": 0
+  }
+]

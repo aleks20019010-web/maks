@@ -1,0 +1,76 @@
+[
+  {
+    "name": "behavior_many_next",
+    "intent": "NEXT",
+    "priority": 65,
+    "require": [
+      {"field": "skips_last_hour", "op": ">=", "value": 5}
+    ],
+    "phrase_set": "NEXT_OFTEN",
+    "cooldown_sec": 600
+  },
+  {
+    "name": "behavior_many_stop",
+    "intent": "STOP",
+    "priority": 65,
+    "require": [
+      {"field": "commands_last_2min", "op": ">=", "value": 4}
+    ],
+    "phrase_set": "MANY_STOP",
+    "cooldown_sec": 300
+  },
+  {
+    "name": "behavior_long_silence_return",
+    "intent": "HELLO",
+    "priority": 40,
+    "require": [
+      {"field": "commands_last_2min", "op": "==", "value": 1}
+    ],
+    "phrase_set": "LONG_SILENCE_RETURN",
+    "cooldown_sec": 1800
+  },
+  {
+    "name": "behavior_energy_low",
+    "intent": "*",
+    "priority": 76,
+    "require": [
+      {"field": "energy", "op": "<=", "value": 0.2}
+    ],
+    "unless": [
+      {"field": "query_intent", "op": "in", "value": [
+        "THANKS", "HELLO", "SILENCE", "SILENCE_END",
+        "WAKE", "WAKE_SHORT", "WAKE_REPEAT", "WAKE_WAIT",
+        "tick"
+      ]}
+    ],
+    "phrase_set": "ENERGY_LOW",
+    "cooldown_sec": 600
+  },
+  {
+    "name": "behavior_tired_short",
+    "intent": "*",
+    "priority": 75,
+    "require": [
+      {"field": "mood", "op": "==", "value": "tired"}
+    ],
+    "unless": [
+      {"field": "query_intent", "op": "in", "value": [
+        "THANKS", "HELLO", "SILENCE", "SILENCE_END",
+        "WAKE", "WAKE_SHORT", "WAKE_REPEAT", "WAKE_WAIT",
+        "tick"
+      ]}
+    ],
+    "phrase_set": "TIRED_DEFAULT",
+    "cooldown_sec": 300
+  },
+  {
+    "name": "behavior_warm_after_thanks",
+    "intent": "PLAY_ARTIST",
+    "priority": 65,
+    "require": [
+      {"field": "valence", "op": ">=", "value": 0.2}
+    ],
+    "phrase_set": "WARM_PLAY_ARTIST",
+    "cooldown_sec": 600
+  }
+]

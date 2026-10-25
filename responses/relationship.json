@@ -1,0 +1,120 @@
+{
+  "RELATIONSHIP_HABIT": [
+    {
+      "text": "sil<[50]> об+ычно вы сл+ушаете {artist} в +это вр+емя. sil<[150]> Включ+ить?",
+      "style": "friendly",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "{artist}? sil<[150]> Как об+ычно?",
+      "style": "normal",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "sil<[50]> по вашей прив+ычке — {artist}. sil<[150]> Включ+аю?",
+      "style": "normal",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Оп+ять {artist}? sil<[150]> Как всегд+а",
+      "style": "ironic",
+      "humor": 0.3,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "sil<[50]> {artist} — в+аша прив+ычка. sil<[150]> Включ+ить?",
+      "style": "friendly",
+      "emotion": "good",
+      "slot": "core"
+    }
+  ],
+  "RELATIONSHIP_PATTERN": [
+    {
+      "text": "sil<[50]> в так+ую пог+оду вы об+ычно ст+авите {artist}. sil<[150]> Включ+ить?",
+      "style": "friendly",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "{artist}? sil<[150]> Как об+ычно в +это вр+емя",
+      "style": "normal",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "sil<[50]> по вашим патт+ернам — {artist}. sil<[150]> Включ+аю?",
+      "style": "normal",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Оп+ять {artist}? sil<[150]> Как по распис+анию",
+      "style": "ironic",
+      "humor": 0.3,
+      "emotion": "good",
+      "slot": "core"
+    }
+  ],
+  "RELATIONSHIP_ARTIST_DOWN": [
+    {
+      "text": "Учт+у",
+      "style": "normal",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Прин+ял. sil<[150]> {artist} — р+еже",
+      "style": "formal",
+      "emotion": "neutral",
+      "slot": "core"
+    },
+    {
+      "text": "Посчит+ал. sil<[150]> {artist} — вниз",
+      "style": "normal",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Запомн+ил. sil<[150]> {artist} — р+еже",
+      "style": "formal",
+      "emotion": "neutral",
+      "slot": "core"
+    },
+    {
+      "text": "П+онял. sil<[150]> {artist} — не в приорит+ете",
+      "style": "normal",
+      "emotion": "good",
+      "slot": "core"
+    }
+  ],
+  "RELATIONSHIP_ARTIST_UP": [
+    {
+      "text": "sil<[50]> {artist} вв+ерх. sil<[150]> Хор+оший в+ыбор",
+      "style": "friendly",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "{artist}? sil<[150]> Запомн+ил. sil<[150]> Вв+ерх",
+      "style": "normal",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Учт+у. sil<[150]> {artist} — ч+аще",
+      "style": "formal",
+      "emotion": "neutral",
+      "slot": "core"
+    },
+    {
+      "text": "Прин+ял. sil<[150]> {artist} — в приорит+ете",
+      "style": "normal",
+      "emotion": "good",
+      "slot": "core"
+    }
+  ]
+}

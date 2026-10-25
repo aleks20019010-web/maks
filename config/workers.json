@@ -1,0 +1,44 @@
+{
+  "workers": [
+    {
+      "name": "brain",
+      "cmd": ["python", "-m", "brain.main"],
+      "cwd": "D:\\Maks",
+      "auto_restart": true,
+      "critical": true,
+      "ram_limit_mb": 500
+    },
+    {
+      "name": "asr",
+      "cmd": ["python", "-m", "workers.asr.main"],
+      "cwd": "D:\\Maks",
+      "auto_restart": true,
+      "critical": false,
+      "ram_limit_mb": 1000
+    },
+    {
+      "name": "tts",
+      "cmd": ["python", "-m", "workers.tts.main"],
+      "cwd": "D:\\Maks",
+      "auto_restart": true,
+      "critical": false,
+      "ram_limit_mb": 300
+    },
+    {
+      "name": "music",
+      "cmd": ["python", "-m", "workers.music.main"],
+      "cwd": "D:\\Maks",
+      "auto_restart": true,
+      "critical": false,
+      "ram_limit_mb": 500
+    }
+  ],
+  "supervisor": {
+    "restart_delay_sec": 3.0,
+    "crash_window_sec": 60.0,
+    "crash_max": 5,
+    "night_restart_hour": 4,
+    "night_restart_minute": 30,
+    "check_ram_interval_sec": 1200
+  }
+}

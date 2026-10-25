@@ -1,0 +1,231 @@
+[
+  {
+    "name": "weather_storm",
+    "intent": "WEATHER_NOW",
+    "priority": 70,
+    "require": [
+      {"field": "payload.precip", "op": "==", "value": "storm"}
+    ],
+    "phrase_set": "WEATHER_STORM",
+    "cooldown_sec": 0
+  },
+  {
+    "name": "weather_fog",
+    "intent": "WEATHER_NOW",
+    "priority": 65,
+    "require": [
+      {"field": "payload.precip", "op": "==", "value": "fog"}
+    ],
+    "phrase_set": "WEATHER_FOG",
+    "cooldown_sec": 0
+  },
+  {
+    "name": "weather_ice",
+    "intent": "WEATHER_NOW",
+    "priority": 65,
+    "require": [
+      {"field": "payload.precip", "op": "==", "value": "ice"}
+    ],
+    "phrase_set": "WEATHER_ICE",
+    "cooldown_sec": 0
+  },
+  {
+    "name": "weather_hail",
+    "intent": "WEATHER_NOW",
+    "priority": 65,
+    "require": [
+      {"field": "payload.precip", "op": "==", "value": "hail"}
+    ],
+    "phrase_set": "WEATHER_HAIL",
+    "cooldown_sec": 0
+  },
+  {
+    "name": "weather_sleet",
+    "intent": "WEATHER_NOW",
+    "priority": 64,
+    "require": [
+      {"field": "payload.precip", "op": "==", "value": "sleet"}
+    ],
+    "phrase_set": "WEATHER_COLD_SLEET",
+    "cooldown_sec": 0
+  },
+  {
+    "name": "weather_heavy_rain",
+    "intent": "WEATHER_NOW",
+    "priority": 63,
+    "require": [
+      {"field": "payload.precip", "op": "==", "value": "heavy_rain"}
+    ],
+    "phrase_set": "WEATHER_HEAVY_RAIN",
+    "cooldown_sec": 0
+  },
+  {
+    "name": "weather_rain_wind",
+    "intent": "WEATHER_NOW",
+    "priority": 62,
+    "require": [
+      {"field": "payload.precip", "op": "==", "value": "rain"},
+      {"field": "payload.wind", "op": "in", "value": ["strong", "very_strong"]}
+    ],
+    "phrase_set": "WEATHER_RAIN_WIND",
+    "cooldown_sec": 0
+  },
+  {
+    "name": "weather_snow_wind",
+    "intent": "WEATHER_NOW",
+    "priority": 62,
+    "require": [
+      {"field": "payload.precip", "op": "==", "value": "snow"},
+      {"field": "payload.wind", "op": "in", "value": ["strong", "very_strong"]}
+    ],
+    "phrase_set": "WEATHER_SNOW_WIND",
+    "cooldown_sec": 0
+  },
+  {
+    "name": "weather_drizzle",
+    "intent": "WEATHER_NOW",
+    "priority": 61,
+    "require": [
+      {"field": "payload.precip", "op": "==", "value": "drizzle"}
+    ],
+    "phrase_set": "WEATHER_DRIZZLE",
+    "cooldown_sec": 0
+  },
+  {
+    "name": "weather_windy",
+    "intent": "WEATHER_NOW",
+    "priority": 60,
+    "require": [
+      {"field": "payload.wind", "op": "in", "value": ["strong", "very_strong"]}
+    ],
+    "phrase_set": "WEATHER_WINDY",
+    "cooldown_sec": 0
+  },
+  {
+    "name": "weather_hot",
+    "intent": "WEATHER_NOW",
+    "priority": 55,
+    "require": [
+      {"field": "payload.temp_bucket", "op": "==", "value": "hot"}
+    ],
+    "phrase_set": "WEATHER_HOT",
+    "cooldown_sec": 0
+  },
+  {
+    "name": "weather_mild_clear",
+    "intent": "WEATHER_NOW",
+    "priority": 50,
+    "require": [
+      {"field": "payload.temp_bucket", "op": "==", "value": "mild"},
+      {"field": "payload.precip", "op": "==", "value": "clear"}
+    ],
+    "phrase_set": "WEATHER_MILD_CLEAR",
+    "cooldown_sec": 0
+  },
+  {
+    "name": "weather_mild_cloudy",
+    "intent": "WEATHER_NOW",
+    "priority": 50,
+    "require": [
+      {"field": "payload.temp_bucket", "op": "==", "value": "mild"},
+      {"field": "payload.precip", "op": "==", "value": "cloudy"}
+    ],
+    "phrase_set": "WEATHER_MILD_CLOUDY",
+    "cooldown_sec": 0
+  },
+  {
+    "name": "weather_mild_rain",
+    "intent": "WEATHER_NOW",
+    "priority": 50,
+    "require": [
+      {"field": "payload.temp_bucket", "op": "==", "value": "mild"},
+      {"field": "payload.precip", "op": "==", "value": "rain"}
+    ],
+    "phrase_set": "WEATHER_MILD_RAIN",
+    "cooldown_sec": 0
+  },
+  {
+    "name": "weather_warm_clear",
+    "intent": "WEATHER_NOW",
+    "priority": 50,
+    "require": [
+      {"field": "payload.temp_bucket", "op": "==", "value": "warm"},
+      {"field": "payload.precip", "op": "==", "value": "clear"}
+    ],
+    "phrase_set": "WEATHER_WARM_CLEAR",
+    "cooldown_sec": 0
+  },
+  {
+    "name": "weather_warm_cloudy",
+    "intent": "WEATHER_NOW",
+    "priority": 50,
+    "require": [
+      {"field": "payload.temp_bucket", "op": "==", "value": "warm"},
+      {"field": "payload.precip", "op": "==", "value": "cloudy"}
+    ],
+    "phrase_set": "WEATHER_WARM_CLOUDY",
+    "cooldown_sec": 0
+  },
+  {
+    "name": "weather_warm_snow",
+    "intent": "WEATHER_NOW",
+    "priority": 50,
+    "require": [
+      {"field": "payload.temp_bucket", "op": "==", "value": "warm"},
+      {"field": "payload.precip", "op": "==", "value": "snow"}
+    ],
+    "phrase_set": "WEATHER_WARM_SNOW",
+    "cooldown_sec": 0
+  },
+  {
+    "name": "weather_cold_clear",
+    "intent": "WEATHER_NOW",
+    "priority": 50,
+    "require": [
+      {"field": "payload.temp_bucket", "op": "==", "value": "cold"},
+      {"field": "payload.precip", "op": "==", "value": "clear"}
+    ],
+    "phrase_set": "WEATHER_COLD_CLEAR",
+    "cooldown_sec": 0
+  },
+  {
+    "name": "weather_cold_cloudy",
+    "intent": "WEATHER_NOW",
+    "priority": 50,
+    "require": [
+      {"field": "payload.temp_bucket", "op": "==", "value": "cold"},
+      {"field": "payload.precip", "op": "==", "value": "cloudy"}
+    ],
+    "phrase_set": "WEATHER_COLD_CLOUDY",
+    "cooldown_sec": 0
+  },
+  {
+    "name": "weather_cold_snow",
+    "intent": "WEATHER_NOW",
+    "priority": 50,
+    "require": [
+      {"field": "payload.temp_bucket", "op": "in", "value": ["cold", "freeze"]},
+      {"field": "payload.precip", "op": "==", "value": "snow"}
+    ],
+    "phrase_set": "WEATHER_COLD_SNOW",
+    "cooldown_sec": 0
+  },
+  {
+    "name": "weather_cold_rain",
+    "intent": "WEATHER_NOW",
+    "priority": 50,
+    "require": [
+      {"field": "payload.temp_bucket", "op": "in", "value": ["cold", "freeze"]},
+      {"field": "payload.precip", "op": "==", "value": "rain"}
+    ],
+    "phrase_set": "WEATHER_COLD_RAIN",
+    "cooldown_sec": 0
+  },
+  {
+    "name": "weather_default",
+    "intent": "WEATHER_NOW",
+    "priority": 1,
+    "phrase_set": "WEATHER_DEFAULT",
+    "cooldown_sec": 0
+  }
+]

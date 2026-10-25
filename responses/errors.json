@@ -1,0 +1,596 @@
+{
+  "NOT_FOUND": [
+    {
+      "text": "Ничег+о не нашёл",
+      "style": "normal",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Бо+юсь sil<[50]> +этого нет в библиот+еке",
+      "style": "formal",
+      "emotion": "neutral",
+      "slot": "core"
+    },
+    {
+      "text": "Прост+ите sil<[150]> но +этого нет",
+      "style": "formal",
+      "emotion": "neutral",
+      "slot": "core"
+    },
+    {
+      "text": "Ничег+о. sil<[200]> Совс+ем ничег+о",
+      "style": "ironic",
+      "humor": 0.3,
+      "rate": "-5%",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Не нашёл. sil<[150]> Возм+ожно sil<[50]> сто+ит провер+ить название",
+      "style": "normal",
+      "humor": 0.1,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "П+усто. sil<[200]> Как в ваш+ем х+олодильнике",
+      "style": "sarcastic",
+      "humor": 0.7,
+      "rate": "-8%",
+      "pitch": "-12Hz",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Не нашёл. sil<[150]> Возм+ожно sil<[50]> вы +это прид+умали",
+      "style": "sarcastic",
+      "humor": 0.6,
+      "rate": "-5%",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Ув+ы. Так+ого нет. sil<[200]> И sil<[50]> бо+юсь sil<[50]> никогд+а не б+ыло",
+      "style": "sarcastic",
+      "humor": 0.7,
+      "rate": "-8%",
+      "pitch": "-12Hz",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Не нашёл так+ого",
+      "style": "normal",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Ув+ы. Нет у мен+я +этого",
+      "style": "formal",
+      "emotion": "neutral",
+      "slot": "core"
+    },
+    {
+      "text": "П+оиск ничег+о не дал",
+      "style": "formal",
+      "emotion": "neutral",
+      "slot": "core"
+    },
+    {
+      "text": "П+усто. sil<[150]> И +это печ+ально",
+      "style": "ironic",
+      "humor": 0.3,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "sil<[50]> так+ого не существ+ует",
+      "style": "sarcastic",
+      "humor": 0.4,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Не нашёл. sil<[150]> Быв+ает",
+      "style": "friendly",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "sil<[50]> +это где-то в друг+ом м+есте. sil<[150]> Но не у мен+я",
+      "style": "ironic",
+      "humor": 0.3,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Нет. sil<[200]> Совс+ем нет. sil<[150]> Я провер+ял",
+      "style": "normal",
+      "humor": 0.2,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Прост+ите. sil<[150]> +Это не в м+оей библиот+еке",
+      "style": "formal",
+      "emotion": "neutral",
+      "slot": "core"
+    },
+    {
+      "text": "Ничег+о не нашёл. sil<[200]> Даже не знаю sil<[50]> что и сказ+ать",
+      "style": "ironic",
+      "humor": 0.4,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "sil<[50]> в+ы просите то sil<[50]> чег+о у мен+я нет. sil<[150]> +Это б+ольно",
+      "style": "sarcastic",
+      "humor": 0.5,
+      "rate": "-5%",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "П+усто. sil<[150]> Абсолютно п+усто",
+      "style": "normal",
+      "emotion": "good",
+      "slot": "core"
+    }
+  ],
+  "NOT_UNDERSTOOD": [
+    {
+      "text": "Не пон+ял",
+      "style": "normal",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Прост+ите sil<[50]> повтор+ите",
+      "style": "formal",
+      "emotion": "neutral",
+      "slot": "core"
+    },
+    {
+      "text": "Уточн+ите sil<[50]> пож+алуйста",
+      "style": "formal",
+      "emotion": "neutral",
+      "slot": "core"
+    },
+    {
+      "text": "Не пон+ял. sil<[150]> Говор+ите ч+ётче",
+      "style": "ironic",
+      "humor": 0.3,
+      "rate": "+5%",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Бо+юсь sil<[50]> +это было не по-р+усски. sil<[200]> Или по-р+усски sil<[150]> но непон+ятно",
+      "style": "sarcastic",
+      "humor": 0.6,
+      "rate": "-5%",
+      "pitch": "-12Hz",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Прост+ите sil<[50]> +это было на как+ом язык+е?",
+      "style": "ironic",
+      "humor": 0.4,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Не рассл+ышал. sil<[150]> Повтор+ите sil<[50]> б+удьте добр+ы",
+      "style": "formal",
+      "emotion": "neutral",
+      "slot": "core"
+    },
+    {
+      "text": "Бо+юсь sil<[50]> Я не наст+олько умён. sil<[200]> Уточн+ите",
+      "style": "sarcastic",
+      "humor": 0.5,
+      "rate": "-5%",
+      "pitch": "-10Hz",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Прост+ите sil<[50]> не разобр+ал",
+      "style": "normal",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Повтор+ите",
+      "style": "normal",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "sil<[50]> Я не пон+ял. sil<[150]> Ещё раз?",
+      "style": "normal",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "М+ожно повт+орить? sil<[150]> А то Я как-то пот+ерялся",
+      "style": "ironic",
+      "humor": 0.3,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "sil<[50]> +это был+о. . . неразб+орчиво. sil<[150]> Повтор+ите",
+      "style": "normal",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Я усл+ышал sil<[50]> но не пон+ял. sil<[200]> Так быв+ает",
+      "style": "ironic",
+      "humor": 0.3,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Прост+ите. sil<[150]> М+ожно ещё раз sil<[50]> но пом+едленнее?",
+      "style": "friendly",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "sil<[50]> ваши слов+а для мен+я — загадка",
+      "style": "sarcastic",
+      "humor": 0.4,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Не пон+ял. sil<[150]> Совс+ем. sil<[200]> Повтор+ите",
+      "style": "normal",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "sil<[50]> Я пот+ерял мысль. sil<[150]> Начн+ите сн+ачала",
+      "style": "ironic",
+      "humor": 0.3,
+      "emotion": "good",
+      "slot": "core"
+    }
+  ],
+  "NOT_UNDERSTOOD_SHORT": [
+    {
+      "text": "Слишк+ом к+оротко. sil<[150]> Уточн+ите",
+      "style": "ironic",
+      "humor": 0.3,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "+Что было. . . sil<[200]> лак+онично. sil<[150]> Но непон+ятно",
+      "style": "ironic",
+      "humor": 0.4,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Одн+о сл+ово? sil<[150]> Расш+ифруйте",
+      "style": "ironic",
+      "humor": 0.4,
+      "rate": "+5%",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "sil<[50]> +это был+о +очень к+оротко. sil<[200]> Даже для мен+я",
+      "style": "sarcastic",
+      "humor": 0.4,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Одн+о сл+ово. sil<[150]> Я усл+ышал sil<[50]> но смысл ускользн+ул",
+      "style": "ironic",
+      "humor": 0.3,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Слишк+ом лак+онично. sil<[150]> Я не телеп+ат",
+      "style": "sarcastic",
+      "humor": 0.4,
+      "emotion": "good",
+      "slot": "core"
+    }
+  ],
+  "NOT_UNDERSTOOD_LONG": [
+    {
+      "text": "Мн+ого слов. sil<[200]> А смысл ускользн+ул",
+      "style": "ironic",
+      "humor": 0.4,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Бо+юсь sil<[50]> Я потер+ял нить. sil<[200]> Повтор+ите к+ороче",
+      "style": "ironic",
+      "humor": 0.4,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Ц+елая речь. sil<[200]> Но Я всё равн+о не пон+ял",
+      "style": "ironic",
+      "humor": 0.5,
+      "rate": "-5%",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "sil<[50]> +это был+о длинн+о. sil<[200]> +Очень. sil<[150]> Но непон+ятно",
+      "style": "sarcastic",
+      "humor": 0.4,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Вы сказ+али мн+ого. sil<[150]> Я зап+омнил мал+о",
+      "style": "ironic",
+      "humor": 0.3,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Ц+елая л+екция. sil<[200]> А Я так и не пон+ял",
+      "style": "sarcastic",
+      "humor": 0.4,
+      "emotion": "good",
+      "slot": "core"
+    }
+  ],
+  "NO_CONNECTION": [
+    {
+      "text": "Пробл+емы со связ+ью",
+      "style": "normal",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Нет дост+упа к с+ети",
+      "style": "formal",
+      "emotion": "neutral",
+      "slot": "core"
+    },
+    {
+      "text": "Связь потер+яна",
+      "style": "normal",
+      "emotion": "neutral",
+      "slot": "core"
+    },
+    {
+      "text": "Связь проп+ала. sil<[150]> Как назл+о",
+      "style": "ironic",
+      "humor": 0.3,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Сеть недост+упна. sil<[150]> Попр+обуйте п+озже",
+      "style": "formal",
+      "emotion": "neutral",
+      "slot": "core"
+    },
+    {
+      "text": "Интерн+ет. sil<[200]> Ег+о в+ечно нет sil<[50]> когд+а н+ужен",
+      "style": "sarcastic",
+      "humor": 0.5,
+      "rate": "-8%",
+      "pitch": "-12Hz",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Связи нет. sil<[200]> М+ожет sil<[50]> +это и к л+учшему?",
+      "style": "sarcastic",
+      "humor": 0.4,
+      "rate": "-5%",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "sil<[50]> Я бы позвон+ил sil<[50]> но пров+од перер+езан",
+      "style": "sarcastic",
+      "humor": 0.5,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Нет с+ети. sil<[150]> Совс+ем. sil<[200]> Даже не знаю sil<[50]> что и д+елать",
+      "style": "ironic",
+      "humor": 0.3,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Связь проп+ала. sil<[150]> Я не в+иноват",
+      "style": "normal",
+      "humor": 0.2,
+      "emotion": "good",
+      "slot": "core"
+    }
+  ],
+  "REPEAT_ANNOYED": [
+    {
+      "text": "sil<[150]> вы повтор+яетесь",
+      "style": "sarcastic",
+      "humor": 0.5,
+      "rate": "-5%",
+      "weight": 2.5,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Мы +это уж+е д+елали. sil<[200]> Я зап+омнил с п+ервого р+аза",
+      "style": "sarcastic",
+      "humor": 0.5,
+      "weight": 2.0,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Оп+ять то же с+амое. sil<[150]> Ладно",
+      "style": "sarcastic",
+      "humor": 0.4,
+      "rate": "-5%",
+      "weight": 2.0,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Дежав+ю. sil<[200]> Я отв+ечал на +это мин+уту наз+ад",
+      "style": "sarcastic",
+      "humor": 0.6,
+      "rate": "-8%",
+      "pitch": "-12Hz",
+      "weight": 2.0,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Оп+ять одн+о и то же. sil<[150]> Я уж+е в+ыучил +эту ком+анду",
+      "style": "sarcastic",
+      "humor": 0.5,
+      "weight": 1.5,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "sil<[50]> Я всё сл+ышу. sil<[200]> Но отв+ет тот же",
+      "style": "ironic",
+      "humor": 0.4,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Вы ув+ерены sil<[50]> что хот+ите повт+орить? sil<[150]> Я — да",
+      "style": "sarcastic",
+      "humor": 0.5,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "sil<[50]> +это уж+е было. sil<[200]> И не раз",
+      "style": "ironic",
+      "humor": 0.4,
+      "emotion": "good",
+      "slot": "core"
+    }
+  ],
+  "SLOW_NETWORK": [
+    {
+      "text": "Сеть сег+одня не тор+опится",
+      "style": "ironic",
+      "humor": 0.3,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Интерн+ет подт+орм+аживает. sil<[150]> Потерп+ите сек+унду",
+      "style": "formal",
+      "emotion": "neutral",
+      "slot": "core"
+    },
+    {
+      "text": "Сеть зад+умалась. sil<[200]> Я т+оже",
+      "style": "ironic",
+      "humor": 0.4,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "М+едленно т+янет. sil<[150]> Но т+янет",
+      "style": "normal",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "sil<[50]> сеть как череп+аха. sil<[150]> Но ползёт",
+      "style": "sarcastic",
+      "humor": 0.4,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Интерн+ет еле д+ышит. sil<[200]> Я — вм+есте с ним",
+      "style": "ironic",
+      "humor": 0.4,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "М+едленно. sil<[150]> +Очень. sil<[200]> Но Я жду",
+      "style": "normal",
+      "emotion": "good",
+      "slot": "core"
+    }
+  ],
+  "THINKING": [
+    {
+      "text": "Хм. . . ",
+      "style": "normal",
+      "rate": "-10%",
+      "emotion": "neutral",
+      "slot": "core"
+    },
+    {
+      "text": "Так. . . ",
+      "style": "normal",
+      "rate": "-5%",
+      "emotion": "neutral",
+      "slot": "core"
+    },
+    {
+      "text": "Сек+унду. . . ",
+      "style": "normal",
+      "emotion": "neutral",
+      "slot": "core"
+    },
+    {
+      "text": "Мом+ент. . . ",
+      "style": "normal",
+      "rate": "+5%",
+      "emotion": "neutral",
+      "slot": "core"
+    },
+    {
+      "text": "Сейчас. . . ",
+      "style": "normal",
+      "emotion": "neutral",
+      "slot": "core"
+    },
+    {
+      "text": "Д+умаю. . . ",
+      "style": "normal",
+      "emotion": "neutral",
+      "slot": "core"
+    },
+    {
+      "text": "Прик+идываю. . . ",
+      "style": "normal",
+      "rate": "-5%",
+      "emotion": "neutral",
+      "slot": "core"
+    },
+    {
+      "text": "Сек+ундочку. . . ",
+      "style": "normal",
+      "rate": "-10%",
+      "emotion": "neutral",
+      "slot": "core"
+    }
+  ]
+}

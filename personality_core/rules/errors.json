@@ -1,0 +1,30 @@
+[
+  {
+    "name": "errors_repeat_annoyed",
+    "intent": "REPEAT_ANNOYED",
+    "priority": 10,
+    "phrase_set": "REPEAT_ANNOYED",
+    "cooldown_sec": 0
+  },
+  {
+    "name": "errors_not_understood_default",
+    "intent": "NOT_UNDERSTOOD",
+    "priority": 10,
+    "phrase_set": "NOT_UNDERSTOOD",
+    "cooldown_sec": 0
+  },
+  {
+    "name": "errors_not_understood_short",
+    "intent": "NOT_UNDERSTOOD_SHORT",
+    "priority": 10,
+    "phrase_set": "NOT_UNDERSTOOD_SHORT",
+    "cooldown_sec": 0
+  },
+  {
+    "name": "errors_not_understood_long",
+    "intent": "NOT_UNDERSTOOD_LONG",
+    "priority": 10,
+    "phrase_set": "NOT_UNDERSTOOD_LONG",
+    "cooldown_sec": 0
+  }
+]

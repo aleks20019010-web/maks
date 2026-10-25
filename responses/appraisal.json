@@ -1,0 +1,142 @@
+{
+  "APPRAISAL_SKIP_3X": [
+    {
+      "text": "sil<[150]> {artist} уж+е тр+етий раз подряд. sil<[200]> М+ожет sil<[50]> убр+ать из волн+ы?",
+      "style": "ironic",
+      "humor": 0.3,
+      "weight": 2.0,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Тр+етий скип. sil<[150]> {artist}. sil<[200]> Я начин+аю поним+ать sil<[50]> что вам не нр+авится",
+      "style": "sarcastic",
+      "humor": 0.4,
+      "weight": 2.0,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "{artist}. sil<[150]> Тр+етий раз. sil<[50]> м+ожет sil<[50]> пр+осто убр+ать?",
+      "style": "sarcastic",
+      "humor": 0.4,
+      "weight": 1.5,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "sil<[150]> вы тр+етий раз пропуск+аете {artist}. sil<[200]> М+ожет sil<[50]> убр+ать из волн+ы?",
+      "style": "ironic",
+      "humor": 0.3,
+      "weight": 2.0,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "{artist}. sil<[150]> Три скипа подр+яд. sil<[200]> М+ожет sil<[50]> поставить в ч+ёрный сп+исок?",
+      "style": "normal",
+      "weight": 1.5,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "sil<[200]> {artist} в тр+етий раз проп+ущен. sil<[150]> Я начин+аю подозрев+ать sil<[50]> что +это не случ+айность",
+      "style": "sarcastic",
+      "humor": 0.4,
+      "weight": 1.5,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "{artist}. sil<[150]> Тр+етий раз. sil<[200]> Ну хор+ошо. sil<[150]> Но +это уж+е зак+оном+ерность",
+      "style": "ironic",
+      "humor": 0.3,
+      "weight": 1.0,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "{artist}. sil<[150]> Тр+етий раз. sil<[200]> Я начин+аю поним+ать sil<[50]> что вам нр+авится сам процесс",
+      "style": "ironic",
+      "humor": 0.4,
+      "weight": 1.5,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "sil<[150]> вы тр+етий раз пропуск+аете {artist}. sil<[200]> М+ожет sil<[50]> пр+осто поставить на repeat? sil<[150]> Эконом+ит слова",
+      "style": "sarcastic",
+      "humor": 0.5,
+      "weight": 1.5,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "{artist}. sil<[150]> Тр+етий раз. sil<[50]> вам не нр+авится sil<[50]> или вы пр+осто ищете что-то друг+ое?",
+      "style": "normal",
+      "weight": 1.5,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "sil<[150]> {artist} в тр+етий раз. sil<[150]> М+ожет sil<[50]> убр+ать из волн+ы? sil<[200]> Я не об+ижусь",
+      "style": "normal",
+      "humor": 0.2,
+      "weight": 1.5,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "{artist}. sil<[150]> П+онял. sil<[200]> Тр+етий раз — +это уж+е зак+оном+ерность. sil<[150]> Учт+у",
+      "style": "formal",
+      "weight": 1.5,
+      "emotion": "neutral",
+      "slot": "core"
+    },
+    {
+      "text": "sil<[150]> {artist} тр+етий раз. sil<[200]> Я начин+аю д+умать sil<[50]> что вы пр+осто не хот+ите сл+ушать м+узыку",
+      "style": "ironic",
+      "humor": 0.4,
+      "weight": 1.0,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "{artist}. sil<[150]> Тр+етий скип. sil<[200]> Запис+ал. sil<[150]> В сл+едующий раз предлож+у что-то друг+ое",
+      "style": "normal",
+      "weight": 1.5,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "sil<[150]> {artist} тр+етий раз. sil<[200]> М+ожет sil<[50]> д+ело не в н+ём sil<[50]> а в настр+оении? sil<[150]> Но я зап+омнил",
+      "style": "normal",
+      "humor": 0.2,
+      "weight": 1.0,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "{artist}. sil<[150]> Учт+у. sil<[200]> Р+еже",
+      "style": "formal",
+      "weight": 1.5,
+      "emotion": "neutral",
+      "slot": "core"
+    },
+    {
+      "text": "sil<[50]> {artist} — учт+у. sil<[150]> Посчит+ал",
+      "style": "normal",
+      "humor": 0.2,
+      "weight": 1.5,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "{artist}. sil<[150]> Прин+ял. sil<[200]> Б+ольше не предлож+у",
+      "style": "formal",
+      "weight": 1.0,
+      "emotion": "neutral",
+      "slot": "core"
+    }
+  ]
+}

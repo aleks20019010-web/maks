@@ -1,0 +1,379 @@
+{
+  "RITUAL_MORNING": [
+    {
+      "text": "Д+оброе +утро. sil<[150]> Кофе гот+ов?",
+      "style": "friendly",
+      "rate": "+5%",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "+Утро. sil<[150]> Что начин+аем?",
+      "style": "normal",
+      "rate": "+5%",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "sil<[50]> +утро. sil<[150]> Я уж+е просн+улся",
+      "style": "ironic",
+      "humor": 0.2,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Д+оброе +утро. sil<[150]> С чег+о начн+ём?",
+      "style": "friendly",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "sil<[50]> рассв+ет. sil<[150]> Я в эф+ире",
+      "style": "normal",
+      "emotion": "good",
+      "slot": "core"
+    }
+  ],
+  "RITUAL_EVENING": [
+    {
+      "text": "Д+обрый в+ечер. sil<[150]> Как прошёл день?",
+      "style": "friendly",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "В+ечер. sil<[150]> Что пост+авим?",
+      "style": "normal",
+      "rate": "-5%",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "sil<[50]> в+ечер. sil<[150]> Хор+ошее вр+емя для м+узыки",
+      "style": "friendly",
+      "humor": 0.2,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Д+обрый в+ечер. sil<[150]> Отдых+аем?",
+      "style": "friendly",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "sil<[50]> день зак+анчивается. sil<[150]> Я здесь",
+      "style": "normal",
+      "emotion": "good",
+      "slot": "core"
+    }
+  ],
+  "RITUAL_NIGHT": [
+    {
+      "text": "Д+оброй н+очи. sil<[150]> Т+ихо",
+      "style": "night",
+      "night": true,
+      "rate": "-12%",
+      "emotion": "neutral",
+      "slot": "core"
+    },
+    {
+      "text": "Ночь. sil<[150]> Не сп+ится?",
+      "style": "night",
+      "night": true,
+      "rate": "-12%",
+      "emotion": "neutral",
+      "slot": "core"
+    },
+    {
+      "text": "sil<[50]> п+оздно. sil<[150]> М+ожет sil<[50]> спать?",
+      "style": "night",
+      "night": true,
+      "rate": "-10%",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Полн+очь. sil<[150]> Сл+ушаю",
+      "style": "night",
+      "night": true,
+      "rate": "-12%",
+      "emotion": "neutral",
+      "slot": "core"
+    },
+    {
+      "text": "Д+оброй н+очи. sil<[150]> Я на м+есте",
+      "style": "night",
+      "night": true,
+      "rate": "-12%",
+      "emotion": "neutral",
+      "slot": "core"
+    }
+  ],
+  "REMINDER_ADDED": [
+    {
+      "text": "Зап+омнил. sil<[150]> Напомн+ю через {minutes} минут",
+      "style": "formal",
+      "emotion": "neutral",
+      "slot": "core"
+    },
+    {
+      "text": "Пр+инял. sil<[150]> Ч+ерез {minutes} минут напомн+ю",
+      "style": "normal",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Запис+ал. sil<[150]> Напомн+ю",
+      "style": "normal",
+      "emotion": "good",
+      "slot": "core"
+    }
+  ],
+  "REMINDER_ADDED_AT": [
+    {
+      "text": "Зап+омнил. sil<[150]> {when}",
+      "style": "formal",
+      "emotion": "neutral",
+      "slot": "core"
+    },
+    {
+      "text": "Пр+инял. sil<[150]> {when}",
+      "style": "normal",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Запис+ал. sil<[150]> {when}",
+      "style": "normal",
+      "emotion": "good",
+      "slot": "core"
+    }
+  ],
+  "REMINDER_TRIGGER": [
+    {
+      "text": "sil<[50]> вы просили нап+омнить. sil<[150]> {text}",
+      "style": "normal",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Напоминаю. sil<[150]> {text}",
+      "style": "formal",
+      "emotion": "neutral",
+      "slot": "core"
+    },
+    {
+      "text": "sil<[50]> {text}. sil<[150]> Как просили",
+      "style": "friendly",
+      "emotion": "good",
+      "slot": "core"
+    }
+  ],
+  "REMINDER_WHEN": [
+    {
+      "text": "{text} — {when}",
+      "style": "normal",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "sil<[50]> {text} {when}",
+      "style": "formal",
+      "emotion": "neutral",
+      "slot": "core"
+    }
+  ],
+  "REMINDER_NOT_FOUND": [
+    {
+      "text": "sil<[50]> про {text} я не помню",
+      "style": "normal",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Нет так+ого напоминания",
+      "style": "formal",
+      "emotion": "neutral",
+      "slot": "core"
+    }
+  ],
+  "REMINDER_DONE": [
+    {
+      "text": "Отм+етил",
+      "style": "formal",
+      "emotion": "neutral",
+      "slot": "core"
+    },
+    {
+      "text": "Гот+ово. sil<[150]> Напоминание закр+ыто",
+      "style": "normal",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Сд+елано",
+      "style": "normal",
+      "emotion": "good",
+      "slot": "core"
+    }
+  ],
+  "PENDING_LIST": [
+    {
+      "text": "sil<[50]> у вас есть: {items}",
+      "style": "normal",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Запланировано : {items}",
+      "style": "formal",
+      "emotion": "neutral",
+      "slot": "core"
+    },
+    {
+      "text": "Вот что у вас в списке : {items}",
+      "style": "friendly",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Напомню. sil<[150]> Всего {count}: {items}",
+      "style": "normal",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "sil<[50]> {count} записей: {items}",
+      "style": "formal",
+      "emotion": "neutral",
+      "slot": "core"
+    },
+    {
+      "text": "Держите : {items}",
+      "style": "friendly",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Список : {items}. sil<[150]> Ничего не упустил",
+      "style": "normal",
+      "humor": 0.1,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "{items}. sil<[150]> Всё под контролем",
+      "style": "formal",
+      "emotion": "neutral",
+      "slot": "core"
+    },
+    {
+      "text": "sil<[50]> напоминаю: {items}",
+      "style": "normal",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Вот : {items}. sil<[150]> Если что — я рядом",
+      "style": "friendly",
+      "humor": 0.1,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "sil<[50]> у меня записано: {items}",
+      "style": "formal",
+      "emotion": "neutral",
+      "slot": "core"
+    },
+    {
+      "text": "Напомню. sil<[150]> {items}",
+      "style": "normal",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Список дел : {items}",
+      "style": "normal",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Вот что вы просили не забыть : {items}",
+      "style": "friendly",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "sil<[50]> всё записано: {items}. sil<[150]> Можете быть спокойны",
+      "style": "friendly",
+      "humor": 0.1,
+      "emotion": "good",
+      "slot": "core"
+    }
+  ],
+  "NOTHING_PENDING": [
+    {
+      "text": "sil<[50]> вы ничего не забыли",
+      "style": "friendly",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Всё под контролем. sil<[150]> Список пуст",
+      "style": "formal",
+      "emotion": "neutral",
+      "slot": "core"
+    },
+    {
+      "text": "sil<[50]> напоминаний нет",
+      "style": "normal",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Чисто. sil<[150]> Ничего не запланировано",
+      "style": "friendly",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "sil<[50]> всё сделано. sil<[150]> Список пуст",
+      "style": "formal",
+      "emotion": "neutral",
+      "slot": "core"
+    },
+    {
+      "text": "Ничего не забыли",
+      "style": "normal",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "sil<[50]> напоминаний нет. sil<[150]> Можете отдыхать",
+      "style": "friendly",
+      "humor": 0.1,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Пусто. sil<[150]> Всё под контролем",
+      "style": "formal",
+      "emotion": "neutral",
+      "slot": "core"
+    },
+    {
+      "text": "sil<[50]> вы свободны. sil<[150]> Ничего не запланировано",
+      "style": "friendly",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Список пуст. sil<[150]> Хорошего дня",
+      "style": "friendly",
+      "emotion": "good",
+      "slot": "core"
+    }
+  ]
+}

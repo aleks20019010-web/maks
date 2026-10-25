@@ -1,0 +1,68 @@
+[
+  {
+    "name": "play_artist_5x",
+    "intent": "PLAY_ARTIST",
+    "priority": 90,
+    "require": [
+      {
+        "field": "plays_artist_today({artist})",
+        "op": ">=",
+        "value": 5
+      }
+    ],
+    "phrase_set": "PLAY_ARTIST_5X",
+    "cooldown_sec": 900
+  },
+  {
+    "name": "play_artist_3x",
+    "intent": "PLAY_ARTIST",
+    "priority": 70,
+    "require": [
+      {
+        "field": "plays_artist_today({artist})",
+        "op": ">=",
+        "value": 3
+      }
+    ],
+    "phrase_set": "PLAY_ARTIST_3X",
+    "cooldown_sec": 600
+  },
+  {
+    "name": "play_artist_night",
+    "intent": "PLAY_ARTIST",
+    "priority": 60,
+    "require": [
+      {
+        "field": "hour",
+        "op": ">=",
+        "value": 23
+      }
+    ],
+    "phrase_set": "PLAY_ARTIST_NIGHT",
+    "cooldown_sec": 300
+  },
+  {
+    "name": "play_artist_default",
+    "intent": "PLAY_ARTIST",
+    "priority": 10,
+    "phrase_set": "PLAY_ARTIST"
+  },
+  {
+    "name": "play_track_default",
+    "intent": "PLAY_TRACK",
+    "priority": 10,
+    "phrase_set": "PLAY_TRACK"
+  },
+  {
+    "name": "play_playlist_default",
+    "intent": "PLAY_PLAYLIST",
+    "priority": 10,
+    "phrase_set": "PLAY_PLAYLIST"
+  },
+  {
+    "name": "play_genre_default",
+    "intent": "PLAY_GENRE",
+    "priority": 10,
+    "phrase_set": "PLAY_GENRE"
+  }
+]

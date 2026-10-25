@@ -1,0 +1,30 @@
+[
+  {
+    "name": "wake_default",
+    "intent": "WAKE",
+    "priority": 10,
+    "phrase_set": "WAKE",
+    "cooldown_sec": 0
+  },
+  {
+    "name": "wake_short_default",
+    "intent": "WAKE_SHORT",
+    "priority": 10,
+    "phrase_set": "WAKE_SHORT",
+    "cooldown_sec": 0
+  },
+  {
+    "name": "wake_repeat_default",
+    "intent": "WAKE_REPEAT",
+    "priority": 10,
+    "phrase_set": "WAKE_REPEAT",
+    "cooldown_sec": 0
+  },
+  {
+    "name": "wake_wait_default",
+    "intent": "WAKE_WAIT",
+    "priority": 10,
+    "phrase_set": "WAKE_WAIT",
+    "cooldown_sec": 0
+  }
+]

@@ -1,0 +1,51 @@
+[
+  {
+    "name": "smalltalk_hello_default",
+    "intent": "HELLO",
+    "priority": 10,
+    "phrase_set": "HELLO",
+    "cooldown_sec": 0
+  },
+  {
+    "name": "smalltalk_thanks_default",
+    "intent": "THANKS",
+    "priority": 10,
+    "phrase_set": "THANKS",
+    "cooldown_sec": 0
+  },
+  {
+    "name": "smalltalk_who_are_you_default",
+    "intent": "WHO_ARE_YOU",
+    "priority": 10,
+    "phrase_set": "WHO_ARE_YOU",
+    "cooldown_sec": 0
+  },
+  {
+    "name": "smalltalk_what_can_you_do_default",
+    "intent": "WHAT_CAN_YOU_DO",
+    "priority": 10,
+    "phrase_set": "WHAT_CAN_YOU_DO",
+    "cooldown_sec": 0
+  },
+  {
+    "name": "smalltalk_how_are_you_default",
+    "intent": "HOW_ARE_YOU",
+    "priority": 10,
+    "phrase_set": "HOW_ARE_YOU",
+    "cooldown_sec": 0
+  },
+  {
+    "name": "smalltalk_silence_default",
+    "intent": "SILENCE",
+    "priority": 10,
+    "phrase_set": "SILENCE",
+    "cooldown_sec": 0
+  },
+  {
+    "name": "smalltalk_silence_end_default",
+    "intent": "SILENCE_END",
+    "priority": 10,
+    "phrase_set": "SILENCE_END",
+    "cooldown_sec": 0
+  }
+]

@@ -1,0 +1,88 @@
+{
+  "CALENDAR_TODAY": [
+    {
+      "text": "sil<[50]> у вас {event} в {time}",
+      "style": "normal",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "{event}. sil<[150]> В {time}",
+      "style": "formal",
+      "emotion": "neutral",
+      "slot": "core"
+    },
+    {
+      "text": "Напоминаю. sil<[150]> {event} в {time}",
+      "style": "friendly",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "sil<[50]> {event}. sil<[150]> {time}",
+      "style": "normal",
+      "emotion": "good",
+      "slot": "core"
+    }
+  ],
+  "CALENDAR_TOMORROW": [
+    {
+      "text": "sil<[50]> з+автра {event} в {time}",
+      "style": "normal",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Завтра. sil<[150]> {event} в {time}",
+      "style": "formal",
+      "emotion": "neutral",
+      "slot": "core"
+    },
+    {
+      "text": "Напоминаю на з+автра. sil<[150]> {event} в {time}",
+      "style": "friendly",
+      "emotion": "good",
+      "slot": "core"
+    }
+  ],
+  "CALENDAR_EMPTY": [
+    {
+      "text": "sil<[50]> на {day} у вас ничег+о нет",
+      "style": "normal",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "{day} своб+оден",
+      "style": "formal",
+      "emotion": "neutral",
+      "slot": "core"
+    },
+    {
+      "text": "sil<[50]> {day} — п+усто. sil<[150]> Отдых+айте",
+      "style": "friendly",
+      "emotion": "good",
+      "slot": "core"
+    }
+  ],
+  "CALENDAR_CONFLICT": [
+    {
+      "text": "sil<[50]> конфл+икт. sil<[150]> {event1} и {event2} в {time}",
+      "style": "normal",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Вним+ание. sil<[150]> Накл+адка: {event1} и {event2}",
+      "style": "formal",
+      "emotion": "neutral",
+      "slot": "core"
+    },
+    {
+      "text": "sil<[50]> два с+обытия в {time}. sil<[150]> {event1} и {event2}",
+      "style": "friendly",
+      "emotion": "good",
+      "slot": "core"
+    }
+  ]
+}

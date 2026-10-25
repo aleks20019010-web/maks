@@ -1,0 +1,406 @@
+{
+  "WAKE": [
+    {
+      "text": "Сл+ушаю",
+      "style": "normal",
+      "rate": "-5%",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "На св+язи",
+      "style": "normal",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "К в+ашим услугам",
+      "style": "formal",
+      "pitch": "-12Hz",
+      "emotion": "neutral",
+      "slot": "core"
+    },
+    {
+      "text": "Весь вним+ание",
+      "style": "normal",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Гот+ов пом+очь",
+      "style": "normal",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Да?",
+      "style": "normal",
+      "rate": "+10%",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Оп+ять Я. sil<[200]> Сл+ушаю",
+      "style": "ironic",
+      "humor": 0.4,
+      "rate": "-8%",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Сн+ова Я. sil<[200]> Что на +этот раз?",
+      "style": "ironic",
+      "humor": 0.4,
+      "rate": "+5%",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Я здесь",
+      "style": "normal",
+      "emotion": "neutral",
+      "slot": "core"
+    },
+    {
+      "text": "Сл+ушаю вас",
+      "style": "normal",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "На св+язи",
+      "style": "formal",
+      "emotion": "neutral",
+      "slot": "core"
+    },
+    {
+      "text": "Что н+ужно?",
+      "style": "normal",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Жду",
+      "style": "normal",
+      "emotion": "neutral",
+      "slot": "core"
+    },
+    {
+      "text": "Да sil<[50]> Я вас сл+ушаю",
+      "style": "formal",
+      "emotion": "neutral",
+      "slot": "core"
+    },
+    {
+      "text": "Вним+ание на мн+е",
+      "style": "ironic",
+      "humor": 0.3,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Оп+ять вы. sil<[150]> И Я тут как тут",
+      "style": "ironic",
+      "humor": 0.4,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Я всегд+а р+ядом",
+      "style": "friendly",
+      "humor": 0.1,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "К услугам в+ашим",
+      "style": "formal",
+      "emotion": "neutral",
+      "slot": "core"
+    },
+    {
+      "text": "Сл+ушаю. sil<[200]> Что на +этот раз?",
+      "style": "normal",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Гот+ов к раб+оте",
+      "style": "formal",
+      "emotion": "neutral",
+      "slot": "core"
+    },
+    {
+      "text": "А?",
+      "style": "normal",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Сл+ушаю. sil<[200]> Я почт+и отключ+ился. sil<[150]> Но для вас всегд+а на св+язи",
+      "drowsy": true,
+      "weight": 2.5,
+      "emotion": "neutral",
+      "slot": "core"
+    },
+    {
+      "text": "? sil<[200]> Я здесь. sil<[150]> Дрем+ал",
+      "drowsy": true,
+      "weight": 2.0,
+      "emotion": "neutral",
+      "slot": "core"
+    },
+    {
+      "text": "Да. sil<[150]> Просн+улся",
+      "drowsy": true,
+      "weight": 1.5,
+      "emotion": "neutral",
+      "slot": "core"
+    },
+    {
+      "text": "Я на св+язи. sil<[200]> Хот+ь и почт+и спал",
+      "drowsy": true,
+      "weight": 2.0,
+      "emotion": "neutral",
+      "slot": "core"
+    },
+    {
+      "text": "Сл+ушаю. sil<[200]> Пр+ишлось просн+уться",
+      "drowsy": true,
+      "weight": 1.5,
+      "emotion": "neutral",
+      "slot": "core"
+    },
+    {
+      "text": "Да?",
+      "style": "normal",
+      "rate": "+10%",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Сл+ушаю. sil<[150]> Что на +этот раз?",
+      "style": "normal",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Я здесь. sil<[150]> Говор+ите",
+      "style": "normal",
+      "emotion": "good",
+      "slot": "core"
+    }
+  ],
+  "WAKE_SHORT": [
+    {
+      "text": "М?",
+      "style": "normal",
+      "rate": "+15%",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Да?",
+      "style": "normal",
+      "rate": "+10%",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Сл+ушаю",
+      "style": "normal",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "?",
+      "style": "normal",
+      "rate": "+5%",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Я здесь",
+      "style": "normal",
+      "emotion": "neutral",
+      "slot": "core"
+    },
+    {
+      "text": "А?",
+      "style": "normal",
+      "rate": "+20%",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Ну?",
+      "style": "normal",
+      "rate": "+15%",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Что?",
+      "style": "normal",
+      "rate": "+10%",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Да?",
+      "style": "normal",
+      "rate": "+10%",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Сл+ушаю",
+      "style": "normal",
+      "rate": "+5%",
+      "emotion": "good",
+      "slot": "core"
+    }
+  ],
+  "WAKE_REPEAT": [
+    {
+      "text": "Я всё ещё здесь",
+      "style": "ironic",
+      "humor": 0.3,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Сл+ушаю. sil<[200]> Вы уж+е втор+ой раз мен+я зовёте",
+      "style": "ironic",
+      "humor": 0.4,
+      "rate": "-5%",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Да? sil<[150]> Что-то ещё?",
+      "style": "normal",
+      "humor": 0.1,
+      "rate": "+5%",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Я никуд+а не уход+ил",
+      "style": "ironic",
+      "humor": 0.4,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "sil<[50]> Я не исчез+аю. Что н+ужно?",
+      "style": "ironic",
+      "humor": 0.5,
+      "rate": "-5%",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Тр+етий раз. Я на м+есте",
+      "style": "ironic",
+      "humor": 0.4,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "sil<[50]> Я вас сл+ышу с п+ервого р+аза",
+      "style": "ironic",
+      "humor": 0.5,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Повтор+яетесь. Сл+ушаю",
+      "style": "ironic",
+      "humor": 0.4,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "sil<[50]> Я всё сл+ышу. sil<[200]> Но сп+асибо sil<[50]> что пров+ерили",
+      "style": "sarcastic",
+      "humor": 0.5,
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Я здесь. sil<[150]> И не уход+ил",
+      "style": "ironic",
+      "humor": 0.3,
+      "emotion": "good",
+      "slot": "core"
+    }
+  ],
+  "WAKE_WAIT": [
+    {
+      "text": "?",
+      "style": "normal",
+      "rate": "+5%",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Я сл+ушаю",
+      "style": "normal",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Жду ком+анду",
+      "style": "normal",
+      "emotion": "neutral",
+      "slot": "core"
+    },
+    {
+      "text": "Не тороп+итесь",
+      "style": "friendly",
+      "humor": 0.1,
+      "rate": "-5%",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Сл+ушаю вним+ательно",
+      "style": "formal",
+      "pitch": "-10Hz",
+      "emotion": "neutral",
+      "slot": "core"
+    },
+    {
+      "text": "Я здесь",
+      "style": "normal",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Что ск+ажете?",
+      "style": "normal",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Ком+анда?",
+      "style": "normal",
+      "rate": "+5%",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "sil<[50]> я жду",
+      "style": "normal",
+      "emotion": "good",
+      "slot": "core"
+    },
+    {
+      "text": "Говор+ите. sil<[150]> Я сл+ушаю",
+      "style": "normal",
+      "emotion": "good",
+      "slot": "core"
+    }
+  ]
+}
