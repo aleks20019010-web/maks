@@ -12,8 +12,8 @@
 # FIX: VOSK_MODEL_PATH — str, а не Path. Vosk вызывает .encode() на аргументе,
 # Path этого не умеет. Остальные пути — Path (работают с open/os.path).
 #
-# ВАЖНО: старый core/config.py пока остаётся. Этот файл — для новой архитектуры.
-# Когда переедем полностью, core/config.py удалим.
+# FIX: WAKE_WORDS — убран "мак". «Макароны» → Vosk слышал «мак» → wake.
+# Теперь только «макс/макса/максу», и _find_wake_word ищет по границам слов.
 
 import os
 import json
@@ -34,7 +34,6 @@ _PATHS_FILE = BASE_DIR / "config" / "paths.json"
 _external = {}
 if _PATHS_FILE.exists():
     try:
-        # FIX: utf-8-sig съедает BOM (PowerShell Out-File -Encoding utf8 добавляет)
         with open(_PATHS_FILE, "r", encoding="utf-8-sig") as f:
             _external = json.load(f)
     except Exception as e:
@@ -122,9 +121,10 @@ MIC_CAPTURE_RATE = 48000
 VOSK_RATE = 16000
 
 # Wake word — «Макс». Vosk слышит его 12/12.
+# FIX: убран "мак" — «макароны» → wake. Только «макс/макса/максу»,
+# и _find_wake_word ищет по границам слов (не find()).
 WAKE_WORDS = [
     "макс",
-    "мак",
     "макса",
     "максу",
 ]

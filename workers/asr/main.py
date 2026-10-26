@@ -13,6 +13,10 @@ workers/asr/main.py — ASR worker: Vosk + микрофон + wake word + hot wo
 FIX: echo-фильтр не считает echo, если распознанное — hot word.
 FIX: порог echo поднят с 0.6 до 0.85.
 
+FIX: _find_wake_word ищет по ГРАНИЦАМ СЛОВ, не find().
+  Раньше «макароны» → find("мак") → wake. Теперь «мак» убран из WAKE_WORDS,
+  и даже «макс» в «макса» ищется по (?<![а-яёa-z])...(?![а-яёa-z]).
+
 ОТКАТ: динамическая грамматика (IDLE/FULL) убрана.
 Один KaldiRecognizer(model, rate) без грамматики — полный диапазон.
 
@@ -36,6 +40,7 @@ FIX: CommandSource enum вместо magic strings "voice"/"voice_hot"/"voice_di
 
 import json
 import queue
+import re
 import sys
 import threading
 import time
@@ -208,11 +213,19 @@ def _is_meaningful_dialog(text_lower: str, command_words: set) -> bool:
 
 # ── Wake word ──────────────────────────────────────────────────
 def _find_wake_word(text: str):
+    """Найти wake word по ГРАНИЦАМ СЛОВ. «макароны» ≠ «макс».
+
+    Раньше: t_lower.find("мак") → «макароны» → wake, after="ароны".
+    Теперь: (?<![а-яёa-z])макс(?![а-яёa-z]) — только целое слово.
+    """
     t_lower = text.lower()
     for w in cfg.WAKE_WORDS:
-        idx = t_lower.find(w)
-        if idx != -1:
-            after = text[idx + len(w):].strip()
+        # Границы: перед — не буква, после — не буква.
+        # (?<!...) — negative lookbehind, (?!...) — negative lookahead.
+        pattern = r'(?<![а-яёa-z])' + re.escape(w) + r'(?![а-яёa-z])'
+        m = re.search(pattern, t_lower)
+        if m:
+            after = text[m.end():].strip()
             after = after.strip(' ,.!?-')
             return w, after
     return None, None
