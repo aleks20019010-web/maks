@@ -21,8 +21,8 @@ brain/main.py — ядро Макса.
 
 Яндекс.Музыка — НЕ здесь. Она в workers/music/main.py.
 
-FIX: source прокидывается в router.process_command(source=...),
-     чтобы router знал про voice_dialog и не звал reminders первым.
+FIX: source прокидывается в router.process_command(source=CommandSource).
+FIX: CommandSource enum вместо magic strings.
 """
 
 import sys
@@ -34,6 +34,7 @@ from shared import protocol
 from shared import metrics
 from shared.log import log
 from shared import config as cfg
+from shared.sources import CommandSource
 
 
 TICK_INTERVAL_SEC = 30
@@ -151,14 +152,24 @@ def _init_self_state():
         log(f"brain: self_state load: {e}", tag="BRAIN", level="WARN")
 
 
+def _parse_source(raw) -> CommandSource:
+    """Привести source к CommandSource. Строка → enum, неизвестное → UNKNOWN."""
+    if isinstance(raw, CommandSource):
+        return raw
+    try:
+        return CommandSource(str(raw))
+    except ValueError:
+        return CommandSource.UNKNOWN
+
+
 def _handle_command(msg: protocol.Message):
     from brain.router import process_command
     from brain.errors import handle_error
 
     text = msg.text
-    source = msg.data.get("source", "unknown")
+    source = _parse_source(msg.data.get("source", CommandSource.UNKNOWN))
     metrics.inc("commands")
-    log(f"brain: команда «{text}» (source={source})", tag="BRAIN")
+    log(f"brain: команда «{text}» (source={source.value})", tag="BRAIN")
 
     try:
         result = process_command(text, source=source)

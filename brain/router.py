@@ -1,15 +1,16 @@
 # brain/router.py
 # Роутер команд: выбирает навык по тексту и вызывает его.
 #
-# ВНЕ ДИАЛОГА (source="voice", "voice_hot"):
+# ВНЕ ДИАЛОГА (CommandSource.VOICE, VOICE_HOT, SYSTEM):
 #   reminders → pending → skills → LLM → NOT_UNDERSTOOD
 #   Router решает первым.
 #
-# В ДИАЛОГЕ (source="voice_dialog"):
+# В ДИАЛОГЕ (CommandSource.VOICE_DIALOG):
 #   smalltalk → LLM → (LLM вернёт command → process_command → router)
 #   Router обрабатывает только smalltalk. Всё остальное — LLM.
-#   Если LLM вернула {"type": "command"} — skill.py вызовет process_command,
-#   и router обработает команду (music, controls, ...) уже как обычную.
+#
+# FIX: CommandSource enum вместо magic strings "voice"/"voice_dialog".
+# source: CommandSource.VOICE_DIALOG вместо source == "voice_dialog".
 
 import re
 import threading
@@ -25,6 +26,7 @@ from shared import ipc
 from shared import protocol
 from shared import metrics
 from shared.log import log
+from shared.sources import CommandSource
 
 
 PENDING_ASK = "music_ask"
@@ -72,20 +74,20 @@ YES_WORDS = {"да", "давай", "конечно", "ага", "угу", "хор
 NO_WORDS = {"нет", "не", "не надо", "неважно", "не важно", "не хочу", "отмена"}
 
 
-def process_command(command: str, source: str = "voice"):
+def process_command(command: str, source: CommandSource = CommandSource.VOICE):
     command = command.strip()
     if not command:
         return None
 
     cmd_lower = command.lower()
     metrics.inc("router_commands")
-    log(f"router: cmd='{command}' | source={source} | NO_REPEAT={cmd_lower in NO_REPEAT_COMMANDS}", tag="BRAIN")
+    log(f"router: cmd='{command}' | source={source.value} | NO_REPEAT={cmd_lower in NO_REPEAT_COMMANDS}", tag="BRAIN")
 
     if cmd_lower in ("выход", "exit", "quit"):
         return "exit"
 
     # ── «Стоп»/«хватит» в диалоге — отменить LLM и TTS ──
-    if source == "voice_dialog" and cmd_lower in ("стоп", "хватит", "достаточно", "замолчи"):
+    if source == CommandSource.VOICE_DIALOG and cmd_lower in ("стоп", "хватит", "достаточно", "замолчи"):
         try:
             from brain.skills.llm.skill import cancel_all
             cancel_all()
@@ -96,7 +98,7 @@ def process_command(command: str, source: str = "voice"):
         return None
 
     # ── ДИАЛОГ: smalltalk → LLM ──
-    if source == "voice_dialog":
+    if source == CommandSource.VOICE_DIALOG:
         if _is_explicit_reminder(cmd_lower):
             if _handle_reminders(cmd_lower):
                 return None

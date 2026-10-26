@@ -31,7 +31,7 @@ FIX: порог echo поднят с 0.6 до 0.85.
   ASR не знает, что с ними делает router. Просто пропускает.
 
 FIX: cfg.VOSK_MODEL_PATH теперь str (из shared/config.py), не Path.
-Vosk вызывает .encode() на аргументе — Path этого не умеет.
+FIX: CommandSource enum вместо magic strings "voice"/"voice_hot"/"voice_dialog".
 """
 
 import json
@@ -48,6 +48,7 @@ from shared import ipc
 from shared import protocol
 from shared import config as cfg
 from shared.log import log
+from shared.sources import CommandSource
 
 
 POST_TTS_MUTE_SEC = 1.0
@@ -152,8 +153,7 @@ def _is_echo(text: str) -> bool:
 # ── Диалоговый режим ───────────────────────────────────────────
 def _session_open() -> bool:
     try:
-        import pathlib
-        flag = pathlib.Path("data/session_open.flag")
+        flag = cfg.DATA_DIR / "session_open.flag"
         if not flag.exists():
             return False
         ts = float(flag.read_text().strip())
@@ -189,16 +189,6 @@ _SHORT_OK = (
 
 
 def _is_meaningful_dialog(text_lower: str, command_words: set) -> bool:
-    """Похоже ли на осмысленный запрос в диалоге?
-
-    Пропускаем, если:
-      - короткая осмысленная фраза (_SHORT_OK),
-      - содержит слово/фразу из commands.json,
-      - есть вопросительное слово,
-      - или триггер подробности,
-      - или длина >= 3 слов.
-    Иначе — [v] dialog-skip.
-    """
     if not text_lower:
         return False
     if text_lower.strip() in _SHORT_OK:
@@ -429,7 +419,7 @@ def main():
             if _waiting_for_command:
                 _waiting_for_command = False
                 log(f"asr: команда «{text}»", tag="ASR")
-                ipc.put(protocol.BRAIN_INBOX, protocol.command(text, source="voice"))
+                ipc.put(protocol.BRAIN_INBOX, protocol.command(text, source=CommandSource.VOICE))
                 continue
 
             # Диалоговый режим (флаг brain свежий) — пропускаем без wake
@@ -440,17 +430,17 @@ def main():
                         continue
                     _last_hot_word_at = now
                     log(f"asr: [HOT] {text} (диалог)", tag="ASR")
-                    ipc.put(protocol.BRAIN_INBOX, protocol.command(text, source="voice_hot"))
+                    ipc.put(protocol.BRAIN_INBOX, protocol.command(text, source=CommandSource.VOICE_HOT))
                     continue
                 if text_lower in ("хватит", "достаточно", "стоп", "замолчи"):
                     log(f"asr: [ДИАЛОГ] {text} → idle", tag="ASR")
-                    ipc.put(protocol.BRAIN_INBOX, protocol.command(text, source="voice_dialog"))
+                    ipc.put(protocol.BRAIN_INBOX, protocol.command(text, source=CommandSource.VOICE_DIALOG))
                     continue
                 if not _is_meaningful_dialog(text_lower, command_words):
                     log(f"asr: [v] {text} (dialog-skip)", tag="ASR")
                     continue
                 log(f"asr: [ДИАЛОГ] {text}", tag="ASR")
-                ipc.put(protocol.BRAIN_INBOX, protocol.command(text, source="voice_dialog"))
+                ipc.put(protocol.BRAIN_INBOX, protocol.command(text, source=CommandSource.VOICE_DIALOG))
                 continue
 
             if text_lower in hot_words:
@@ -459,7 +449,7 @@ def main():
                     continue
                 _last_hot_word_at = now
                 log(f"asr: [HOT] {text} (без wake)", tag="ASR")
-                ipc.put(protocol.BRAIN_INBOX, protocol.command(text, source="voice_hot"))
+                ipc.put(protocol.BRAIN_INBOX, protocol.command(text, source=CommandSource.VOICE_HOT))
                 continue
 
             wake, after = _find_wake_word(text)
@@ -468,14 +458,14 @@ def main():
                     log("asr: wake слишком часто", tag="ASR")
                     ipc.put(protocol.BRAIN_INBOX, protocol.event("wake_repeat", source="asr"))
                     if after:
-                        ipc.put(protocol.BRAIN_INBOX, protocol.command(after, source="voice"))
+                        ipc.put(protocol.BRAIN_INBOX, protocol.command(after, source=CommandSource.VOICE))
                     continue
 
                 log(f"asr: [{wake.upper()}]", tag="ASR")
 
                 if after:
                     log(f"asr: команда «{after}»", tag="ASR")
-                    ipc.put(protocol.BRAIN_INBOX, protocol.command(after, source="voice"))
+                    ipc.put(protocol.BRAIN_INBOX, protocol.command(after, source=CommandSource.VOICE))
                 else:
                     _waiting_for_command = True
                     ipc.put(protocol.BRAIN_INBOX, protocol.event("wake", source="asr"))

@@ -17,9 +17,13 @@
 #   provider: {"sort": "latency"} — AITUNNEL выбирает провайдера с минимальной
 #   задержкой до первого токена. Без этого — балансировка по загрузке,
 #   которая может направить запрос к медленному провайдеру (наблюдалось 32с).
-#   Документация: https://aitunnel.ru/docs/provider [citation:1]
+#
+# FIX: process_command(cmd) → process_command(cmd, source=CommandSource.SYSTEM).
+# LLM вернула command — это системный вызов, не голос. CommandSource enum.
+#
+# FIX: _in_dialog() и session_open.flag — через cfg.DATA_DIR, не хардкод "data/".
+# FIX: llm_key.txt — через cfg.CONFIG_DIR, не хардкод os.path.
 
-import os
 import queue
 import threading
 import time
@@ -27,6 +31,8 @@ import time
 from brain.skills.base import Skill, register
 from brain.skills._helpers import respond_and_say as _respond_and_say
 from shared.log import log
+from shared import config as cfg
+from shared.sources import CommandSource
 
 from brain.skills.llm import _prompt, _parser, _history, _session, _whitelist
 
@@ -99,9 +105,9 @@ def _get_client():
         log(f"llm: {_client_error}", tag="BRAIN", level="ERROR")
         return None
 
-    key_file = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
-        os.path.dirname(os.path.abspath(__file__))))), "config", "llm_key.txt")
-    if not os.path.exists(key_file):
+    # FIX: через cfg.CONFIG_DIR, не хардкод os.path.dirname x4
+    key_file = cfg.CONFIG_DIR / "llm_key.txt"
+    if not key_file.exists():
         _client_error = f"llm_key.txt not found: {key_file}"
         log(f"llm: {_client_error}", tag="BRAIN", level="ERROR")
         return None
@@ -132,9 +138,9 @@ def _get_client():
 # ==================== ДИАЛОГ ====================
 
 def _in_dialog() -> bool:
+    # FIX: через cfg.DATA_DIR, не хардкод "data/"
     try:
-        import pathlib
-        flag = pathlib.Path("data/session_open.flag")
+        flag = cfg.DATA_DIR / "session_open.flag"
         if not flag.exists():
             return False
         ts = float(flag.read_text().strip())
@@ -276,7 +282,8 @@ def _llm_worker():
             log(f"llm: command → {cmd!r}", tag="BRAIN")
             from brain.router import process_command
             try:
-                process_command(cmd)
+                # FIX: source=CommandSource.SYSTEM — LLM вернула command, это не голос
+                process_command(cmd, source=CommandSource.SYSTEM)
             except Exception as e:
                 log(f"llm: process_command({cmd!r}): {e}", tag="BRAIN", level="WARN")
             continue
@@ -303,9 +310,9 @@ def _llm_worker():
                     _history.get().add("user", user_text)
                     _history.get().add("assistant", text)
 
+                # FIX: через cfg.DATA_DIR, не хардкод "data/"
                 try:
-                    import pathlib
-                    flag = pathlib.Path("data/session_open.flag")
+                    flag = cfg.DATA_DIR / "session_open.flag"
                     flag.parent.mkdir(exist_ok=True)
                     flag.write_text(str(time.time()))
                 except Exception:
