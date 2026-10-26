@@ -10,15 +10,22 @@ workers/asr/main.py — ASR worker: Vosk + микрофон + wake word + hot wo
 
   Vosk → echo-фильтр → дедуп → wake/hot word/команда → brain_inbox
 
-FIX: echo-фильтр не считает echo, если распознанное — hot word
-     (дальше, стоп, пауза, громче, тише и т.д.). Иначе реальные команды
-     режутся как echo от TTS.
+FIX: echo-фильтр не считает echo, если распознанное — hot word.
 FIX: порог echo поднят с 0.6 до 0.85.
+
+ОТКАТ: динамическая грамматика (IDLE/FULL) убрана.
+Причина: Vosk SetGrammar на работающем распознавателе нестабилен
+('Can't add speaker model to already running recognizer',
+ 'NoneType' object has no attribute 'encode',
+ 'Expecting array of strings, got: []').
+Один KaldiRecognizer(model, rate) без грамматики — полный диапазон.
+ASR фильтрует фоновый разговор через _session_open() и wake/hot.
 """
 
 import json
 import queue
 import sys
+import threading
 import time
 
 import numpy as np
@@ -34,9 +41,10 @@ from shared.log import log
 POST_TTS_MUTE_SEC = 1.0
 POST_TTS_MUTE_WAKE_SEC = 0.7
 HOT_WORD_COOLDOWN_SEC = 1.0
-ECHO_SIMILARITY_THRESHOLD = 0.85   # было 0.6 — слишком низкий
+ECHO_SIMILARITY_THRESHOLD = 0.85
 DEDUP_WINDOW_SEC = 1.0
 HOT_WORDS_RELOAD_SEC = 30.0
+DIALOG_SESSION_SEC = 20.0
 
 
 # ── Внутренние состояния ────────────────────────────────────────
@@ -62,68 +70,62 @@ def _get_wake_words() -> set:
 
 
 def _is_command_word(text: str) -> bool:
-    """Проверить, что текст — hot word или wake word + hot word.
-
-    Такие фразы не считаем echo, даже если они совпадают с TTS.
-    """
     hot = _get_hot_words()
     wake = _get_wake_words()
     if not hot and not wake:
         return False
-
     tl = text.lower().strip()
     if not tl:
         return False
-
-    # Чистое hot word
     if tl in hot:
         return True
-
-    # Wake word + hot word («макс дальше»)
     for w in wake:
         if tl.startswith(w):
             rest = tl[len(w):].strip(" ,.!?-")
             if rest in hot:
                 return True
-            # «макс включи музыку» — не hot, но команда (не echo)
             if rest and len(rest.split()) >= 1:
-                # Если после wake идёт что-то — это команда, не echo
                 return True
-
     return False
 
 
 # ── Echo-фильтр ────────────────────────────────────────────────
 def _is_echo(text: str) -> bool:
-    # FIX: команды (hot words, wake + команда) не считаем echo
     if _is_command_word(text):
         return False
-
     try:
         from workers.tts.state_file import get_state
         state = get_state()
         last = state.get("last_text", "") or ""
     except Exception:
         return False
-
     if not last or not text:
         return False
-
     import difflib
     last_norm = last.lower().strip()
     text_norm = text.lower().strip()
     if not last_norm or not text_norm:
         return False
-
-    # Очень короткие фразы (1-2 слова) — не echo (риск ложного срабатывания)
     if len(text_norm.split()) <= 2 and len(last_norm.split()) <= 2:
         return False
-
     ratio = difflib.SequenceMatcher(None, last_norm, text_norm).ratio()
     if ratio >= ECHO_SIMILARITY_THRESHOLD:
         log(f"asr: echo '{text}' ~ '{last}' ({ratio:.2f})", tag="ASR")
         return True
     return False
+
+
+# ── Диалоговый режим ───────────────────────────────────────────
+def _session_open() -> bool:
+    try:
+        import pathlib
+        flag = pathlib.Path("data/session_open.flag")
+        if not flag.exists():
+            return False
+        ts = float(flag.read_text().strip())
+        return (time.time() - ts) < DIALOG_SESSION_SEC
+    except Exception:
+        return False
 
 
 # ── Wake word ──────────────────────────────────────────────────
@@ -200,6 +202,7 @@ def main():
         log(f"asr: Vosk не загрузился: {e}", tag="ASR", level="ERROR")
         sys.exit(1)
 
+    # Один распознаватель, полный диапазон, без грамматики
     rec = KaldiRecognizer(model, cfg.VOSK_RATE)
     mic_channels = 1
 
@@ -210,7 +213,7 @@ def main():
     near_q = queue.Queue(maxsize=50)
     clean_q = queue.Queue(maxsize=50)
 
-    # ── AEC через echoff (если включён) ──
+    # ── AEC через echoff ──
     echoff_worker = None
     use_echoff = False
     if cfg.AEC_ENABLED:
@@ -226,7 +229,6 @@ def main():
             use_echoff = False
 
     input_q = clean_q if use_echoff else near_q
-    input_q_name = "clean_q (echoff)" if use_echoff else "near_q"
 
     _was_speaking = False
     _speaking_stopped_at = 0.0
@@ -332,6 +334,24 @@ def main():
                 ipc.put(protocol.BRAIN_INBOX, protocol.command(text, source="voice"))
                 continue
 
+            # Диалоговый режим (флаг brain свежий) — пропускаем без wake
+            if _session_open():
+                if text_lower in hot_words:
+                    if (now - _last_hot_word_at) < HOT_WORD_COOLDOWN_SEC:
+                        log(f"asr: [HOT] {text} — cooldown", tag="ASR")
+                        continue
+                    _last_hot_word_at = now
+                    log(f"asr: [HOT] {text} (диалог)", tag="ASR")
+                    ipc.put(protocol.BRAIN_INBOX, protocol.command(text, source="voice_hot"))
+                    continue
+                if text_lower in ("хватит", "достаточно", "стоп", "замолчи"):
+                    log(f"asr: [ДИАЛОГ] {text} → idle", tag="ASR")
+                    ipc.put(protocol.BRAIN_INBOX, protocol.command(text, source="voice_dialog"))
+                    continue
+                log(f"asr: [ДИАЛОГ] {text}", tag="ASR")
+                ipc.put(protocol.BRAIN_INBOX, protocol.command(text, source="voice_dialog"))
+                continue
+
             if text_lower in hot_words:
                 if (now - _last_hot_word_at) < HOT_WORD_COOLDOWN_SEC:
                     log(f"asr: [HOT] {text} — cooldown", tag="ASR")
@@ -343,8 +363,6 @@ def main():
 
             wake, after = _find_wake_word(text)
             if wake:
-                log(f"asr: [{wake.upper()}]", tag="ASR")
-
                 if not _check_wake_cooldown():
                     log("asr: wake слишком часто", tag="ASR")
                     ipc.put(protocol.BRAIN_INBOX, protocol.event("wake_repeat", source="asr"))
@@ -352,13 +370,14 @@ def main():
                         ipc.put(protocol.BRAIN_INBOX, protocol.command(after, source="voice"))
                     continue
 
+                log(f"asr: [{wake.upper()}]", tag="ASR")
+
                 if after:
                     log(f"asr: команда «{after}»", tag="ASR")
                     ipc.put(protocol.BRAIN_INBOX, protocol.command(after, source="voice"))
                 else:
                     _waiting_for_command = True
                     ipc.put(protocol.BRAIN_INBOX, protocol.event("wake", source="asr"))
-                    import threading
                     threading.Thread(target=_wait_for_command_timeout, daemon=True).start()
                 continue
 

@@ -46,3 +46,10 @@ Thumbs.db
 
 # Секреты
 config/weather_key.txt
+config/llm_key.txt
+data/session_open.flag
+*.txt
+config/llm_key.txt
+data/session_open.flag
+brain/skills/llm/Новый текстовый документ.txt
+tools/Новый текстовый документ.txt

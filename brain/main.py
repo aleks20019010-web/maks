@@ -20,6 +20,9 @@ brain/main.py — ядро Макса.
   - F1: напоминания — фоновый воркер (не зависит от wake/команды).
 
 Яндекс.Музыка — НЕ здесь. Она в workers/music/main.py.
+
+FIX: source прокидывается в router.process_command(source=...),
+     чтобы router знал про voice_dialog и не звал reminders первым.
 """
 
 import sys
@@ -158,7 +161,7 @@ def _handle_command(msg: protocol.Message):
     log(f"brain: команда «{text}» (source={source})", tag="BRAIN")
 
     try:
-        result = process_command(text)
+        result = process_command(text, source=source)
         if result == "exit":
             log("brain: команда exit — остановка", tag="BRAIN")
             sys.exit(0)
