@@ -13,6 +13,9 @@ output_dir — уникальный на каждый запуск (timestamp), 
 отказывается писать в папку с прошлыми артефактами.
 
 microphone_clean может приходить как tuple — приводим к np.ndarray.
+
+FIX (день 28): output_dir = cfg.DATA_DIR / "aec_capture" / ts,
+   а не Path(f"D:/Maks/data/aec_capture/{ts}"). Работает на любом компе.
 """
 
 import queue
@@ -105,7 +108,8 @@ class EchoffWorker:
 
         # Уникальная папка на каждый запуск — иначе echoff откажется перезаписывать
         ts = datetime.now().strftime("%Y%m%d-%H%M%S")
-        out_dir = Path(f"D:/Maks/data/aec_capture/{ts}")
+        # FIX: от cfg.DATA_DIR, не хардкод D:/Maks
+        out_dir = cfg.DATA_DIR / "aec_capture" / ts
         out_dir.mkdir(parents=True, exist_ok=True)
 
         try:

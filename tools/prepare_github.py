@@ -8,12 +8,18 @@
 # Запуск:
 #   python tools/prepare_github.py --dry-run
 #   python tools/prepare_github.py
+#
+# FIX (день 28): _extract_secrets выпилен.
+#   Раньше: читал токен из shared/yandex.py через regex. Но токен давно
+#   живёт в config/token.txt, а в shared/yandex.py его нет. Функция
+#   возвращала пустой dict и создавала пустой secrets.json — делала вид,
+#   что работает. Теперь _write_secrets просто получает {} и честно
+#   сообщает «секретов не найдено». Если понадобится — читать из
+#   config/*.txt, а не из .py.
 
 import os
 import sys
 import shutil
-import re
-import json
 
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -51,7 +57,7 @@ def _write_from_template(template_name: str, target_rel: str) -> bool:
     dst = os.path.join(BASE_DIR, target_rel)
 
     if not os.path.exists(src):
-        _log(f"  ⚠ {template_name} — нет шаблона", )
+        _log(f"  ⚠ {template_name} — нет шаблона")
         return False
     if os.path.exists(dst):
         _log(f"  ⏭ {target_rel} — уже есть")
@@ -74,39 +80,10 @@ def _write_from_template(template_name: str, target_rel: str) -> bool:
         return False
 
 
-def _extract_secrets() -> dict:
-    """Извлечь токены из shared/yandex.py и config/*.txt."""
-    secrets = {}
-
-    yandex_path = os.path.join(BASE_DIR, "shared", "yandex.py")
-    if os.path.exists(yandex_path):
-        try:
-            with open(yandex_path, "r", encoding="utf-8") as f:
-                content = f.read()
-            m = re.search(r'TOKEN\s*=\s*["\']([^"\']+)["\']', content)
-            if m:
-                secrets["yandex_token"] = m.group(1)
-        except Exception:
-            pass
-
-    for key, fname in [("yandex_key", "yandex_key.txt"),
-                       ("yandex_folder", "yandex_folder.txt")]:
-        p = os.path.join(BASE_DIR, "config", fname)
-        if os.path.exists(p):
-            try:
-                with open(p, "r", encoding="utf-8") as f:
-                    v = f.read().strip()
-                if v:
-                    secrets[key] = v
-            except Exception:
-                pass
-
-    return secrets
-
-
 def _write_secrets(secrets: dict):
+    """Записать config/secrets.json. Пустой dict — не создаём, сообщаем честно."""
     if not secrets:
-        _log("  ⏭ config/secrets.json — секретов не найдено")
+        _log("  ⏭ config/secrets.json — секретов не найдено (токены в config/*.txt)")
         return
     path = os.path.join(BASE_DIR, "config", "secrets.json")
     if os.path.exists(path):
@@ -116,6 +93,7 @@ def _write_secrets(secrets: dict):
         _log(f"  📝 config/secrets.json — будет создан ({list(secrets.keys())})")
         return
     try:
+        import json
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w", encoding="utf-8") as f:
             json.dump(secrets, f, ensure_ascii=False, indent=2)
@@ -181,8 +159,9 @@ def main():
     _log("")
 
     _log("4. Секреты → config/secrets.json")
-    secrets = _extract_secrets()
-    _write_secrets(secrets)
+    # FIX: _extract_secrets выпилен. Токены живут в config/*.txt,
+    # читать их из shared/yandex.py бессмысленно — там их нет.
+    _write_secrets({})
     _log("")
 
     _log("5. cleanup_c.ps1 → tools/")

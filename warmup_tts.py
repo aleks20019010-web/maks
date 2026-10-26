@@ -24,6 +24,9 @@
 #   - фразы, где {artist} + {track}/{title} вместе, ПРОПУСКАЮТСЯ
 #   - composer.json ИСКЛЮЧЁН (правила, не фразы)
 #   - треки с названиями < 3 символов или без букв — ПРОПУСКАЮТСЯ
+#
+# FIX (день 28): BASE_DIR = Path(__file__).resolve().parent, не r'D:\Maks'.
+#   Теперь warmup работает на любом компе, а не только там, где D:\Maks.
 
 import os
 import sys
@@ -34,10 +37,11 @@ import argparse
 import re
 import sqlite3
 from itertools import product
+from pathlib import Path
 
-BASE_DIR = r'D:\Maks'
-if BASE_DIR not in sys.path:
-    sys.path.insert(0, BASE_DIR)
+BASE_DIR = Path(__file__).resolve().parent
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
 
 from shared import config as cfg
 from workers.tts.engine import YandexEngine

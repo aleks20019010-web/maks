@@ -1,6 +1,26 @@
-from openai import OpenAI
+# tools/test_llm.py
+# Проверка: поднимается ли клиент AITUNNEL и отвечает ли модель.
+#
+# Запуск:
+#   python tools/test_llm.py
+#
+# FIX (день 28): ключ читается из cfg.CONFIG_DIR, не хардкод D:/Maks.
+#   sys.path — от BASE_DIR, чтобы запускалось из любой папки.
 
-with open("D:/Maks/config/llm_key.txt", "r", encoding="utf-8") as f:
+import os
+import sys
+from pathlib import Path
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
+
+from openai import OpenAI
+from shared import config as cfg
+
+
+key_file = cfg.CONFIG_DIR / "llm_key.txt"
+with open(key_file, "r", encoding="utf-8") as f:
     key = f.read().strip()
 
 client = OpenAI(api_key=key, base_url="https://api.aitunnel.ru/v1/")
