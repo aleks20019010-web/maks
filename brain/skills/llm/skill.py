@@ -9,20 +9,26 @@
 #   (порядок гарантирован, история последовательна). tts_worker отправляет
 #   ответы в TTS строго по порядку номеров.
 #
-# ОТМЕНА:
-#   threading.Event _cancelled. «Стоп»/«хватит» → set(). llm_worker и
-#   tts_worker проверяют is_set() перед работой и после _call_llm.
+# FIX 1 (критично): очередь TTS больше не зависает.
+#   Раньше: command → continue без _tts_queue.put → tts_worker ждёт
+#   next_id навсегда. Теперь: КАЖДЫЙ req_id попадает в _tts_queue,
+#   даже command/cancel/error — со статусом "NO_TTS" (ничего не говорить).
+#
+# FIX 2 (критично): отмена через generation_id, не глобальный Event.
+#   Раньше: handle() → reset_cancel() сбрасывал _cancelled, и старый
+#   запрос (ещё в _call_llm) продолжал работу после «стоп» + новый вопрос.
+#   Теперь: _generation увеличивается при cancel_all(). Каждый запрос
+#   запоминает generation на старте. Если generation изменился —
+#   запрос считается отменённым. Новый запрос НЕ сбрасывает старую отмену.
 #
 # ПРОВАЙДЕР:
 #   provider: {"sort": "latency"} — AITUNNEL выбирает провайдера с минимальной
 #   задержкой до первого токена. Без этого — балансировка по загрузке,
 #   которая может направить запрос к медленному провайдеру (наблюдалось 32с).
 #
-# FIX: process_command(cmd) → process_command(cmd, source=CommandSource.SYSTEM).
-# LLM вернула command — это системный вызов, не голос. CommandSource enum.
-#
-# FIX: _in_dialog() и session_open.flag — через cfg.DATA_DIR, не хардкод "data/".
-# FIX: llm_key.txt — через cfg.CONFIG_DIR, не хардкод os.path.
+# FIX: process_command(cmd, source=CommandSource.SYSTEM). CommandSource enum.
+# FIX: _in_dialog() и session_open.flag — через cfg.DATA_DIR.
+# FIX: llm_key.txt — через cfg.CONFIG_DIR.
 
 import queue
 import threading
@@ -39,9 +45,12 @@ from brain.skills.llm import _prompt, _parser, _history, _session, _whitelist
 
 # ==================== ГЛОБАЛЬНЫЕ ОЧЕРЕДИ И ФЛАГИ ====================
 
-_llm_queue: "queue.Queue[tuple[int, str, bool]]" = queue.Queue()
+_llm_queue: "queue.Queue[tuple[int, str, bool, int]]" = queue.Queue()
 _tts_queue: "queue.Queue[tuple[int, object]]" = queue.Queue()
-_cancelled = threading.Event()
+
+# FIX 2: generation вместо глобального _cancelled
+_generation = 0
+_generation_lock = threading.Lock()
 
 _request_counter = 0
 _counter_lock = threading.Lock()
@@ -60,7 +69,12 @@ def set_engine(engine):
 
 
 def cancel_all():
-    _cancelled.set()
+    """Отменить всё: увеличить generation, очистить очереди."""
+    global _generation
+    with _generation_lock:
+        _generation += 1
+        gen = _generation
+
     while not _llm_queue.empty():
         try:
             _llm_queue.get_nowait()
@@ -71,11 +85,18 @@ def cancel_all():
             _tts_queue.get_nowait()
         except queue.Empty:
             break
-    log("llm: cancelled all", tag="BRAIN")
+    log(f"llm: cancelled all (gen={gen})", tag="BRAIN")
 
 
-def reset_cancel():
-    _cancelled.clear()
+def _current_gen() -> int:
+    with _generation_lock:
+        return _generation
+
+
+def _is_cancelled(gen: int) -> bool:
+    """Запрос отменён, если generation изменился с момента старта."""
+    with _generation_lock:
+        return _generation != gen
 
 
 def _next_id() -> int:
@@ -105,7 +126,6 @@ def _get_client():
         log(f"llm: {_client_error}", tag="BRAIN", level="ERROR")
         return None
 
-    # FIX: через cfg.CONFIG_DIR, не хардкод os.path.dirname x4
     key_file = cfg.CONFIG_DIR / "llm_key.txt"
     if not key_file.exists():
         _client_error = f"llm_key.txt not found: {key_file}"
@@ -138,7 +158,6 @@ def _get_client():
 # ==================== ДИАЛОГ ====================
 
 def _in_dialog() -> bool:
-    # FIX: через cfg.DATA_DIR, не хардкод "data/"
     try:
         flag = cfg.DATA_DIR / "session_open.flag"
         if not flag.exists():
@@ -213,7 +232,7 @@ def _call_llm(user_text: str, detail: bool = False) -> str | None:
     context = _build_context()
     messages = _prompt.build_messages(user_text, history=history, context=context, detail=detail)
     t1 = time.time()
-    print(f"[LLM T] build_messages: {t1-t0:.2f}s (detail={detail})")
+    log(f"llm: build_messages {t1-t0:.2f}s (detail={detail})", tag="LLM")
 
     try:
         t2 = time.time()
@@ -228,12 +247,11 @@ def _call_llm(user_text: str, detail: bool = False) -> str | None:
             },
         )
         t3 = time.time()
-        print(f"[LLM T] chat.completions.create: {t3-t2:.2f}s")
+        log(f"llm: create {t3-t2:.2f}s", tag="LLM")
         raw = resp.choices[0].message.content
-        print(f"[LLM DEBUG] _call_llm: raw={raw!r}")
+        log(f"llm: raw={raw!r}", tag="LLM")
         return raw
     except Exception as e:
-        print(f"[LLM DEBUG] _call_llm: EXCEPTION: {e}")
         log(f"llm: request failed: {e}", tag="BRAIN", level="WARN")
         return None
 
@@ -244,25 +262,29 @@ def _llm_worker():
     log("llm: llm_worker запущен", tag="BRAIN")
     while True:
         try:
-            req_id, user_text, detail = _llm_queue.get(timeout=1.0)
+            req_id, user_text, detail, gen = _llm_queue.get(timeout=1.0)
         except queue.Empty:
             continue
 
-        if _cancelled.is_set():
-            log(f"llm: req {req_id} cancelled before start", tag="BRAIN")
+        # Отмена до старта
+        if _is_cancelled(gen):
+            log(f"llm: req {req_id} cancelled before start (gen={gen})", tag="BRAIN")
+            _tts_queue.put((req_id, "NO_TTS"))
             continue
 
-        print(f"[LLM DEBUG] llm_worker: req={req_id} text={user_text!r} detail={detail}")
+        log(f"llm: worker req={req_id} text={user_text!r} detail={detail}", tag="LLM")
 
         if not _in_dialog():
             _respond_and_say("LLM_THINKING")
         else:
-            print("[LLM T] _respond_and_say(LLM_THINKING): skipped (dialog)")
+            log("llm: LLM_THINKING skipped (dialog)", tag="LLM")
 
         raw = _call_llm(user_text, detail=detail)
 
-        if _cancelled.is_set():
-            log(f"llm: req {req_id} cancelled after llm", tag="BRAIN")
+        # Отмена после LLM
+        if _is_cancelled(gen):
+            log(f"llm: req {req_id} cancelled after llm (gen={gen})", tag="BRAIN")
+            _tts_queue.put((req_id, "NO_TTS"))
             continue
 
         if raw is None:
@@ -275,17 +297,18 @@ def _llm_worker():
             continue
 
         ptype = parsed.get("type")
-        print(f"[LLM DEBUG] llm_worker: req={req_id} ptype={ptype!r}")
+        log(f"llm: worker req={req_id} ptype={ptype!r}", tag="LLM")
 
+        # FIX 1: command — всё равно кладём в tts_queue, чтобы не завис next_id
         if ptype == "command":
             cmd = parsed.get("text", "")
             log(f"llm: command → {cmd!r}", tag="BRAIN")
             from brain.router import process_command
             try:
-                # FIX: source=CommandSource.SYSTEM — LLM вернула command, это не голос
                 process_command(cmd, source=CommandSource.SYSTEM)
             except Exception as e:
                 log(f"llm: process_command({cmd!r}): {e}", tag="BRAIN", level="WARN")
+            _tts_queue.put((req_id, "NO_TTS"))
             continue
 
         if ptype == "answer":
@@ -310,7 +333,6 @@ def _llm_worker():
                     _history.get().add("user", user_text)
                     _history.get().add("assistant", text)
 
-                # FIX: через cfg.DATA_DIR, не хардкод "data/"
                 try:
                     flag = cfg.DATA_DIR / "session_open.flag"
                     flag.parent.mkdir(exist_ok=True)
@@ -321,7 +343,6 @@ def _llm_worker():
                 _tts_queue.put((req_id, response))
 
             except Exception as e:
-                print(f"[LLM DEBUG] llm_worker answer: EXCEPTION: {e}")
                 log(f"llm: answer: {e}", tag="BRAIN", level="WARN")
                 _tts_queue.put((req_id, None))
             continue
@@ -346,8 +367,9 @@ def _tts_worker():
         while next_id in buffer:
             resp = buffer.pop(next_id)
 
-            if _cancelled.is_set():
-                log(f"llm: tts req {next_id} cancelled", tag="BRAIN")
+            # FIX 1: NO_TTS — просто пропускаем номер, ничего не говорим
+            if resp == "NO_TTS":
+                log(f"llm: tts req {next_id} skipped (NO_TTS)", tag="LLM")
                 next_id += 1
                 continue
 
@@ -395,13 +417,15 @@ class LLMSkill(Skill):
 
     def handle(self, text: str) -> bool:
         _start_workers()
-        reset_cancel()
+
+        # FIX 2: НЕ reset_cancel(). generation запоминается на старте.
+        gen = _current_gen()
 
         detail = _wants_detail(text)
         req_id = _next_id()
 
-        print(f"[LLM DEBUG] handle: req={req_id} text={text!r} detail={detail}")
-        _llm_queue.put((req_id, text, detail))
+        log(f"llm: handle req={req_id} text={text!r} detail={detail} gen={gen}", tag="LLM")
+        _llm_queue.put((req_id, text, detail, gen))
 
         return True
 

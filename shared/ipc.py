@@ -1,8 +1,14 @@
 """
 shared/ipc.py — файловая шина общения между процессами.
 
-Работает через файлы в data/ipc/<topic>/<uuid>.json.
+Работает через файлы в data/ipc/<topic>/<timestamp_ns>_<uuid>.json.
 Просто, надёжно, работает на Windows без Manager.
+
+FIX: имя файла с timestamp_ns вместо uuid.hex.
+Раньше: sorted(glob("*.json")) по UUID — НЕ по времени, порядок сообщений
+не гарантирован. Для музыки (play → stop → next) это критично.
+Теперь: f"{time.time_ns()}_{uuid.uuid4().hex}.json" — сортировка по имени
+= сортировка по времени. Старое сообщение всегда первым.
 
 Использование:
     from shared import ipc
@@ -11,8 +17,6 @@ shared/ipc.py — файловая шина общения между проце
 
 Очистка:
     ipc.init(clean=True) — вызывается ТОЛЬКО из supervisor при старте.
-    Удаляет все старые .json из всех топиков, чтобы мусор прошлых
-    сессий не читался как команды.
 """
 
 import glob
@@ -33,9 +37,13 @@ def _topic_dir(topic: str) -> str:
 
 
 def put(topic: str, msg) -> None:
-    """Положить сообщение в очередь (файл)."""
+    """Положить сообщение в очередь (файл).
+
+    FIX: имя = <timestamp_ns>_<uuid>.json — сортировка по имени = по времени.
+    """
     folder = _topic_dir(topic)
-    fname = f"{uuid.uuid4().hex}.json"
+    # timestamp_ns — 19 цифр, лексикографически сортируется как число
+    fname = f"{time.time_ns():019d}_{uuid.uuid4().hex}.json"
     path = os.path.join(folder, fname)
 
     if isinstance(msg, Message):
@@ -67,7 +75,6 @@ def get(topic: str, timeout: float = 1.0) -> Optional[Message]:
             try:
                 with open(oldest, "r", encoding="utf-8") as f:
                     raw = f.read()
-                # Сначала парсим — если битый JSON, файл остаётся для разбора
                 msg = Message.from_json(raw)
                 try:
                     os.remove(oldest)
@@ -75,7 +82,6 @@ def get(topic: str, timeout: float = 1.0) -> Optional[Message]:
                     pass
                 return msg
             except Exception:
-                # Битый JSON — оставляем файл, чтобы можно было разобрать вручную
                 try:
                     os.rename(oldest, oldest + ".bad")
                 except Exception:

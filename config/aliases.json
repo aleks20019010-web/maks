@@ -2498,5 +2498,9 @@
   "unk": {
     "artist_id": 81476,
     "artist_name": "UNK"
+  },
+  "на паузу": {
+    "artist_id": 23336282,
+    "artist_name": "Музыкальная пауза"
   }
 }
