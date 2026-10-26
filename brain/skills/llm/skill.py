@@ -22,6 +22,10 @@
 #   _tts_worker «зависал» на пропущенном номере. Следующий ответ ждал
 #   next_id, которого нет → очередь стояла.
 #
+# FIX 3: cancel_all() закрывает сессию (_session.get().close()).
+#   Иначе _history живёт после «хватит», и следующий вопрос получит
+#   старый контекст. Session.close() вызывает _history.clear().
+#
 # ПРОВАЙДЕР:
 #   provider: {"sort": "latency"} — AITUNNEL выбирает провайдера с минимальной
 #   задержкой до первого токена.
@@ -75,11 +79,21 @@ def cancel_all():
 
     FIX 2 (ПРАВИЛЬНЫЙ): НЕ очищаем очереди. Старые запросы сами увидят
     _is_cancelled(gen) → NO_TTS → пропустятся. next_id не рвётся.
+
+    FIX 3: закрываем сессию — иначе _history живёт после «хватит»,
+    и следующий вопрос получит старый контекст.
     """
     global _generation
     with _generation_lock:
         _generation += 1
         gen = _generation
+
+    # Закрыть сессию — очистить историю диалога
+    try:
+        _session.get().close()
+    except Exception as e:
+        log(f"llm: cancel_all session.close: {e}", tag="BRAIN", level="WARN")
+
     log(f"llm: cancelled all (gen={gen})", tag="BRAIN")
 
 

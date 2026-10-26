@@ -2,27 +2,25 @@
 # Очистка диска C. Голосовой скил (system).
 #
 # Логика:
-#   «почисти диск C» → cleanup_dry() → «Могу освободить X ГБ. Очистить?»
-#   «да» → cleanup_real() → «Очистка завершена. Освобождено X ГБ.»
+#   «почисти диск C» → cleanup_dry() → «Могу освободить: безопасно — X ГБ; корзина — Y ГБ. Очистить безопасное?»
+#   «да» → cleanup_real() → «Очистка завершена. Освобождено X ГБ.» (или «не удалось — файлы используются»)
 #   «нет» → отмена.
 #
-# FIX: детали НЕ озвучиваются. Только итог (свободно / могу освободить).
-# FIX: если Predicted == 0 — «Чистить нечего», без вопроса.
-# FIX: темп быстрее (rate="+10%") для cleanup-фраз.
+# cleanup_c.ps1 чистит ТОЛЬКО безопасное по умолчанию:
+#   - %TEMP%, %LOCALAPPDATA%\Temp, C:\Windows\Temp
+#   - Windows Update Download, CBS/DISM логи
+#   - Jellyfin transcodes
+# Корзина и Windows.old — только с флагами. Prefetch не трогаем.
 #
-# ВАЖНО: cleanup — системная команда. Она НЕ должна зависеть от mood/energy.
-# Поэтому используется прямой protocol.say (минуя engine/policy/composer).
+# cleanup_dry разделяет safe_predicted / recycle_predicted / dangerous.
+# Корзина — не Dangerous, но и не «безопасное по умолчанию». Она опциональна.
+# В safe_predicted не входит, в msg упоминается отдельно.
 #
-# Pending — через brain.pending (set/get/pop).
+# Проверяем returncode PowerShell. Если != 0 — не читаем старый JSON.
 #
-# SIGNATURE = "— Макс"
-# «Сэр» убран везде.
-#
-# cleanup_c.ps1 — в D:\Maks\tools\ (часть репозитория, не D:\Scripts\).
+# Пути — от cfg.BASE_DIR (data/cleanup_c_result.json, tools/cleanup_c.ps1).
 
-import os
 import json
-import random
 import subprocess
 
 from brain.skills.base import Skill, register
@@ -33,24 +31,20 @@ from shared import protocol
 
 
 # ==================== ПУТИ ====================
-# tools/ — относительно brain/skills/system/cleanup.py (на 3 уровня выше)
-_BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-TOOLS_DIR = os.path.join(_BASE_DIR, "tools")
-CLEANUP_SCRIPT = os.path.join(TOOLS_DIR, "cleanup_c.ps1")
+TOOLS_DIR = cfg.BASE_DIR / "tools"
+CLEANUP_SCRIPT = TOOLS_DIR / "cleanup_c.ps1"
+CLEANUP_RESULT = cfg.DATA_DIR / "cleanup_c_result.json"
 
 PS_EXE = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
-CLEANUP_RESULT = r"D:\cleanup_c_result.json"
 
 CLEANUP_PENDING_KEY = "cleanup"
 CLEANUP_PENDING_TIMEOUT = 120.0
+CLEANUP_RATE = "+10%"
 
-CLEANUP_RATE = "+10%"  # темп быстрее для cleanup-фраз
 
-
-# ==================== ПРЯМОЙ TTS (минуя policy) ====================
+# ==================== ПРЯМОЙ TTS ====================
 
 def _say_text(text: str, rate: str = None):
-    """Прямой TTS с текстом. Минуя engine/policy/composer."""
     if not text:
         return
     try:
@@ -60,7 +54,6 @@ def _say_text(text: str, rate: str = None):
 
 
 def _say_phrase(phrase_set: str, rate: str = None, **kw):
-    """Выбрать фразу из responses/*.json и сказать напрямую."""
     try:
         from brain.skills._helpers import _engine
         if _engine is None:
@@ -74,82 +67,154 @@ def _say_phrase(phrase_set: str, rate: str = None, **kw):
 
 # ==================== CLEANUP ====================
 
-def cleanup_dry():
-    """Запустить cleanup_c.ps1 -DryRun. Вернуть (data, msg, predicted)."""
+def _run_ps(dry_run: bool, include_recycle: bool = False,
+            include_winold: bool = False) -> tuple[bool, str]:
+    if not CLEANUP_SCRIPT.exists():
+        return False, f"cleanup_c.ps1 не найден: {CLEANUP_SCRIPT}"
+
     try:
-        if os.path.exists(CLEANUP_RESULT):
-            os.remove(CLEANUP_RESULT)
+        if CLEANUP_RESULT.exists():
+            CLEANUP_RESULT.unlink()
     except Exception:
         pass
 
+    cmd = [
+        PS_EXE, "-NoProfile", "-ExecutionPolicy", "Bypass",
+        "-File", str(CLEANUP_SCRIPT),
+        "-ResultFile", str(CLEANUP_RESULT),
+    ]
+    if dry_run:
+        cmd.append("-DryRun")
+    if include_recycle:
+        cmd.append("-IncludeRecycleBin")
+    if include_winold:
+        cmd.append("-IncludeWindowsOld")
+
     try:
-        subprocess.run(
-            [PS_EXE, "-NoProfile", "-ExecutionPolicy", "Bypass",
-             "-File", CLEANUP_SCRIPT, "-DryRun"],
-            timeout=300, creationflags=subprocess.CREATE_NO_WINDOW, cwd=TOOLS_DIR
+        result = subprocess.run(
+            cmd,
+            timeout=1800,
+            creationflags=subprocess.CREATE_NO_WINDOW,
+            cwd=str(TOOLS_DIR),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
         )
+    except subprocess.TimeoutExpired:
+        return False, "Таймаут очистки (30 минут)"
     except Exception as e:
-        return None, f"Ошибка запуска dry-run: {e}", 0
+        return False, f"Ошибка запуска: {e}"
 
-    if not os.path.exists(CLEANUP_RESULT):
-        return None, "Не получил результат dry-run.", 0
+    if result.returncode != 0:
+        stderr = (result.stderr or "").strip()[:300]
+        return False, f"PowerShell exit {result.returncode}: {stderr}"
 
+    if not CLEANUP_RESULT.exists():
+        return False, "PowerShell не создал cleanup_c_result.json"
+
+    return True, ""
+
+
+def _read_result() -> dict | None:
+    if not CLEANUP_RESULT.exists():
+        return None
     try:
         with open(CLEANUP_RESULT, "r", encoding="utf-8-sig") as f:
-            data = json.load(f)
+            return json.load(f)
     except Exception as e:
-        return None, f"Ошибка JSON: {e}", 0
+        log(f"cleanup: JSON: {e}", tag="BRAIN", level="WARN")
+        return None
+
+
+def cleanup_dry(include_recycle: bool = False,
+                include_winold: bool = False) -> tuple[dict | None, str, float]:
+    """Dry-run. Вернуть (data, msg, safe_predicted_gb).
+
+    safe_predicted_gb — только безопасные цели (без корзины и Dangerous).
+    """
+    ok, err = _run_ps(dry_run=True,
+                      include_recycle=include_recycle,
+                      include_winold=include_winold)
+    if not ok:
+        return None, f"Ошибка dry-run: {err}", 0.0
+
+    data = _read_result()
+    if data is None:
+        return None, "Не получил результат dry-run.", 0.0
 
     free_gb = data.get("FreeBefore", 0)
     total_gb = data.get("TotalGB", 0)
-    predicted = data.get("Predicted", 0)
 
-    # FIX: детали НЕ озвучиваем. Только итог.
-    if predicted <= 0:
+    details = data.get("Details", [])
+    safe_predicted = 0.0
+    recycle_predicted = 0.0
+    dangerous_items = []
+
+    for item in details:
+        freed = float(item.get("Freed", 0) or 0)
+        desc = item.get("Desc", "")
+        if desc.startswith("Корзина"):
+            recycle_predicted += freed
+        elif item.get("Dangerous"):
+            if freed > 0:
+                dangerous_items.append(desc)
+        else:
+            safe_predicted += freed
+
+    safe_predicted = round(safe_predicted, 2)
+    recycle_predicted = round(recycle_predicted, 2)
+
+    if safe_predicted <= 0 and recycle_predicted <= 0 and not dangerous_items:
         msg = (
             f"На диске C: {free_gb} из {total_gb} ГБ свободно. "
             f"Чистить нечего, и так свободен."
         )
-        return data, msg, 0
+        return data, msg, 0.0
+
+    parts = []
+    if safe_predicted > 0:
+        parts.append(f"безопасно — {safe_predicted} ГБ")
+    if recycle_predicted > 0:
+        parts.append(f"корзина — {recycle_predicted} ГБ")
+    if dangerous_items:
+        parts.append(f"{', '.join(dangerous_items)} — не трогаю")
 
     msg = (
         f"На диске C: {free_gb} из {total_gb} ГБ свободно. "
-        f"Могу освободить около {predicted} ГБ. "
-        f"Очистить? Да или нет."
+        f"Могу освободить: {'; '.join(parts)}. "
+        f"Очистить безопасное? Да или нет."
     )
-    return data, msg, predicted
+
+    return data, msg, safe_predicted
 
 
-def cleanup_real():
-    """Запустить cleanup_c.ps1 (без -DryRun). Вернуть msg."""
-    try:
-        if os.path.exists(CLEANUP_RESULT):
-            os.remove(CLEANUP_RESULT)
-    except Exception:
-        pass
+def cleanup_real() -> tuple[dict | None, str]:
+    """Реальная очистка (только безопасное). Вернуть (data, msg)."""
+    ok, err = _run_ps(dry_run=False,
+                      include_recycle=False,
+                      include_winold=False)
+    if not ok:
+        return None, f"Ошибка очистки: {err}"
 
-    try:
-        subprocess.run(
-            [PS_EXE, "-NoProfile", "-ExecutionPolicy", "Bypass",
-             "-File", CLEANUP_SCRIPT],
-            timeout=1800, creationflags=subprocess.CREATE_NO_WINDOW, cwd=TOOLS_DIR
+    data = _read_result()
+    if data is None:
+        return None, "Ошибка: не получил результат."
+
+    freed = data.get("Freed", 0)
+    free_after = data.get("FreeAfter", 0)
+
+    # FIX: если Freed == 0, а Predicted был > 0 — файлы заняты (Temp, CBS).
+    # Не врём «освобождено 0», говорим честно.
+    if freed <= 0:
+        return data, (
+            f"Очистка завершена, но освободить не удалось — файлы используются. "
+            f"Свободно на C: {free_after} ГБ."
         )
-    except Exception as e:
-        return f"Ошибка очистки: {e}"
 
-    if not os.path.exists(CLEANUP_RESULT):
-        return "Ошибка: не получил результат."
-
-    try:
-        with open(CLEANUP_RESULT, "r", encoding="utf-8-sig") as f:
-            data = json.load(f)
-    except Exception as e:
-        return f"Ошибка JSON: {e}"
-
-    # FIX: только итог, без деталей
-    return (
-        f"Очистка завершена. Освобождено: {data.get('Freed',0)} ГБ. "
-        f"Свободно на C: {data.get('FreeAfter',0)} ГБ."
+    return data, (
+        f"Очистка завершена. Освобождено: {freed} ГБ. "
+        f"Свободно на C: {free_after} ГБ."
     )
 
 
@@ -175,12 +240,10 @@ class CleanupSkill(Skill):
             _say_text(f"Ошибка: {msg}", rate=CLEANUP_RATE)
             return True
 
-        # FIX: если Predicted == 0 — не спрашиваем, просто говорим
         if predicted <= 0:
             _say_text(msg, rate=CLEANUP_RATE)
             return True
 
-        # Сохраняем pending — ждём «да»/«нет»
         try:
             from brain import pending
             pending.set(
@@ -193,7 +256,6 @@ class CleanupSkill(Skill):
         except Exception as e:
             log(f"cleanup: pending.set: {e}", tag="BRAIN", level="WARN")
 
-        # Прямой TTS, минуя policy
         _say_text(msg, rate=CLEANUP_RATE)
         return True
 
@@ -224,8 +286,8 @@ class CleanupConfirmSkill(Skill):
 
         if tl in ("да", "yes", "ок", "окей", "подтверждаю", "+"):
             _say_phrase("CLEANUP_RUNNING", rate=CLEANUP_RATE)
-            result = cleanup_real()
-            _say_text(result, rate=CLEANUP_RATE)
+            data, msg = cleanup_real()
+            _say_text(msg, rate=CLEANUP_RATE)
         else:
             _say_text("Отменил.", rate=CLEANUP_RATE)
         return True
