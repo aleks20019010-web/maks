@@ -9,26 +9,28 @@
 #   (порядок гарантирован, история последовательна). tts_worker отправляет
 #   ответы в TTS строго по порядку номеров.
 #
-# FIX 1 (критично): очередь TTS больше не зависает.
-#   Раньше: command → continue без _tts_queue.put → tts_worker ждёт
-#   next_id навсегда. Теперь: КАЖДЫЙ req_id попадает в _tts_queue,
-#   даже command/cancel/error — со статусом "NO_TTS" (ничего не говорить).
+# FIX 1: очередь TTS не зависает.
+#   КАЖДЫЙ req_id попадает в _tts_queue, даже command/cancel/error —
+#   со статусом "NO_TTS" (ничего не говорить).
 #
-# FIX 2 (критично): отмена через generation_id, не глобальный Event.
-#   Раньше: handle() → reset_cancel() сбрасывал _cancelled, и старый
-#   запрос (ещё в _call_llm) продолжал работу после «стоп» + новый вопрос.
-#   Теперь: _generation увеличивается при cancel_all(). Каждый запрос
-#   запоминает generation на старте. Если generation изменился —
-#   запрос считается отменённым. Новый запрос НЕ сбрасывает старую отмену.
+# FIX 2 (ПРАВИЛЬНЫЙ): отмена через generation_id. cancel_all() НЕ очищает
+#   очереди — только _generation += 1. Старые запросы сами увидят
+#   _is_cancelled(gen) → положат NO_TTS → пропустятся. next_id идёт
+#   последовательно, НИКОГДА не рвётся.
+#
+#   Раньше: cancel_all() очищал _llm_queue и _tts_queue, и next_id в
+#   _tts_worker «зависал» на пропущенном номере. Следующий ответ ждал
+#   next_id, которого нет → очередь стояла.
 #
 # ПРОВАЙДЕР:
 #   provider: {"sort": "latency"} — AITUNNEL выбирает провайдера с минимальной
-#   задержкой до первого токена. Без этого — балансировка по загрузке,
-#   которая может направить запрос к медленному провайдеру (наблюдалось 32с).
+#   задержкой до первого токена.
 #
 # FIX: process_command(cmd, source=CommandSource.SYSTEM). CommandSource enum.
 # FIX: _in_dialog() и session_open.flag — через cfg.DATA_DIR.
 # FIX: llm_key.txt — через cfg.CONFIG_DIR.
+# FIX: _whitelist.is_command_allowed(cmd) — LLM-команда проверяется перед
+#      выполнением. Запрещённые (формат, shutdown) → NOT_UNDERSTOOD.
 
 import queue
 import threading
@@ -69,22 +71,15 @@ def set_engine(engine):
 
 
 def cancel_all():
-    """Отменить всё: увеличить generation, очистить очереди."""
+    """Отменить всё: увеличить generation.
+
+    FIX 2 (ПРАВИЛЬНЫЙ): НЕ очищаем очереди. Старые запросы сами увидят
+    _is_cancelled(gen) → NO_TTS → пропустятся. next_id не рвётся.
+    """
     global _generation
     with _generation_lock:
         _generation += 1
         gen = _generation
-
-    while not _llm_queue.empty():
-        try:
-            _llm_queue.get_nowait()
-        except queue.Empty:
-            break
-    while not _tts_queue.empty():
-        try:
-            _tts_queue.get_nowait()
-        except queue.Empty:
-            break
     log(f"llm: cancelled all (gen={gen})", tag="BRAIN")
 
 
@@ -249,7 +244,7 @@ def _call_llm(user_text: str, detail: bool = False) -> str | None:
         t3 = time.time()
         log(f"llm: create {t3-t2:.2f}s", tag="LLM")
         raw = resp.choices[0].message.content
-        log(f"llm: raw={raw!r}", tag="LLM")
+        log(f"llm: raw_len={len(raw) if raw else 0}", tag="LLM")
         return raw
     except Exception as e:
         log(f"llm: request failed: {e}", tag="BRAIN", level="WARN")
@@ -299,10 +294,16 @@ def _llm_worker():
         ptype = parsed.get("type")
         log(f"llm: worker req={req_id} ptype={ptype!r}", tag="LLM")
 
-        # FIX 1: command — всё равно кладём в tts_queue, чтобы не завис next_id
         if ptype == "command":
             cmd = parsed.get("text", "")
             log(f"llm: command → {cmd!r}", tag="BRAIN")
+
+            # FIX: whitelist — LLM-команда проверяется перед выполнением
+            if not _whitelist.is_command_allowed(cmd):
+                log(f"llm: command blocked by whitelist: {cmd!r}", tag="BRAIN", level="WARN")
+                _tts_queue.put((req_id, "NOT_UNDERSTOOD"))
+                continue
+
             from brain.router import process_command
             try:
                 process_command(cmd, source=CommandSource.SYSTEM)
@@ -367,7 +368,6 @@ def _tts_worker():
         while next_id in buffer:
             resp = buffer.pop(next_id)
 
-            # FIX 1: NO_TTS — просто пропускаем номер, ничего не говорим
             if resp == "NO_TTS":
                 log(f"llm: tts req {next_id} skipped (NO_TTS)", tag="LLM")
                 next_id += 1
@@ -418,7 +418,6 @@ class LLMSkill(Skill):
     def handle(self, text: str) -> bool:
         _start_workers()
 
-        # FIX 2: НЕ reset_cancel(). generation запоминается на старте.
         gen = _current_gen()
 
         detail = _wants_detail(text)
