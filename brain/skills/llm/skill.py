@@ -18,13 +18,15 @@
 #   _is_cancelled(gen) → положат NO_TTS → пропустятся. next_id идёт
 #   последовательно, НИКОГДА не рвётся.
 #
-#   Раньше: cancel_all() очищал _llm_queue и _tts_queue, и next_id в
-#   _tts_worker «зависал» на пропущенном номере. Следующий ответ ждал
-#   next_id, которого нет → очередь стояла.
-#
 # FIX 3: cancel_all() закрывает сессию (_session.get().close()).
 #   Иначе _history живёт после «хватит», и следующий вопрос получит
 #   старый контекст. Session.close() вызывает _history.clear().
+#
+# FIX 4 (день 28): _llm_worker обёрнут во внешний try/except.
+#   Если _respond_and_say("LLM_THINKING") или _engine.process_llm_answer
+#   бросит исключение — поток НЕ умирает, req_id попадает в _tts_queue
+#   со статусом NO_TTS. Без этого tts_worker зависал на next_id,
+#   которого никто не положит. Очередь жива — Макс жив.
 #
 # ПРОВАЙДЕР:
 #   provider: {"sort": "latency"} — AITUNNEL выбирает провайдера с минимальной
@@ -275,95 +277,109 @@ def _llm_worker():
         except queue.Empty:
             continue
 
-        # Отмена до старта
-        if _is_cancelled(gen):
-            log(f"llm: req {req_id} cancelled before start (gen={gen})", tag="BRAIN")
-            _tts_queue.put((req_id, "NO_TTS"))
-            continue
-
-        log(f"llm: worker req={req_id} text={user_text!r} detail={detail}", tag="LLM")
-
-        if not _in_dialog():
-            _respond_and_say("LLM_THINKING")
-        else:
-            log("llm: LLM_THINKING skipped (dialog)", tag="LLM")
-
-        raw = _call_llm(user_text, detail=detail)
-
-        # Отмена после LLM
-        if _is_cancelled(gen):
-            log(f"llm: req {req_id} cancelled after llm (gen={gen})", tag="BRAIN")
-            _tts_queue.put((req_id, "NO_TTS"))
-            continue
-
-        if raw is None:
-            _tts_queue.put((req_id, None))
-            continue
-
-        parsed = _parser.parse_response(raw)
-        if parsed is None:
-            _tts_queue.put((req_id, None))
-            continue
-
-        ptype = parsed.get("type")
-        log(f"llm: worker req={req_id} ptype={ptype!r}", tag="LLM")
-
-        if ptype == "command":
-            cmd = parsed.get("text", "")
-            log(f"llm: command → {cmd!r}", tag="BRAIN")
-
-            # FIX: whitelist — LLM-команда проверяется перед выполнением
-            if not _whitelist.is_command_allowed(cmd):
-                log(f"llm: command blocked by whitelist: {cmd!r}", tag="BRAIN", level="WARN")
-                _tts_queue.put((req_id, "NOT_UNDERSTOOD"))
+        # FIX 4: ВЕСЬ код обработки — под внешним try/except.
+        # Если что-то бросит — req_id всё равно попадёт в _tts_queue,
+        # tts_worker не зависнет на next_id.
+        try:
+            # Отмена до старта
+            if _is_cancelled(gen):
+                log(f"llm: req {req_id} cancelled before start (gen={gen})", tag="BRAIN")
+                _tts_queue.put((req_id, "NO_TTS"))
                 continue
 
-            from brain.router import process_command
-            try:
-                process_command(cmd, source=CommandSource.SYSTEM)
-            except Exception as e:
-                log(f"llm: process_command({cmd!r}): {e}", tag="BRAIN", level="WARN")
-            _tts_queue.put((req_id, "NO_TTS"))
-            continue
+            log(f"llm: worker req={req_id} text={user_text!r} detail={detail}", tag="LLM")
 
-        if ptype == "answer":
-            try:
-                from brain.skills._helpers import _engine
-                if _engine is None:
-                    _tts_queue.put((req_id, None))
-                    continue
+            if not _in_dialog():
+                _respond_and_say("LLM_THINKING")
+            else:
+                log("llm: LLM_THINKING skipped (dialog)", tag="LLM")
 
-                if detail:
-                    text = parsed.get("full") or parsed.get("short") or parsed.get("minimal")
-                else:
-                    text = parsed.get("short") or parsed.get("full") or parsed.get("minimal")
+            raw = _call_llm(user_text, detail=detail)
 
-                if not text:
-                    _tts_queue.put((req_id, None))
-                    continue
+            # Отмена после LLM
+            if _is_cancelled(gen):
+                log(f"llm: req {req_id} cancelled after llm (gen={gen})", tag="BRAIN")
+                _tts_queue.put((req_id, "NO_TTS"))
+                continue
 
-                response = _engine.process_llm_answer(text, parsed.get("explicit_detail", False))
-
-                with _history_lock:
-                    _history.get().add("user", user_text)
-                    _history.get().add("assistant", text)
-
-                try:
-                    flag = cfg.DATA_DIR / "session_open.flag"
-                    flag.parent.mkdir(exist_ok=True)
-                    flag.write_text(str(time.time()))
-                except Exception:
-                    pass
-
-                _tts_queue.put((req_id, response))
-
-            except Exception as e:
-                log(f"llm: answer: {e}", tag="BRAIN", level="WARN")
+            if raw is None:
                 _tts_queue.put((req_id, None))
-            continue
+                continue
 
-        log(f"llm: unknown for {user_text!r}", tag="BRAIN")
-        _tts_queue.put((req_id, "NOT_UNDERSTOOD"))
+            parsed = _parser.parse_response(raw)
+            if parsed is None:
+                _tts_queue.put((req_id, None))
+                continue
+
+            ptype = parsed.get("type")
+            log(f"llm: worker req={req_id} ptype={ptype!r}", tag="LLM")
+
+            if ptype == "command":
+                cmd = parsed.get("text", "")
+                log(f"llm: command → {cmd!r}", tag="BRAIN")
+
+                # FIX: whitelist — LLM-команда проверяется перед выполнением
+                if not _whitelist.is_command_allowed(cmd):
+                    log(f"llm: command blocked by whitelist: {cmd!r}", tag="BRAIN", level="WARN")
+                    _tts_queue.put((req_id, "NOT_UNDERSTOOD"))
+                    continue
+
+                from brain.router import process_command
+                try:
+                    process_command(cmd, source=CommandSource.SYSTEM)
+                except Exception as e:
+                    log(f"llm: process_command({cmd!r}): {e}", tag="BRAIN", level="WARN")
+                _tts_queue.put((req_id, "NO_TTS"))
+                continue
+
+            if ptype == "answer":
+                try:
+                    from brain.skills._helpers import _engine
+                    if _engine is None:
+                        _tts_queue.put((req_id, None))
+                        continue
+
+                    if detail:
+                        text = parsed.get("full") or parsed.get("short") or parsed.get("minimal")
+                    else:
+                        text = parsed.get("short") or parsed.get("full") or parsed.get("minimal")
+
+                    if not text:
+                        _tts_queue.put((req_id, None))
+                        continue
+
+                    response = _engine.process_llm_answer(text, parsed.get("explicit_detail", False))
+
+                    with _history_lock:
+                        _history.get().add("user", user_text)
+                        _history.get().add("assistant", text)
+
+                    try:
+                        flag = cfg.DATA_DIR / "session_open.flag"
+                        flag.parent.mkdir(exist_ok=True)
+                        flag.write_text(str(time.time()))
+                    except Exception:
+                        pass
+
+                    _tts_queue.put((req_id, response))
+
+                except Exception as e:
+                    log(f"llm: answer: {e}", tag="BRAIN", level="WARN")
+                    _tts_queue.put((req_id, None))
+                continue
+
+            log(f"llm: unknown for {user_text!r}", tag="BRAIN")
+            _tts_queue.put((req_id, "NOT_UNDERSTOOD"))
+
+        except Exception as e:
+            # FIX 4: любое исключение в обработке — req_id не теряем.
+            # Кладём NO_TTS, чтобы tts_worker шёл дальше по next_id.
+            log(f"llm: worker crash req={req_id}: {type(e).__name__}: {e}",
+                tag="BRAIN", level="ERROR")
+            try:
+                _tts_queue.put((req_id, "NO_TTS"))
+            except Exception:
+                pass
 
 
 def _tts_worker():
