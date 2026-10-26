@@ -6,12 +6,16 @@ shared/yandex.py — клиент Яндекс.Музыки.
 
 Почему не в state: state — данные музыки (playlist, prefetched, ...).
 Клиент — это сетевое подключение. Разные вещи.
+
+FIX: cfg.TOKEN_FILE теперь Path (из shared/config.py), не str.
+Используем Path.exists() и open() — работают с Path.
+log вместо print — единообразие с другими воркерами.
 """
 
-import os
 import threading
 
 from shared import config as cfg
+from shared.log import log
 
 
 _client = None
@@ -30,28 +34,28 @@ def init() -> bool:
         if _client is not None:
             return True
 
-        if not os.path.exists(cfg.TOKEN_FILE):
-            print(f"❌ yandex: не найден {cfg.TOKEN_FILE}")
+        if not cfg.TOKEN_FILE.exists():
+            log(f"yandex: не найден {cfg.TOKEN_FILE}", tag="MUSIC", level="ERROR")
             return False
 
         try:
             with open(cfg.TOKEN_FILE, "r", encoding="utf-8") as f:
                 token = f.read().strip()
         except Exception as e:
-            print(f"❌ yandex: ошибка чтения токена: {e}")
+            log(f"yandex: ошибка чтения токена: {e}", tag="MUSIC", level="ERROR")
             return False
 
         if not token:
-            print("❌ yandex: пустой токен")
+            log("yandex: пустой токен", tag="MUSIC", level="ERROR")
             return False
 
         try:
             from yandex_music import Client
             client = Client(token).init()
             account = client.me.account.display_name
-            print(f"🎵 yandex: подключён ({account})")
+            log(f"yandex: подключён ({account})", tag="MUSIC")
         except Exception as e:
-            print(f"❌ yandex: ошибка подключения: {e}")
+            log(f"yandex: ошибка подключения: {e}", tag="MUSIC", level="ERROR")
             return False
 
         _client = client

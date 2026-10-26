@@ -29,10 +29,12 @@ FIX: порог echo поднят с 0.6 до 0.85.
 
   commands.json — ТОЛЬКО для ASR. Это словарь «похоже на команду»,
   ASR не знает, что с ними делает router. Просто пропускает.
+
+FIX: cfg.VOSK_MODEL_PATH теперь str (из shared/config.py), не Path.
+Vosk вызывает .encode() на аргументе — Path этого не умеет.
 """
 
 import json
-import os
 import queue
 import sys
 import threading
@@ -87,8 +89,8 @@ def _get_command_words() -> set:
 
     ASR не знает, что с ними делает router. Просто пропускает в диалоге.
     """
-    path = os.path.join(cfg.BASE_DIR, "responses", _COMMANDS_FILE)
-    if not os.path.exists(path):
+    path = cfg.RESPONSES_DIR / _COMMANDS_FILE
+    if not path.exists():
         return set()
     try:
         with open(path, "r", encoding="utf-8-sig") as f:
@@ -175,6 +177,7 @@ _DETAIL_WORDS = (
     "продолжай",
 )
 
+# Короткие осмысленные фразы — пропускаем в диалоге, даже если 1 слово
 _SHORT_OK = (
     "спасибо", "благодарю", "привет", "здравствуй", "пока",
     "да", "нет", "конечно", "хорошо", "ладно", "ясно",
@@ -282,7 +285,7 @@ def main():
 
     log(f"asr: загружаю Vosk: {cfg.VOSK_MODEL_PATH}", tag="ASR")
     try:
-        model = Model(cfg.VOSK_MODEL_PATH)
+        model = Model(str(cfg.VOSK_MODEL_PATH))
     except Exception as e:
         log(f"asr: Vosk не загрузился: {e}", tag="ASR", level="ERROR")
         sys.exit(1)
