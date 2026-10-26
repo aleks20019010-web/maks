@@ -13,7 +13,13 @@
 #
 # SUGGEST / REPEAT:
 #   - Если артист/трек с высоким весом (>40) — "Я как раз собирался предложить".
-#   - Если артист/трек уже играл 2+ раза сегодня — "Снова. Ну хорошо, сэр" (сарказм).
+#   - Если артист/трек уже играл 2+ раза сегодня — "Снова. Ну хорошо" (сарказм).
+#
+# FIX: play_artist / play_track теперь говорят «Ищу» (SEARCHING) до music,
+# а «Машина времени. Включаю» (STARTED) — на music_started, когда music уже
+# нашёл каноничное имя. Раньше brain говорил «машину времени сегодня» —
+# сырой запрос в именительном падеже, звучало как «С лампу проблем не будет».
+# Pending "music_started" хранит, что ждём (artist/track) и какой phrase_set.
 
 import time
 
@@ -29,8 +35,10 @@ from shared.log import log
 
 
 PENDING_KEY = "music_ask"
+PENDING_STARTED = "music_started"
 SUGGEST_WEIGHT_THRESHOLD = 40.0
 REPEAT_TODAY_THRESHOLD = 2
+STARTED_TIMEOUT_SEC = 10.0
 
 
 def _get_artist_weight(artist: str) -> float:
@@ -161,24 +169,29 @@ class MusicSkill(Skill):
             weight = _get_artist_weight(artist)
             today = _plays_artist_today(artist)
 
-            if today >= REPEAT_TODAY_THRESHOLD:
-                _respond_and_say("REPEAT_ARTIST", artist=artist)
-            elif weight > SUGGEST_WEIGHT_THRESHOLD:
-                _respond_and_say("WAS_GOING_TO_SUGGEST_ARTIST", artist=artist)
-            else:
-                _respond_and_say("PLAY_ARTIST", artist=artist)
+            # Говорим «Ищу» до music. Каноничное имя скажем на music_started.
+            _respond_and_say("PLAY_ARTIST_SEARCHING")
+
+            # Запоминаем, что ждём music_started (artist)
+            pending.set(
+                PENDING_STARTED,
+                timeout=STARTED_TIMEOUT_SEC,
+                on_timeout=lambda _d: _respond_and_say("NOT_FOUND"),
+                data={"kind": "artist", "phrase_set": "PLAY_ARTIST_STARTED"},
+            )
 
             ipc.put(protocol.MUSIC_INBOX, protocol.play_artist(artist))
 
         elif action == "play_track":
             track = result["track"]
-            weight = _get_track_weight_by_title(track)
 
-            if weight > SUGGEST_WEIGHT_THRESHOLD:
-                _respond_and_say("WAS_GOING_TO_SUGGEST_TRACK", title=track)
-            else:
-                _respond_and_say("PLAY_TRACK", title=track)
-
+            _respond_and_say("PLAY_TRACK_SEARCHING")
+            pending.set(
+                PENDING_STARTED,
+                timeout=STARTED_TIMEOUT_SEC,
+                on_timeout=lambda _d: _respond_and_say("NOT_FOUND"),
+                data={"kind": "track", "phrase_set": "PLAY_TRACK_STARTED"},
+            )
             ipc.put(protocol.MUSIC_INBOX, protocol.play_track(track))
 
         elif action == "play_genre":
@@ -206,6 +219,27 @@ class MusicSkill(Skill):
         elif action == "dislike":
             _respond_and_say("MUSIC_DISLIKE")
             ipc.put(protocol.MUSIC_INBOX, protocol.music_dislike())
+
+
+def on_music_started(artist: str, title: str) -> None:
+    """Вызывается из brain/main.py на событие music_started.
+
+    Если был pending "music_started" (ждали play_artist / play_track) —
+    говорим PLAY_ARTIST_STARTED / PLAY_TRACK_STARTED с каноничным именем.
+    Если pending нет (например, music_started после next) — молчим.
+    """
+    p = pending.pop(PENDING_STARTED)
+    if p is None:
+        return
+    phrase_set = p.data.get("phrase_set", "PLAY_ARTIST_STARTED")
+    kind = p.data.get("kind", "artist")
+    try:
+        if kind == "artist":
+            _respond_and_say(phrase_set, artist=artist)
+        else:
+            _respond_and_say(phrase_set, title=title)
+    except Exception as e:
+        log(f"music: on_music_started: {e}", tag="BRAIN", level="WARN")
 
 
 register(MusicSkill())

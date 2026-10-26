@@ -23,6 +23,8 @@ brain/main.py — ядро Макса.
 
 FIX: source прокидывается в router.process_command(source=CommandSource).
 FIX: CommandSource enum вместо magic strings.
+FIX: music_started → on_music_started (каноничное имя артиста в фразе
+     «Машина времени. Включаю», а не сырой запрос «машину времени»).
 """
 
 import sys
@@ -233,6 +235,14 @@ def _handle_event(msg: protocol.Message):
                     log(f"brain: habit {bucket} → {artist}", tag="BRAIN")
                 except Exception as e:
                     log(f"brain: record_play_habit: {e}", tag="BRAIN", level="WARN")
+
+            # Говорим «Машина времени. Включаю» — если ждали play_artist/play_track.
+            # Если pending нет (music_started после next) — молчим.
+            try:
+                from brain.skills.music.skill import on_music_started
+                on_music_started(artist, title)
+            except Exception as e:
+                log(f"brain: on_music_started: {e}", tag="BRAIN", level="WARN")
 
         elif msg.name == "track_finished":
             state.clear_current()

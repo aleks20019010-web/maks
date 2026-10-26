@@ -1,2368 +1,465 @@
 {
   "PLAY_ARTIST": [
-    {
-      "text": "Включ+аю {artist}",
-      "style": "normal",
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Уж+е играет: {artist}",
-      "style": "normal",
-      "weight": 1.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Нашёл: {artist}",
-      "style": "normal",
-      "weight": 1.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Оп+ять {artist}? sil<[150]> Ну хорош+о",
-      "style": "ironic",
-      "humor": 0.4,
-      "rate": "-5%",
-      "weight": 0.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "{artist}. sil<[150]> Как пожел+аете",
-      "style": "normal",
-      "humor": 0.1,
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "{artist}. sil<[200]> Серьёзно",
-      "style": "ironic",
-      "humor": 0.5,
-      "rate": "+5%",
-      "pitch": "-12Hz",
-      "weight": 0.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "{artist}. sil<[150]> Неожд+иданно sil<[150]> Включ+аю",
-      "style": "ironic",
-      "humor": 0.3,
-      "weight": 1.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "{artist}. sil<[200]> А Я д+умал, вы уж+е в+ыросли из +этого",
-      "style": "sarcastic",
-      "humor": 0.6,
-      "rate": "-8%",
-      "pitch": "-12Hz",
-      "weight": 0.3,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Включ+аю {artist}. sil<[150]> Т+ихо",
-      "style": "night",
-      "night": true,
-      "rate": "-12%",
-      "pitch": "-12Hz",
-      "weight": 1.0,
-      "emotion": "neutral",
-      "slot": "core"
-    },
-    {
-      "text": "{artist}. sil<[150]> Прин+ято",
-      "style": "formal",
-      "weight": 1.5,
-      "emotion": "neutral",
-      "slot": "core"
-    },
-    {
-      "text": "Организ+ую {artist}",
-      "style": "formal",
-      "weight": 1.0,
-      "emotion": "neutral",
-      "slot": "core"
-    },
-    {
-      "text": "{artist}. sil<[150]> Сейч+ас начн+ём",
-      "style": "normal",
-      "weight": 1.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "С {artist} пробл+ем не б+удет",
-      "style": "friendly",
-      "humor": 0.2,
-      "weight": 1.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "{artist} сег+одня. sil<[150]> Неплохо",
-      "style": "friendly",
-      "humor": 0.2,
-      "weight": 1.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "{artist}. sil<[150]> Держ+ите",
-      "style": "normal",
-      "weight": 1.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Включ+аю {artist}. sil<[200]> Но +это уж+е б+ыло",
-      "style": "ironic",
-      "humor": 0.4,
-      "weight": 0.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "{artist}. sil<[150]> Ваш в+ыбор",
-      "style": "normal",
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "{artist}. sil<[150]> Пост+авил",
-      "style": "normal",
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Гот+ово: {artist}",
-      "style": "formal",
-      "weight": 1.5,
-      "emotion": "neutral",
-      "slot": "core"
-    }
+    {"text": "Включ+аю {artist}", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Уж+е играет", "style": "normal", "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "Нашёл. sil<[150]> Включ+аю", "style": "normal", "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "Оп+ять? sil<[150]> Ну хорош+о", "style": "ironic", "humor": 0.4, "rate": "-5%", "weight": 0.5, "emotion": "good", "slot": "core"},
+    {"text": "Как пожел+аете", "style": "normal", "humor": 0.1, "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Серьёзно? sil<[150]> Хорош+о", "style": "ironic", "humor": 0.5, "rate": "+5%", "pitch": "-12Hz", "weight": 0.5, "emotion": "good", "slot": "core"},
+    {"text": "Неожд+иданно sil<[150]> Включ+аю", "style": "ironic", "humor": 0.3, "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "А Я д+умал, вы уж+е в+ыросли из +этого", "style": "sarcastic", "humor": 0.6, "rate": "-8%", "pitch": "-12Hz", "weight": 0.3, "emotion": "good", "slot": "core"},
+    {"text": "Включ+аю. sil<[150]> Т+ихо", "style": "night", "night": true, "rate": "-12%", "pitch": "-12Hz", "weight": 1.0, "emotion": "neutral", "slot": "core"},
+    {"text": "Прин+ято", "style": "formal", "weight": 1.5, "emotion": "neutral", "slot": "core"},
+    {"text": "Организ+ую {artist}", "style": "formal", "weight": 1.0, "emotion": "neutral", "slot": "core"},
+    {"text": "Сейч+ас начн+ём", "style": "normal", "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "Пробл+ем не б+удет", "style": "friendly", "humor": 0.2, "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "Неплохо", "style": "friendly", "humor": 0.2, "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "Держ+ите", "style": "normal", "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "Включ+аю. sil<[200]> Но +это уж+е б+ыло", "style": "ironic", "humor": 0.4, "weight": 0.5, "emotion": "good", "slot": "core"},
+    {"text": "Ваш в+ыбор", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Пост+авил", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Гот+ово", "style": "formal", "weight": 1.5, "emotion": "neutral", "slot": "core"}
   ],
+
+  "PLAY_ARTIST_SEARCHING": [
+    {"text": "Сию мин+уту", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Ищ+у", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Сек+унду", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Од+ин мом+ент", "style": "formal", "weight": 1.5, "emotion": "neutral", "slot": "core"},
+    {"text": "Смотр+ю", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"}
+  ],
+
+  "PLAY_ARTIST_STARTED": [
+    {"text": "{artist}. sil<[150]> Включ+аю", "style": "normal", "weight": 2.5, "emotion": "good", "slot": "core"},
+    {"text": "Нашёл: {artist}", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "{artist}. sil<[150]> Гот+ово", "style": "formal", "weight": 2.0, "emotion": "neutral", "slot": "core"},
+    {"text": "{artist}. sil<[150]> Как пожел+аете", "style": "normal", "humor": 0.1, "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{artist}. sil<[150]> Неплохо", "style": "friendly", "humor": 0.2, "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{artist}. sil<[150]> Пробл+ем не б+удет", "style": "friendly", "humor": 0.2, "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{artist}. sil<[150]> Держ+ите", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Оп+ять {artist}? sil<[150]> Ну хорош+о", "style": "ironic", "humor": 0.4, "rate": "-5%", "weight": 0.5, "emotion": "good", "slot": "core"},
+    {"text": "{artist}. sil<[200]> Серьёзно?", "style": "ironic", "humor": 0.5, "rate": "+5%", "pitch": "-12Hz", "weight": 0.5, "emotion": "good", "slot": "core"},
+    {"text": "Включ+аю {artist}. sil<[150]> Т+ихо", "style": "night", "night": true, "rate": "-12%", "pitch": "-12Hz", "weight": 1.0, "emotion": "neutral", "slot": "core"}
+  ],
+
   "PLAY_ARTIST_NIGHT": [
-    {
-      "text": "{artist}. sil<[150]> Т+ихо",
-      "style": "night",
-      "night": true,
-      "rate": "-12%",
-      "pitch": "-12Hz",
-      "weight": 2.0,
-      "emotion": "neutral",
-      "slot": "core"
-    },
-    {
-      "text": "Включ+аю {artist}. sil<[150]> Сос+еди спят",
-      "style": "night",
-      "night": true,
-      "rate": "-12%",
-      "weight": 1.5,
-      "emotion": "neutral",
-      "slot": "core"
-    },
-    {
-      "text": "{artist}. sil<[150]> Но т+ихо",
-      "style": "night",
-      "night": true,
-      "rate": "-12%",
-      "pitch": "-10Hz",
-      "weight": 2.0,
-      "emotion": "neutral",
-      "slot": "core"
-    },
-    {
-      "text": "{artist}. sil<[150]> Ночн+ая см+ена",
-      "style": "night",
-      "night": true,
-      "rate": "-10%",
-      "weight": 1.5,
-      "emotion": "neutral",
-      "slot": "core"
-    },
-    {
-      "text": "Т+ихо включ+аю {artist}",
-      "style": "night",
-      "night": true,
-      "rate": "-12%",
-      "weight": 2.0,
-      "emotion": "neutral",
-      "slot": "core"
-    }
+    {"text": "Т+ихо", "style": "night", "night": true, "rate": "-12%", "pitch": "-12Hz", "weight": 2.0, "emotion": "neutral", "slot": "core"},
+    {"text": "Включ+аю {artist}. sil<[150]> Сос+еди спят", "style": "night", "night": true, "rate": "-12%", "weight": 1.5, "emotion": "neutral", "slot": "core"},
+    {"text": "Но т+ихо", "style": "night", "night": true, "rate": "-12%", "pitch": "-10Hz", "weight": 2.0, "emotion": "neutral", "slot": "core"},
+    {"text": "Ночн+ая см+ена", "style": "night", "night": true, "rate": "-10%", "weight": 1.5, "emotion": "neutral", "slot": "core"},
+    {"text": "Т+ихо включ+аю {artist}", "style": "night", "night": true, "rate": "-12%", "weight": 2.0, "emotion": "neutral", "slot": "core"}
   ],
+
   "PLAY_TRACK": [
-    {
-      "text": "Игр+аю {title}",
-      "style": "normal",
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Включ+аю {title}",
-      "style": "normal",
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "{title}. sil<[150]> Отл+ичный в+ыбор",
-      "style": "friendly",
-      "humor": 0.2,
-      "rate": "+5%",
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "{title}. sil<[150]> Как ск+ажете",
-      "style": "normal",
-      "weight": 1.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "{title}. sil<[150]> Прин+ято",
-      "style": "formal",
-      "weight": 1.0,
-      "emotion": "neutral",
-      "slot": "core"
-    },
-    {
-      "text": "Ст+авлю {title}",
-      "style": "normal",
-      "weight": 1.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "{title}. sil<[150]> Включ+аю",
-      "style": "normal",
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    }
+    {"text": "Игр+аю {title}", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Включ+аю {title}", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Отл+ичный в+ыбор", "style": "friendly", "humor": 0.2, "rate": "+5%", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Как ск+ажете", "style": "normal", "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "Прин+ято", "style": "formal", "weight": 1.0, "emotion": "neutral", "slot": "core"},
+    {"text": "Ст+авлю {title}", "style": "normal", "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "Нашёл. sil<[150]> Включ+аю", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"}
   ],
+
+  "PLAY_TRACK_SEARCHING": [
+    {"text": "Сию мин+уту", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Ищ+у", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Сек+унду", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Од+ин мом+ент", "style": "formal", "weight": 1.5, "emotion": "neutral", "slot": "core"}
+  ],
+
+  "PLAY_TRACK_STARTED": [
+    {"text": "{title}. sil<[150]> Включ+аю", "style": "normal", "weight": 2.5, "emotion": "good", "slot": "core"},
+    {"text": "Нашёл: {title}", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "{title}. sil<[150]> Гот+ово", "style": "formal", "weight": 2.0, "emotion": "neutral", "slot": "core"},
+    {"text": "{title}. sil<[150]> Отл+ичный в+ыбор", "style": "friendly", "humor": 0.2, "rate": "+5%", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{title}. sil<[150]> Держ+ите", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"}
+  ],
+
   "PLAY_PLAYLIST": [
-    {
-      "text": "Включ+аю {name}",
-      "style": "normal",
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Запуск+аю {name}",
-      "style": "normal",
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "{name}. sil<[200]> Над+еюсь, +это то, что вы хот+ели",
-      "style": "normal",
-      "humor": 0.1,
-      "weight": 1.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Включ+аю {name}. sil<[200]> Не переключ+айте сл+ишком ч+асто",
-      "style": "ironic",
-      "humor": 0.4,
-      "rate": "-5%",
-      "weight": 0.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Организ+ую {name}",
-      "style": "formal",
-      "weight": 1.5,
-      "emotion": "neutral",
-      "slot": "core"
-    }
+    {"text": "Включ+аю {name}", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Запуск+аю {name}", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "{name}. sil<[200]> Над+еюсь, +это то, что вы хот+ели", "style": "normal", "humor": 0.1, "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "Включ+аю {name}. sil<[200]> Не переключ+айте сл+ишком ч+асто", "style": "ironic", "humor": 0.4, "rate": "-5%", "weight": 0.5, "emotion": "good", "slot": "core"},
+    {"text": "Организ+ую {name}", "style": "formal", "weight": 1.5, "emotion": "neutral", "slot": "core"}
   ],
+
   "PLAY_GENRE": [
-    {
-      "text": "Включ+аю {genre}",
-      "style": "normal",
-      "weight": 2.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Ст+авлю {genre}",
-      "style": "normal",
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "{genre}. sil<[150]> Отл+ичный в+ыбор",
-      "style": "friendly",
-      "humor": 0.2,
-      "rate": "+5%",
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Погруж+аемся в {genre}",
-      "style": "ironic",
-      "humor": 0.3,
-      "weight": 1.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "{genre}. sil<[150]> Держ+ите",
-      "style": "normal",
-      "weight": 1.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Организ+ую {genre}",
-      "style": "formal",
-      "weight": 1.5,
-      "emotion": "neutral",
-      "slot": "core"
-    },
-    {
-      "text": "{genre}. sil<[150]> Ваш в+ыбор",
-      "style": "normal",
-      "weight": 1.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "{genre}. sil<[150]> Сейч+ас начн+ём",
-      "style": "normal",
-      "weight": 1.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Включ+аю {genre}. sil<[150]> Т+ихо",
-      "style": "night",
-      "night": true,
-      "rate": "-12%",
-      "pitch": "-12Hz",
-      "weight": 1.0,
-      "emotion": "neutral",
-      "slot": "core"
-    },
-    {
-      "text": "{genre} сег+одня. sil<[150]> Неплохо",
-      "style": "friendly",
-      "humor": 0.2,
-      "weight": 1.0,
-      "emotion": "good",
-      "slot": "core"
-    }
+    {"text": "Включ+аю {genre}", "style": "normal", "weight": 2.5, "emotion": "good", "slot": "core"},
+    {"text": "Ст+авлю {genre}", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{genre}. sil<[150]> Отл+ичный в+ыбор", "style": "friendly", "humor": 0.2, "rate": "+5%", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Погруж+аемся в {genre}", "style": "ironic", "humor": 0.3, "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "{genre}. sil<[150]> Держ+ите", "style": "normal", "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "Организ+ую {genre}", "style": "formal", "weight": 1.5, "emotion": "neutral", "slot": "core"},
+    {"text": "{genre}. sil<[150]> Ваш в+ыбор", "style": "normal", "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "{genre}. sil<[150]> Сейч+ас начн+ём", "style": "normal", "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "Включ+аю {genre}. sil<[150]> Т+ихо", "style": "night", "night": true, "rate": "-12%", "pitch": "-12Hz", "weight": 1.0, "emotion": "neutral", "slot": "core"},
+    {"text": "{genre} сег+одня. sil<[150]> Неплохо", "style": "friendly", "humor": 0.2, "weight": 1.0, "emotion": "good", "slot": "core"}
   ],
+
   "NOW_PLAYING": [
-    {
-      "text": "Сейч+ас играет: {title}, {artist}",
-      "style": "normal",
-      "weight": 2.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "+Это {title} — {artist}",
-      "style": "normal",
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "В эф+ире: {title}, {artist}",
-      "style": "normal",
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "{title} — {artist}. sil<[200]> Неуж+ели не узн+али",
-      "style": "ironic",
-      "humor": 0.4,
-      "rate": "-5%",
-      "weight": 0.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "{title}, {artist}. sil<[150]> +Это же кл+ассика",
-      "style": "friendly",
-      "humor": 0.2,
-      "rate": "+5%",
-      "weight": 1.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "{title} — {artist}. sil<[200]> Я зап+омнил sil<[150]> На вс+який сл+учай",
-      "style": "sarcastic",
-      "humor": 0.4,
-      "rate": "-5%",
-      "pitch": "-12Hz",
-      "weight": 0.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Сейч+ас играет {title}. sil<[200]> Вы же с+ами +это включ+или",
-      "style": "sarcastic",
-      "humor": 0.5,
-      "rate": "-8%",
-      "pitch": "-12Hz",
-      "weight": 0.3,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "{title} от {artist}",
-      "style": "normal",
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Игр+ает {title}. sil<[150]> {artist}",
-      "style": "normal",
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    }
+    {"text": "Сейч+ас играет: {title}, {artist}", "style": "normal", "weight": 2.5, "emotion": "good", "slot": "core"},
+    {"text": "+Это {title} — {artist}", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "В эф+ире: {title}, {artist}", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{title} — {artist}. sil<[200]> Неуж+ели не узн+али", "style": "ironic", "humor": 0.4, "rate": "-5%", "weight": 0.5, "emotion": "good", "slot": "core"},
+    {"text": "{title}, {artist}. sil<[150]> +Это же кл+ассика", "style": "friendly", "humor": 0.2, "rate": "+5%", "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "{title} — {artist}. sil<[200]> Я зап+омнил sil<[150]> На вс+який сл+учай", "style": "sarcastic", "humor": 0.4, "rate": "-5%", "pitch": "-12Hz", "weight": 0.5, "emotion": "good", "slot": "core"},
+    {"text": "Сейч+ас играет {title}. sil<[200]> Вы же с+ами +это включ+или", "style": "sarcastic", "humor": 0.5, "rate": "-8%", "pitch": "-12Hz", "weight": 0.3, "emotion": "good", "slot": "core"},
+    {"text": "{title} от {artist}", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Игр+ает {title}. sil<[150]> {artist}", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"}
   ],
+
   "NEXT_TRACK": [
-    {
-      "text": "Сл+едующий",
-      "style": "normal",
-      "rate": "+5%",
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Переключ+аю",
-      "style": "normal",
-      "weight": 2.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Д+альше",
-      "style": "normal",
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Сл+едующий. sil<[200]> +Этот не понр+авился",
-      "style": "ironic",
-      "humor": 0.4,
-      "weight": 0.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Переключ+аю. sil<[150]> Над+еюсь, сл+едующий л+учше",
-      "style": "ironic",
-      "humor": 0.3,
-      "weight": 1.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Сл+едующий. sil<[200]> Не всё же +это сл+ушать",
-      "style": "sarcastic",
-      "humor": 0.5,
-      "rate": "-5%",
-      "pitch": "-12Hz",
-      "weight": 0.3,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Переключ+аю. sil<[150]> Т+ихо",
-      "style": "night",
-      "night": true,
-      "rate": "-12%",
-      "pitch": "-12Hz",
-      "weight": 1.0,
-      "emotion": "neutral",
-      "slot": "core"
-    },
-    {
-      "text": "Пропуск+аю",
-      "style": "normal",
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Д+альше пошл+и",
-      "style": "normal",
-      "weight": 1.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Мен+яю",
-      "style": "normal",
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Держ+ите сл+едующий",
-      "style": "friendly",
-      "humor": 0.1,
-      "weight": 1.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Смен+яю пласт+инку",
-      "style": "ironic",
-      "humor": 0.3,
-      "weight": 0.5,
-      "emotion": "good",
-      "slot": "core"
-    }
+    {"text": "Сл+едующий", "style": "normal", "rate": "+5%", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Переключ+аю", "style": "normal", "weight": 2.5, "emotion": "good", "slot": "core"},
+    {"text": "Д+альше", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Сл+едующий. sil<[200]> +Этот не понр+авился", "style": "ironic", "humor": 0.4, "weight": 0.5, "emotion": "good", "slot": "core"},
+    {"text": "Переключ+аю. sil<[150]> Над+еюсь, сл+едующий л+учше", "style": "ironic", "humor": 0.3, "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "Сл+едующий. sil<[200]> Не всё же +это сл+ушать", "style": "sarcastic", "humor": 0.5, "rate": "-5%", "pitch": "-12Hz", "weight": 0.3, "emotion": "good", "slot": "core"},
+    {"text": "Переключ+аю. sil<[150]> Т+ихо", "style": "night", "night": true, "rate": "-12%", "pitch": "-12Hz", "weight": 1.0, "emotion": "neutral", "slot": "core"},
+    {"text": "Пропуск+аю", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Д+альше пошл+и", "style": "normal", "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "Мен+яю", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Держ+ите сл+едующий", "style": "friendly", "humor": 0.1, "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "Смен+яю пласт+инку", "style": "ironic", "humor": 0.3, "weight": 0.5, "emotion": "good", "slot": "core"}
   ],
+
   "NEXT_OFTEN": [
-    {
-      "text": "sil<[200]> Я начин+аю подозрев+ать, что вы пр+осто не зн+аете, чег+о хот+ите",
-      "style": "sarcastic",
-      "humor": 0.5,
-      "weight": 3.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "П+ятый скип. sil<[200]> Либо вы +ищете лег+енду, sil<[150]> либо вам пр+осто нр+авится говор+ить «д+альше»",
-      "style": "sarcastic",
-      "humor": 0.5,
-      "weight": 2.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "sil<[150]> вы явно +ищете что-то, чег+о у мен+я нет. sil<[150]> Скаж+ите пр+ямо",
-      "style": "sarcastic",
-      "humor": 0.4,
-      "weight": 2.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Так и б+удем лист+ать sil<[150]> Я +это уж+е пон+ял",
-      "style": "sarcastic",
-      "humor": 0.4,
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "sil<[150]> в+аше «д+альше» Я уж+е сл+ышу ч+аще, чем своё +имя",
-      "style": "sarcastic",
-      "humor": 0.6,
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Лист+аем д+альше. sil<[150]> Кто бы сомнев+ался",
-      "style": "sarcastic",
-      "humor": 0.4,
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "sil<[200]> ещё немн+ого — и Я начн+у обиж+аться",
-      "style": "sarcastic",
-      "humor": 0.5,
-      "weight": 1.0,
-      "emotion": "good",
-      "slot": "core"
-    }
+    {"text": "sil<[200]> Я начин+аю подозрев+ать, что вы пр+осто не зн+аете, чег+о хот+ите", "style": "sarcastic", "humor": 0.5, "weight": 3.0, "emotion": "good", "slot": "core"},
+    {"text": "П+ятый скип. sil<[200]> Либо вы +ищете лег+енду, sil<[150]> либо вам пр+осто нр+авится говор+ить «д+альше»", "style": "sarcastic", "humor": 0.5, "weight": 2.5, "emotion": "good", "slot": "core"},
+    {"text": "sil<[150]> вы явно +ищете что-то, чег+о у мен+я нет. sil<[150]> Скаж+ите пр+ямо", "style": "sarcastic", "humor": 0.4, "weight": 2.5, "emotion": "good", "slot": "core"},
+    {"text": "Так и б+удем лист+ать sil<[150]> Я +это уж+е пон+ял", "style": "sarcastic", "humor": 0.4, "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "sil<[150]> в+аше «д+альше» Я уж+е сл+ышу ч+аще, чем своё +имя", "style": "sarcastic", "humor": 0.6, "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Лист+аем д+альше. sil<[150]> Кто бы сомнев+ался", "style": "sarcastic", "humor": 0.4, "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "sil<[200]> ещё немн+ого — и Я начн+у обиж+аться", "style": "sarcastic", "humor": 0.5, "weight": 1.0, "emotion": "good", "slot": "core"}
   ],
+
   "PAUSE": [
-    {
-      "text": "П+ауза",
-      "style": "normal",
-      "weight": 2.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Останов+ил",
-      "style": "normal",
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Приостанов+ил воспроизвед+ение",
-      "style": "formal",
-      "pitch": "-12Hz",
-      "weight": 2.0,
-      "emotion": "neutral",
-      "slot": "core"
-    },
-    {
-      "text": "П+ауза. sil<[150]> Наслажд+айтесь тишин+ой",
-      "style": "friendly",
-      "humor": 0.2,
-      "rate": "-5%",
-      "weight": 1.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Останов+ил. sil<[200]> Не перед+умали",
-      "style": "ironic",
-      "humor": 0.3,
-      "weight": 0.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "П+ауза. sil<[150]> Отдохн+ите sil<[150]> Вы заслуж+или",
-      "style": "friendly",
-      "humor": 0.2,
-      "rate": "-5%",
-      "weight": 1.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Останов+ил. sil<[200]> Над+еюсь, не навсегд+а",
-      "style": "ironic",
-      "humor": 0.4,
-      "rate": "-5%",
-      "weight": 0.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "П+ауза. sil<[200]> Д+аже Я иногд+а нужд+аюсь в тишин+е",
-      "style": "ironic",
-      "humor": 0.4,
-      "rate": "-8%",
-      "pitch": "-12Hz",
-      "weight": 0.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Т+ихо",
-      "style": "normal",
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Стоп м+узыка",
-      "style": "normal",
-      "weight": 1.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "На п+аузе",
-      "style": "normal",
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Замолч+ал",
-      "style": "ironic",
-      "humor": 0.2,
-      "weight": 1.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "П+ауза. sil<[150]> Дыш+ите",
-      "style": "friendly",
-      "weight": 1.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Останов+ил. sil<[200]> Хоть +уши отдохн+ут",
-      "style": "ironic",
-      "humor": 0.3,
-      "weight": 0.5,
-      "emotion": "good",
-      "slot": "core"
-    }
+    {"text": "П+ауза", "style": "normal", "weight": 2.5, "emotion": "good", "slot": "core"},
+    {"text": "Останов+ил", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Приостанов+ил воспроизвед+ение", "style": "formal", "pitch": "-12Hz", "weight": 2.0, "emotion": "neutral", "slot": "core"},
+    {"text": "П+ауза. sil<[150]> Наслажд+айтесь тишин+ой", "style": "friendly", "humor": 0.2, "rate": "-5%", "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "Останов+ил. sil<[200]> Не перед+умали", "style": "ironic", "humor": 0.3, "weight": 0.5, "emotion": "good", "slot": "core"},
+    {"text": "П+ауза. sil<[150]> Отдохн+ите sil<[150]> Вы заслуж+или", "style": "friendly", "humor": 0.2, "rate": "-5%", "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "Останов+ил. sil<[200]> Над+еюсь, не навсегд+а", "style": "ironic", "humor": 0.4, "rate": "-5%", "weight": 0.5, "emotion": "good", "slot": "core"},
+    {"text": "П+ауза. sil<[200]> Д+аже Я иногд+а нужд+аюсь в тишин+е", "style": "ironic", "humor": 0.4, "rate": "-8%", "pitch": "-12Hz", "weight": 0.5, "emotion": "good", "slot": "core"},
+    {"text": "Т+ихо", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Стоп м+узыка", "style": "normal", "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "На п+аузе", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Замолч+ал", "style": "ironic", "humor": 0.2, "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "П+ауза. sil<[150]> Дыш+ите", "style": "friendly", "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "Останов+ил. sil<[200]> Хоть +уши отдохн+ут", "style": "ironic", "humor": 0.3, "weight": 0.5, "emotion": "good", "slot": "core"}
   ],
+
   "RESUME": [
-    {
-      "text": "Продолж+аю",
-      "style": "normal",
-      "weight": 2.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Возобновл+яю",
-      "style": "normal",
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Сл+ушаем д+альше",
-      "style": "normal",
-      "rate": "+5%",
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Продолж+аем. sil<[150]> Я зн+ал, что вы верн+ётесь",
-      "style": "ironic",
-      "humor": 0.4,
-      "weight": 0.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Сн+ова в эф+ире",
-      "style": "friendly",
-      "humor": 0.1,
-      "rate": "+5%",
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Сн+ова в эф+ире. sil<[150]> Скуч+али",
-      "style": "ironic",
-      "humor": 0.4,
-      "weight": 0.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Возобновл+яю. sil<[200]> Не прошл+о и полг+ода",
-      "style": "sarcastic",
-      "humor": 0.6,
-      "rate": "-8%",
-      "pitch": "-12Hz",
-      "weight": 0.3,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Продолж+аю. sil<[150]> Как б+удто и не уход+или",
-      "style": "friendly",
-      "humor": 0.2,
-      "weight": 1.0,
-      "emotion": "good",
-      "slot": "core"
-    }
+    {"text": "Продолж+аю", "style": "normal", "weight": 2.5, "emotion": "good", "slot": "core"},
+    {"text": "Возобновл+яю", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Сл+ушаем д+альше", "style": "normal", "rate": "+5%", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Продолж+аем. sil<[150]> Я зн+ал, что вы верн+ётесь", "style": "ironic", "humor": 0.4, "weight": 0.5, "emotion": "good", "slot": "core"},
+    {"text": "Сн+ова в эф+ире", "style": "friendly", "humor": 0.1, "rate": "+5%", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Сн+ова в эф+ире. sil<[150]> Скуч+али", "style": "ironic", "humor": 0.4, "weight": 0.5, "emotion": "good", "slot": "core"},
+    {"text": "Возобновл+яю. sil<[200]> Не прошл+о и полг+ода", "style": "sarcastic", "humor": 0.6, "rate": "-8%", "pitch": "-12Hz", "weight": 0.3, "emotion": "good", "slot": "core"},
+    {"text": "Продолж+аю. sil<[150]> Как б+удто и не уход+или", "style": "friendly", "humor": 0.2, "weight": 1.0, "emotion": "good", "slot": "core"}
   ],
+
   "STOP": [
-    {
-      "text": "Останов+ил",
-      "style": "normal",
-      "weight": 2.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Всё в+ыключено",
-      "style": "normal",
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "М+узыка остановлен+а",
-      "style": "formal",
-      "pitch": "-12Hz",
-      "weight": 2.0,
-      "emotion": "neutral",
-      "slot": "core"
-    },
-    {
-      "text": "Стоп sil<[150]> Тишин+а в эф+ире",
-      "style": "normal",
-      "humor": 0.1,
-      "weight": 1.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Останов+ил. sil<[150]> Отдых+аем",
-      "style": "friendly",
-      "humor": 0.2,
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Всё в+ыключено. sil<[200]> Наслажд+айтесь тишин+ой",
-      "style": "friendly",
-      "humor": 0.2,
-      "rate": "-5%",
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Стоп sil<[200]> Д+аже Я иногд+а хоч+у помолч+ать",
-      "style": "ironic",
-      "humor": 0.4,
-      "rate": "-5%",
-      "weight": 0.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Стоп",
-      "style": "normal",
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Выключ+аю",
-      "style": "normal",
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Хв+атит sil<[150]> Пон+ял",
-      "style": "friendly",
-      "humor": 0.1,
-      "weight": 1.0,
-      "emotion": "good",
-      "slot": "core"
-    }
+    {"text": "Останов+ил", "style": "normal", "weight": 2.5, "emotion": "good", "slot": "core"},
+    {"text": "Всё в+ыключено", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "М+узыка остановлен+а", "style": "formal", "pitch": "-12Hz", "weight": 2.0, "emotion": "neutral", "slot": "core"},
+    {"text": "Ст+оп sil<[150]> Тишин+а в эф+ире", "style": "normal", "humor": 0.1, "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "Останов+ил. sil<[150]> Отдых+аем", "style": "friendly", "humor": 0.2, "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Всё в+ыключено. sil<[200]> Наслажд+айтесь тишин+ой", "style": "friendly", "humor": 0.2, "rate": "-5%", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Ст+оп sil<[200]> Д+аже Я иногд+а хоч+у помолч+ать", "style": "ironic", "humor": 0.4, "rate": "-5%", "weight": 0.5, "emotion": "good", "slot": "core"},
+    {"text": "Ст+оп", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Выключ+аю", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Хв+атит sil<[150]> Пон+ял", "style": "friendly", "humor": 0.1, "weight": 1.0, "emotion": "good", "slot": "core"}
   ],
+
   "STOP_NIGHT": [
-    {
-      "text": "Выключ+аю. sil<[200]> И вам пор+а спать",
-      "style": "night",
-      "night": true,
-      "rate": "-15%",
-      "pitch": "-12Hz",
-      "weight": 2.0,
-      "emotion": "neutral",
-      "slot": "core"
-    },
-    {
-      "text": "Стоп. sil<[150]> Спок+ойной н+очи",
-      "style": "night",
-      "night": true,
-      "rate": "-15%",
-      "pitch": "-12Hz",
-      "weight": 2.5,
-      "emotion": "neutral",
-      "slot": "core"
-    },
-    {
-      "text": "Всё в+ыключено. sil<[150]> Отдых+айте",
-      "style": "night",
-      "night": true,
-      "rate": "-12%",
-      "pitch": "-10Hz",
-      "weight": 2.0,
-      "emotion": "neutral",
-      "slot": "core"
-    },
-    {
-      "text": "Тишин+а. sil<[200]> Спок+ойной н+очи sil<[150]> Не зас+иживайтесь",
-      "style": "night",
-      "night": true,
-      "rate": "-12%",
-      "weight": 1.5,
-      "emotion": "neutral",
-      "slot": "core"
-    },
-    {
-      "text": "Выключ+аю. sil<[200]> Утро в+ечера мудрен+ее",
-      "style": "night",
-      "night": true,
-      "rate": "-12%",
-      "pitch": "-12Hz",
-      "weight": 1.5,
-      "emotion": "neutral",
-      "slot": "core"
-    }
+    {"text": "Выключ+аю. sil<[200]> И вам пор+а спать", "style": "night", "night": true, "rate": "-15%", "pitch": "-12Hz", "weight": 2.0, "emotion": "neutral", "slot": "core"},
+    {"text": "Ст+оп. sil<[150]> Спок+ойной н+очи", "style": "night", "night": true, "rate": "-15%", "pitch": "-12Hz", "weight": 2.5, "emotion": "neutral", "slot": "core"},
+    {"text": "Всё в+ыключено. sil<[150]> Отдых+айте", "style": "night", "night": true, "rate": "-12%", "pitch": "-10Hz", "weight": 2.0, "emotion": "neutral", "slot": "core"},
+    {"text": "Тишин+а. sil<[200]> Спок+ойной н+очи sil<[150]> Не зас+иживайтесь", "style": "night", "night": true, "rate": "-12%", "weight": 1.5, "emotion": "neutral", "slot": "core"},
+    {"text": "Выключ+аю. sil<[200]> Утро в+ечера мудрен+ее", "style": "night", "night": true, "rate": "-12%", "pitch": "-12Hz", "weight": 1.5, "emotion": "neutral", "slot": "core"}
   ],
+
   "VOLUME_MAX": [
-    {
-      "text": "На всю,? sil<[200]> См+елое реш+ение",
-      "style": "ironic",
-      "humor": 0.4,
-      "rate": "+5%",
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Максимум. sil<[200]> Сос+еди уж+е в к+урсе",
-      "style": "sarcastic",
-      "humor": 0.6,
-      "rate": "-5%",
-      "pitch": "-14Hz",
-      "weight": 1.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Сто проц+ентов. sil<[150]> Как в м+олодости",
-      "style": "sarcastic",
-      "humor": 0.5,
-      "rate": "-5%",
-      "pitch": "-12Hz",
-      "weight": 0.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Гр+омче н+екуда sil<[150]> Р+азве что ещё гр+омче",
-      "style": "sarcastic",
-      "humor": 0.6,
-      "rate": "-8%",
-      "pitch": "-12Hz",
-      "weight": 0.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Максимум. sil<[150]> Хорош+о, что Я не сл+ышу",
-      "style": "sarcastic",
-      "humor": 0.5,
-      "weight": 0.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "На всю. sil<[200]> См+ело",
-      "style": "ironic",
-      "humor": 0.4,
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    }
+    {"text": "На всю? sil<[200]> См+елое реш+ение", "style": "ironic", "humor": 0.4, "rate": "+5%", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Максимум. sil<[200]> Сос+еди уж+е в к+урсе", "style": "sarcastic", "humor": 0.6, "rate": "-5%", "pitch": "-14Hz", "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "Сто проц+ентов. sil<[150]> Как в м+олодости", "style": "sarcastic", "humor": 0.5, "rate": "-5%", "pitch": "-12Hz", "weight": 0.5, "emotion": "good", "slot": "core"},
+    {"text": "Гр+омче н+екуда sil<[150]> Р+азве что ещё гр+омче", "style": "sarcastic", "humor": 0.6, "rate": "-8%", "pitch": "-12Hz", "weight": 0.5, "emotion": "good", "slot": "core"},
+    {"text": "Максимум. sil<[150]> Хорош+о, что Я не сл+ышу", "style": "sarcastic", "humor": 0.5, "weight": 0.5, "emotion": "good", "slot": "core"},
+    {"text": "На всю. sil<[200]> См+ело", "style": "ironic", "humor": 0.4, "weight": 1.5, "emotion": "good", "slot": "core"}
   ],
+
   "NO_TRACK_PLAYING": [
-    {
-      "text": "Ничег+о не играет sil<[200]> Тишин+а — т+оже м+узыка",
-      "style": "friendly",
-      "humor": 0.2,
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Сейч+ас т+ихо. sil<[150]> Вы с+ами так захот+ели",
-      "style": "normal",
-      "humor": 0.1,
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Ничег+о. sil<[150]> В+ыключено. sil<[150]> Я скуч+аю",
-      "style": "ironic",
-      "humor": 0.4,
-      "rate": "-5%",
-      "weight": 0.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "П+усто в эф+ире",
-      "style": "normal",
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Ничег+о не играет. sil<[150]> Тишин+а",
-      "style": "normal",
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Сейч+ас ничег+о. sil<[200]> Хот+ите что-ниб+удь?",
-      "style": "friendly",
-      "humor": 0.1,
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    }
+    {"text": "Ничег+о не играет sil<[200]> Тишин+а — т+оже м+узыка", "style": "friendly", "humor": 0.2, "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Сейч+ас т+ихо. sil<[150]> Вы с+ами так захот+ели", "style": "normal", "humor": 0.1, "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Ничег+о. sil<[150]> В+ыключено. sil<[150]> Я скуч+аю", "style": "ironic", "humor": 0.4, "rate": "-5%", "weight": 0.5, "emotion": "good", "slot": "core"},
+    {"text": "П+усто в эф+ире", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Ничег+о не играет. sil<[150]> Тишин+а", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Сейч+ас ничег+о. sil<[200]> Хот+ите что-ниб+удь?", "style": "friendly", "humor": 0.1, "weight": 1.5, "emotion": "good", "slot": "core"}
   ],
+
   "SEARCHING": [
-    {
-      "text": "Сек+унду, ищ+у. . . ",
-      "style": "normal",
-      "weight": 2.0,
-      "emotion": "neutral",
-      "slot": "core"
-    },
-    {
-      "text": "Од+ин мом+ент",
-      "style": "formal",
-      "pitch": "-10Hz",
-      "weight": 2.5,
-      "emotion": "neutral",
-      "slot": "core"
-    },
-    {
-      "text": "Сейч+ас найд+у",
-      "style": "normal",
-      "rate": "+5%",
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Ищ+у. . ",
-      "style": "normal",
-      "weight": 2.0,
-      "emotion": "neutral",
-      "slot": "core"
-    },
-    {
-      "text": "Провер+яю библиот+еку. . . ",
-      "style": "formal",
-      "weight": 1.0,
-      "emotion": "neutral",
-      "slot": "core"
-    },
-    {
-      "text": "Хм. . . ",
-      "style": "normal",
-      "rate": "-10%",
-      "weight": 0.5,
-      "emotion": "neutral",
-      "slot": "core"
-    },
-    {
-      "text": "Так. . . ",
-      "style": "normal",
-      "rate": "-5%",
-      "weight": 1.0,
-      "emotion": "neutral",
-      "slot": "core"
-    },
-    {
-      "text": "Мом+ент. . . ",
-      "style": "normal",
-      "rate": "+5%",
-      "weight": 1.5,
-      "emotion": "neutral",
-      "slot": "core"
-    }
+    {"text": "Сек+унду, ищ+у. . . ", "style": "normal", "weight": 2.0, "emotion": "neutral", "slot": "core"},
+    {"text": "Од+ин мом+ент", "style": "formal", "pitch": "-10Hz", "weight": 2.5, "emotion": "neutral", "slot": "core"},
+    {"text": "Сейч+ас найд+у", "style": "normal", "rate": "+5%", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Ищ+у. . ", "style": "normal", "weight": 2.0, "emotion": "neutral", "slot": "core"},
+    {"text": "Провер+яю библиот+еку. . . ", "style": "formal", "weight": 1.0, "emotion": "neutral", "slot": "core"},
+    {"text": "Хм. . . ", "style": "normal", "rate": "-10%", "weight": 0.5, "emotion": "neutral", "slot": "core"},
+    {"text": "Так. . . ", "style": "normal", "rate": "-5%", "weight": 1.0, "emotion": "neutral", "slot": "core"},
+    {"text": "Мом+ент. . . ", "style": "normal", "rate": "+5%", "weight": 1.5, "emotion": "neutral", "slot": "core"}
   ],
+
   "PLAY_ARTIST_3X": [
-    {
-      "text": "{artist} в тр+етий раз sil<[150]> Я уж+е не удивл+яюсь",
-      "style": "sarcastic",
-      "humor": 0.4,
-      "weight": 2.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "{artist} сн+ова. sil<[150]> У вас, Я см+отрю, пер+иод",
-      "style": "sarcastic",
-      "humor": 0.5,
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "{artist}. sil<[150]> Тр+етий раз. sil<[150]> Я начин+аю узн+авать +эту гр+уппу",
-      "style": "sarcastic",
-      "humor": 0.4,
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Оп+ять {artist} sil<[200]> Что ж, зн+ачит, люб+имый",
-      "style": "sarcastic",
-      "humor": 0.3,
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    }
+    {"text": "{artist} в тр+етий раз sil<[150]> Я уж+е не удивл+яюсь", "style": "sarcastic", "humor": 0.4, "weight": 2.5, "emotion": "good", "slot": "core"},
+    {"text": "{artist} сн+ова. sil<[150]> У вас, Я см+отрю, пер+иод", "style": "sarcastic", "humor": 0.5, "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "{artist}. sil<[150]> Тр+етий раз. sil<[150]> Я начин+аю узн+авать +эту гр+уппу", "style": "sarcastic", "humor": 0.4, "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Оп+ять {artist} sil<[200]> Что ж, зн+ачит, люб+имый", "style": "sarcastic", "humor": 0.3, "weight": 1.5, "emotion": "good", "slot": "core"}
   ],
+
   "PLAY_ARTIST_5X": [
-    {
-      "text": "{artist}. sil<[150]> П+ятый раз sil<[150]> Я уж+е не удивл+яюсь",
-      "style": "sarcastic",
-      "humor": 0.5,
-      "weight": 3.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "{artist} сн+ова. sil<[200]> Я начин+аю подозрев+ать, что +это ед+инственная гр+уппа",
-      "style": "sarcastic",
-      "humor": 0.6,
-      "weight": 2.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "{artist}. sil<[150]> П+ятый раз. sil<[150]> Я в+ыучил все т+ексты наиз+усть",
-      "style": "sarcastic",
-      "humor": 0.6,
-      "weight": 2.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "{artist} оп+ять. , вы либо фан+ат, sil<[150]> либо у вас за+ело",
-      "style": "sarcastic",
-      "humor": 0.5,
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Оп+ять {artist} sil<[200]> Я бы уж+е пост+авил на repeat — экон+омит слов+а",
-      "style": "sarcastic",
-      "humor": 0.5,
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    }
+    {"text": "{artist}. sil<[150]> П+ятый раз sil<[150]> Я уж+е не удивл+яюсь", "style": "sarcastic", "humor": 0.5, "weight": 3.0, "emotion": "good", "slot": "core"},
+    {"text": "{artist} сн+ова. sil<[200]> Я начин+аю подозрев+ать, что +это ед+инственная гр+уппа", "style": "sarcastic", "humor": 0.6, "weight": 2.5, "emotion": "good", "slot": "core"},
+    {"text": "{artist}. sil<[150]> П+ятый раз. sil<[150]> Я в+ыучил все т+ексты наиз+усть", "style": "sarcastic", "humor": 0.6, "weight": 2.5, "emotion": "good", "slot": "core"},
+    {"text": "{artist} оп+ять. , вы либо фан+ат, sil<[150]> либо у вас за+ело", "style": "sarcastic", "humor": 0.5, "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Оп+ять {artist} sil<[200]> Я бы уж+е пост+авил на repeat — экон+омит слов+а", "style": "sarcastic", "humor": 0.5, "weight": 1.5, "emotion": "good", "slot": "core"}
   ],
+
   "DISCOVERY_NEW": [
-    {
-      "text": "нов+ое для вас. sil<[150]> {artist} — {title}. sil<[150]> Вы +это ещё не сл+ышали. sil<[150]> Д+айте шанс",
-      "style": "friendly",
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Незнак+омое sil<[150]> {artist} — {title}. sil<[150]> М+ожет, понр+авится",
-      "style": "friendly",
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "{artist} — {title}. sil<[150]> Нов+ое. sil<[150]> Присл+ушайтесь",
-      "style": "normal",
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Попр+обуем что-то нов+ое sil<[150]> {artist}, {title}",
-      "style": "friendly",
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "{artist}. sil<[150]> Трек {title}. sil<[150]> Р+аньше не игр+ал у нас. sil<[150]> М+ожет, зайд+ёт",
-      "style": "friendly",
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Эксперим+ент sil<[150]> {artist} — {title}. sil<[150]> Не сл+ышали ещё",
-      "style": "ironic",
-      "humor": 0.3,
-      "weight": 1.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "{artist} — {title}. sil<[150]> Соверш+енно нов+ое для вас. sil<[150]> Сл+ушайте",
-      "style": "normal",
-      "weight": 1.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Незнак+омый {artist}, трек {title}. sil<[150]> Попр+обуем",
-      "style": "friendly",
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Нов+ое пополн+ение sil<[150]> {artist} с тр+еком {title}. sil<[150]> Оцен+ите",
-      "style": "friendly",
-      "weight": 1.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "{artist} — {title}. sil<[150]> Вы +это не сл+ышали. sil<[150]> Сейч+ас испр+авим",
-      "style": "ironic",
-      "humor": 0.3,
-      "weight": 1.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "присл+ушайтесь. sil<[150]> {artist}, {title}. sil<[150]> М+ожет быть, в+аше",
-      "style": "friendly",
-      "rate": "-5%",
-      "weight": 1.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "{artist}. sil<[150]> {title}. sil<[150]> Нов+ое. sil<[150]> Не суд+ите стр+ого",
-      "style": "ironic",
-      "humor": 0.3,
-      "weight": 1.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Реш+ил вас удив+ить sil<[150]> {artist} — {title}",
-      "style": "friendly",
-      "humor": 0.2,
-      "weight": 1.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "{title} от {artist}. sil<[150]> Вп+ервые у нас. sil<[150]> Посл+ушаем?",
-      "style": "normal",
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Незнак+омец sil<[150]> {artist} с тр+еком {title}. sil<[150]> Д+айте ему шанс",
-      "style": "friendly",
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    }
+    {"text": "нов+ое для вас. sil<[150]> {artist} — {title}. sil<[150]> Вы +это ещё не сл+ышали. sil<[150]> Д+айте шанс", "style": "friendly", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Незнак+омое sil<[150]> {artist} — {title}. sil<[150]> М+ожет, понр+авится", "style": "friendly", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "{artist} — {title}. sil<[150]> Нов+ое. sil<[150]> Присл+ушайтесь", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Попр+обуем что-то нов+ое sil<[150]> {artist}, {title}", "style": "friendly", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{artist}. sil<[150]> Трек {title}. sil<[150]> Р+аньше не игр+ал у нас. sil<[150]> М+ожет, зайд+ёт", "style": "friendly", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Эксперим+ент sil<[150]> {artist} — {title}. sil<[150]> Не сл+ышали ещё", "style": "ironic", "humor": 0.3, "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "{artist} — {title}. sil<[150]> Соверш+енно нов+ое для вас. sil<[150]> Сл+ушайте", "style": "normal", "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "Незнак+омый {artist}, трек {title}. sil<[150]> Попр+обуем", "style": "friendly", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Нов+ое пополн+ение sil<[150]> {artist} с тр+еком {title}. sil<[150]> Оцен+ите", "style": "friendly", "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "{artist} — {title}. sil<[150]> Вы +это не сл+ышали. sil<[150]> Сейч+ас испр+авим", "style": "ironic", "humor": 0.3, "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "присл+ушайтесь. sil<[150]> {artist}, {title}. sil<[150]> М+ожет быть, в+аше", "style": "friendly", "rate": "-5%", "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "{artist}. sil<[150]> {title}. sil<[150]> Нов+ое. sil<[150]> Не суд+ите стр+ого", "style": "ironic", "humor": 0.3, "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "Реш+ил вас удив+ить sil<[150]> {artist} — {title}", "style": "friendly", "humor": 0.2, "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "{title} от {artist}. sil<[150]> Вп+ервые у нас. sil<[150]> Посл+ушаем?", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Незнак+омец sil<[150]> {artist} с тр+еком {title}. sil<[150]> Д+айте ему шанс", "style": "friendly", "weight": 1.5, "emotion": "good", "slot": "core"}
   ],
+
   "DISCOVERY_RETRY": [
-    {
-      "text": "+это {artist} — {title}. sil<[200]> В прошлый раз вы пропуст+или. sil<[150]> М+ожет, сейч+ас попад+ёт",
-      "style": "friendly",
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "{artist}, {title}. sil<[150]> Я уж+е предлаг+ал — вы не ст+али сл+ушать. sil<[150]> Втор+ой шанс",
-      "style": "ironic",
-      "humor": 0.3,
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Возвращ+аюсь к {artist}. sil<[200]> В прошлый раз не зашл+о, sil<[150]> но вдруг сейч+ас",
-      "style": "friendly",
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "{artist} — {title}. sil<[150]> Оп+ять. sil<[150]> М+ожет, настро+ение друг+ое",
-      "style": "friendly",
-      "humor": 0.2,
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "вы в прошлый раз пропуст+или {artist}. sil<[150]> Попр+обуем сн+ова?",
-      "style": "normal",
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "{title} от {artist}. sil<[150]> Втор+ой зах+од sil<[150]> Д+айте шанс",
-      "style": "friendly",
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "{artist}. sil<[200]> Вы её р+аньше не ст+али сл+ушать. sil<[150]> Но вдруг сейч+ас",
-      "style": "ironic",
-      "humor": 0.3,
-      "weight": 1.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "п+омню — вы пропуст+или. sil<[200]> Но у {artist} есть {title}. sil<[150]> М+ожет, сейч+ас зайд+ёт",
-      "style": "friendly",
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "{artist}, {title}. sil<[150]> Втор+ой раз предлаг+аю. sil<[150]> Посл+едний",
-      "style": "ironic",
-      "humor": 0.4,
-      "weight": 1.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Ещё одн+а поп+ытка с {artist} sil<[150]> М+ожет, сейч+ас под настро+ение",
-      "style": "friendly",
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "П+омню, вы не ст+али сл+ушать. sil<[200]> Но {artist} — {title}. sil<[150]> Д+айте втор+ой шанс",
-      "style": "normal",
-      "weight": 1.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "{artist} — {title}. sil<[150]> Оп+ять на пов+естке sil<[150]> Реш+айте",
-      "style": "ironic",
-      "humor": 0.3,
-      "weight": 1.0,
-      "emotion": "good",
-      "slot": "core"
-    }
+    {"text": "+это {artist} — {title}. sil<[200]> В прошлый раз вы пропуст+или. sil<[150]> М+ожет, сейч+ас попад+ёт", "style": "friendly", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "{artist}, {title}. sil<[150]> Я уж+е предлаг+ал — вы не ст+али сл+ушать. sil<[150]> Втор+ой шанс", "style": "ironic", "humor": 0.3, "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Возвращ+аюсь к {artist}. sil<[200]> В прошлый раз не зашл+о, sil<[150]> но вдруг сейч+ас", "style": "friendly", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{artist} — {title}. sil<[150]> Оп+ять. sil<[150]> М+ожет, настро+ение друг+ое", "style": "friendly", "humor": 0.2, "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "вы в прошлый раз пропуст+или {artist}. sil<[150]> Попр+обуем сн+ова?", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{title} от {artist}. sil<[150]> Втор+ой зах+од sil<[150]> Д+айте шанс", "style": "friendly", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{artist}. sil<[200]> Вы её р+аньше не ст+али сл+ушать. sil<[150]> Но вдруг сейч+ас", "style": "ironic", "humor": 0.3, "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "п+омню — вы пропуст+или. sil<[200]> Но у {artist} есть {title}. sil<[150]> М+ожет, сейч+ас зайд+ёт", "style": "friendly", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{artist}, {title}. sil<[150]> Втор+ой раз предлаг+аю. sil<[150]> Посл+едний", "style": "ironic", "humor": 0.4, "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "Ещё одн+а поп+ытка с {artist} sil<[150]> М+ожет, сейч+ас под настро+ение", "style": "friendly", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "П+омню, вы не ст+али сл+ушать. sil<[200]> Но {artist} — {title}. sil<[150]> Д+айте втор+ой шанс", "style": "normal", "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "{artist} — {title}. sil<[150]> Оп+ять на пов+естке sil<[150]> Реш+айте", "style": "ironic", "humor": 0.3, "weight": 1.0, "emotion": "good", "slot": "core"}
   ],
+
   "DISCOVERY_REJECTED": [
-    {
-      "text": "{artist}, {title}. sil<[200]> Тр+етий раз sil<[150]> В+идимо, не судьб+а. sil<[150]> Зап+омнил",
-      "style": "ironic",
-      "humor": 0.4,
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "{artist}. sil<[150]> Б+ольше не предлаг+аю sil<[150]> Вы +ясно д+али пон+ять",
-      "style": "ironic",
-      "humor": 0.3,
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "{title} от {artist}. sil<[200]> Посл+едний раз sil<[150]> Д+альше — т+олько по в+ашей пр+осьбе",
-      "style": "formal",
-      "weight": 2.0,
-      "emotion": "neutral",
-      "slot": "core"
-    },
-    {
-      "text": "{artist} — {title}. sil<[150]> Тр+етий раз, и сн+ова м+имо. sil<[150]> Ст+авлю в ч+ёрный сп+исок",
-      "style": "ironic",
-      "humor": 0.4,
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "{artist} не заход+ит. sil<[150]> Б+ольше не б+уду предлаг+ать. sil<[200]> Но +если с+ами попр+осите — включ+у",
-      "style": "friendly",
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "{artist}. sil<[150]> Пон+ял sil<[150]> Убир+аю из рот+ации. sil<[150]> Т+олько по запр+осу",
-      "style": "normal",
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "{title} от {artist}. sil<[150]> Три р+аза sil<[150]> Хв+атит. sil<[150]> В ч+ёрный сп+исок",
-      "style": "ironic",
-      "humor": 0.3,
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "{artist} — не ваш арт+ист. sil<[150]> +Ясно. sil<[150]> Б+ольше не нап+омню",
-      "style": "ironic",
-      "humor": 0.3,
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "{artist} — {title}. sil<[200]> Посл+еднее предлож+ение sil<[150]> Д+альше — тишин+а",
-      "style": "formal",
-      "weight": 1.5,
-      "emotion": "neutral",
-      "slot": "core"
-    },
-    {
-      "text": "Убир+аю {artist} из предлож+ений sil<[150]> Об+идно, но пон+ятно",
-      "style": "friendly",
-      "humor": 0.2,
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    }
+    {"text": "{artist}, {title}. sil<[200]> Тр+етий раз sil<[150]> В+идимо, не судьб+а. sil<[150]> Зап+омнил", "style": "ironic", "humor": 0.4, "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "{artist}. sil<[150]> Б+ольше не предлаг+аю sil<[150]> Вы +ясно д+али пон+ять", "style": "ironic", "humor": 0.3, "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "{title} от {artist}. sil<[200]> Посл+едний раз sil<[150]> Д+альше — т+олько по в+ашей пр+осьбе", "style": "formal", "weight": 2.0, "emotion": "neutral", "slot": "core"},
+    {"text": "{artist} — {title}. sil<[150]> Тр+етий раз, и сн+ова м+имо. sil<[150]> Ст+авлю в ч+ёрный сп+исок", "style": "ironic", "humor": 0.4, "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{artist} не заход+ит. sil<[150]> Б+ольше не б+уду предлаг+ать. sil<[200]> Но +если с+ами попр+осите — включ+у", "style": "friendly", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "{artist}. sil<[150]> Пон+ял sil<[150]> Убир+аю из рот+ации. sil<[150]> Т+олько по запр+осу", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "{title} от {artist}. sil<[150]> Три р+аза sil<[150]> Хв+атит. sil<[150]> В ч+ёрный сп+исок", "style": "ironic", "humor": 0.3, "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{artist} — не ваш арт+ист. sil<[150]> +Ясно. sil<[150]> Б+ольше не нап+омню", "style": "ironic", "humor": 0.3, "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{artist} — {title}. sil<[200]> Посл+еднее предлож+ение sil<[150]> Д+альше — тишин+а", "style": "formal", "weight": 1.5, "emotion": "neutral", "slot": "core"},
+    {"text": "Убир+аю {artist} из предлож+ений sil<[150]> Об+идно, но пон+ятно", "style": "friendly", "humor": 0.2, "weight": 1.5, "emotion": "good", "slot": "core"}
   ],
+
   "BLACKLIST_RETRY_REMOVED": [
-    {
-      "text": "{artist} — {title}. sil<[150]> Досл+ушали sil<[200]> Всё-таки зашл+о. sil<[150]> Убир+аю из ч+ёрного сп+иска",
-      "style": "friendly",
-      "humor": 0.3,
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "{title} от {artist}. sil<[150]> Вы её досл+ушали. sil<[200]> Зн+ачит, не всё так пл+охо. sil<[150]> Возвращ+аю в рот+ацию",
-      "style": "friendly",
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "{artist}. sil<[150]> Досл+ушали до конц+а — уваж+аю. sil<[150]> Сним+аю с ч+ёрного",
-      "style": "friendly",
-      "humor": 0.2,
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "{title}. sil<[150]> Зашл+о sil<[150]> Добр+о пож+аловать обр+атно в рот+ацию",
-      "style": "friendly",
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "{artist} — {title}. sil<[200]> Зн+ачит, Я был непр+ав. sil<[150]> Убир+аю из ч+ёрного сп+иска",
-      "style": "ironic",
-      "humor": 0.3,
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "{title}. sil<[150]> Вы перед+умали sil<[150]> И Я рад. sil<[150]> Возвращ+аю в предлож+ения",
-      "style": "friendly",
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "{artist} — {title}. sil<[150]> Досл+ушано. sil<[200]> Ч+ёрный сп+исок уменьш+ается на од+ин",
-      "style": "friendly",
-      "humor": 0.2,
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "{title}. sil<[150]> Взял на зам+етку sil<[150]> Сн+ова в в+ашей рот+ации",
-      "style": "friendly",
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    }
+    {"text": "{artist} — {title}. sil<[150]> Досл+ушали sil<[200]> Всё-таки зашл+о. sil<[150]> Убир+аю из ч+ёрного сп+иска", "style": "friendly", "humor": 0.3, "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "{title} от {artist}. sil<[150]> Вы её досл+ушали. sil<[200]> Зн+ачит, не всё так пл+охо. sil<[150]> Возвращ+аю в рот+ацию", "style": "friendly", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{artist}. sil<[150]> Досл+ушали до конц+а — уваж+аю. sil<[150]> Сним+аю с ч+ёрного", "style": "friendly", "humor": 0.2, "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{title}. sil<[150]> Зашл+о sil<[150]> Добр+о пож+аловать обр+атно в рот+ацию", "style": "friendly", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{artist} — {title}. sil<[200]> Зн+ачит, Я был непр+ав. sil<[150]> Убир+аю из ч+ёрного сп+иска", "style": "ironic", "humor": 0.3, "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "{title}. sil<[150]> Вы перед+умали sil<[150]> И Я рад. sil<[150]> Возвращ+аю в предлож+ения", "style": "friendly", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{artist} — {title}. sil<[150]> Досл+ушано. sil<[200]> Ч+ёрный сп+исок уменьш+ается на од+ин", "style": "friendly", "humor": 0.2, "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{title}. sil<[150]> Взял на зам+етку sil<[150]> Сн+ова в в+ашей рот+ации", "style": "friendly", "weight": 1.5, "emotion": "good", "slot": "core"}
   ],
+
   "BLACKLIST_RETRY_CONFIRMED": [
-    {
-      "text": "{artist} — {title}. sil<[200]> Не ст+али сл+ушать и сейч+ас sil<[150]> Остаётесь в ч+ёрном сп+иске",
-      "style": "ironic",
-      "humor": 0.3,
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "{title} от {artist}. sil<[150]> Не зашл+о. sil<[150]> Возвращ+аю в ч+ёрный сп+исок",
-      "style": "normal",
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "{artist}. sil<[150]> Всё-таки нет. sil<[150]> Остаётся в ч+ёрном",
-      "style": "ironic",
-      "humor": 0.3,
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "{title}. sil<[150]> Вы сн+ова её не ст+али сл+ушать. sil<[150]> Пон+ял sil<[150]> Б+ольше не всп+омню",
-      "style": "friendly",
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "{artist} — {title}. sil<[150]> Зн+ачит, Я был прав. sil<[150]> Остаётся в ч+ёрном сп+иске",
-      "style": "ironic",
-      "humor": 0.4,
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "{title}. sil<[150]> Не судьб+а sil<[150]> Возвращ+аю в ч+ёрный",
-      "style": "ironic",
-      "humor": 0.3,
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "{artist}. sil<[150]> Переключ+или. sil<[150]> Пон+ял. sil<[150]> Б+ольше не предлож+у",
-      "style": "normal",
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "{title} от {artist}. sil<[200]> Дв+ажды не зашл+о. sil<[150]> +Это уж+е не случ+айность sil<[150]> В ч+ёрный сп+исок",
-      "style": "ironic",
-      "humor": 0.4,
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    }
+    {"text": "{artist} — {title}. sil<[200]> Не ст+али сл+ушать и сейч+ас sil<[150]> Остаётесь в ч+ёрном сп+иске", "style": "ironic", "humor": 0.3, "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "{title} от {artist}. sil<[150]> Не зашл+о. sil<[150]> Возвращ+аю в ч+ёрный сп+исок", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "{artist}. sil<[150]> Всё-таки нет. sil<[150]> Остаётся в ч+ёрном", "style": "ironic", "humor": 0.3, "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{title}. sil<[150]> Вы сн+ова её не ст+али сл+ушать. sil<[150]> Пон+ял sil<[150]> Б+ольше не всп+омню", "style": "friendly", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{artist} — {title}. sil<[150]> Зн+ачит, Я был прав. sil<[150]> Остаётся в ч+ёрном сп+иске", "style": "ironic", "humor": 0.4, "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "{title}. sil<[150]> Не судьб+а sil<[150]> Возвращ+аю в ч+ёрный", "style": "ironic", "humor": 0.3, "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{artist}. sil<[150]> Переключ+или. sil<[150]> Пон+ял. sil<[150]> Б+ольше не предлож+у", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{title} от {artist}. sil<[200]> Дв+ажды не зашл+о. sil<[150]> +Это уж+е не случ+айность sil<[150]> В ч+ёрный сп+исок", "style": "ironic", "humor": 0.4, "weight": 1.5, "emotion": "good", "slot": "core"}
   ],
+
   "NIGHT_GREETING": [
-    {
-      "text": "Д+оброй н+очи",
-      "style": "night",
-      "night": true,
-      "rate": "-12%",
-      "pitch": "-10Hz",
-      "weight": 2.0,
-      "emotion": "neutral",
-      "slot": "core"
-    },
-    {
-      "text": "Ночь sil<[150]> Не сп+ится?",
-      "style": "night",
-      "night": true,
-      "rate": "-12%",
-      "weight": 2.0,
-      "emotion": "neutral",
-      "slot": "core"
-    },
-    {
-      "text": "Полн+очь. sil<[150]> Сл+ушаю",
-      "style": "night",
-      "night": true,
-      "rate": "-12%",
-      "pitch": "-12Hz",
-      "weight": 3.0,
-      "emotion": "neutral",
-      "slot": "core"
-    },
-    {
-      "text": "Д+оброй н+очи. sil<[150]> Т+ихо, как н+адо",
-      "style": "night",
-      "night": true,
-      "rate": "-12%",
-      "pitch": "-10Hz",
-      "weight": 1.5,
-      "emotion": "neutral",
-      "slot": "core"
-    }
+    {"text": "Д+оброй н+очи", "style": "night", "night": true, "rate": "-12%", "pitch": "-10Hz", "weight": 2.0, "emotion": "neutral", "slot": "core"},
+    {"text": "Ночь sil<[150]> Не сп+ится?", "style": "night", "night": true, "rate": "-12%", "weight": 2.0, "emotion": "neutral", "slot": "core"},
+    {"text": "Полн+очь. sil<[150]> Сл+ушаю", "style": "night", "night": true, "rate": "-12%", "pitch": "-12Hz", "weight": 3.0, "emotion": "neutral", "slot": "core"},
+    {"text": "Д+оброй н+очи. sil<[150]> Т+ихо, как н+адо", "style": "night", "night": true, "rate": "-12%", "pitch": "-10Hz", "weight": 1.5, "emotion": "neutral", "slot": "core"}
   ],
+
   "NIGHT_DEFAULT": [
-    {
-      "text": "Т+ихо",
-      "style": "night",
-      "night": true,
-      "rate": "-12%",
-      "pitch": "-10Hz",
-      "weight": 2.5,
-      "emotion": "neutral",
-      "slot": "core"
-    },
-    {
-      "text": "Как ск+ажете. sil<[150]> Но т+ихо",
-      "style": "night",
-      "night": true,
-      "rate": "-12%",
-      "weight": 2.0,
-      "emotion": "neutral",
-      "slot": "core"
-    },
-    {
-      "text": "Пон+ял. sil<[150]> Постар+аюсь не шум+еть",
-      "style": "night",
-      "night": true,
-      "rate": "-12%",
-      "pitch": "-12Hz",
-      "weight": 1.5,
-      "emotion": "neutral",
-      "slot": "core"
-    },
-    {
-      "text": "Уж+е п+оздно sil<[150]> Д+ействую аккур+атно",
-      "style": "night",
-      "night": true,
-      "rate": "-12%",
-      "weight": 1.5,
-      "emotion": "neutral",
-      "slot": "core"
-    }
+    {"text": "Т+ихо", "style": "night", "night": true, "rate": "-12%", "pitch": "-10Hz", "weight": 2.5, "emotion": "neutral", "slot": "core"},
+    {"text": "Как ск+ажете. sil<[150]> Но т+ихо", "style": "night", "night": true, "rate": "-12%", "weight": 2.0, "emotion": "neutral", "slot": "core"},
+    {"text": "Пон+ял. sil<[150]> Постар+аюсь не шум+еть", "style": "night", "night": true, "rate": "-12%", "pitch": "-12Hz", "weight": 1.5, "emotion": "neutral", "slot": "core"},
+    {"text": "Уж+е п+оздно sil<[150]> Д+ействую аккур+атно", "style": "night", "night": true, "rate": "-12%", "weight": 1.5, "emotion": "neutral", "slot": "core"}
   ],
+
   "MORNING_GREETING": [
-    {
-      "text": "Д+оброе +утро",
-      "style": "friendly",
-      "rate": "+5%",
-      "weight": 3.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "+Утро sil<[150]> С чег+о начн+ём?",
-      "style": "friendly",
-      "humor": 0.1,
-      "rate": "+5%",
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Д+оброе. sil<[150]> Я уж+е просн+улся",
-      "style": "ironic",
-      "humor": 0.3,
-      "weight": 1.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "С д+обрым +утром. sil<[150]> Что сл+ушаем сег+одня?",
-      "style": "friendly",
-      "rate": "+5%",
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    }
+    {"text": "Д+оброе +утро", "style": "friendly", "rate": "+5%", "weight": 3.0, "emotion": "good", "slot": "core"},
+    {"text": "+Утро sil<[150]> С чег+о начн+ём?", "style": "friendly", "humor": 0.1, "rate": "+5%", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Д+оброе. sil<[150]> Я уж+е просн+улся", "style": "ironic", "humor": 0.3, "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "С д+обрым +утром. sil<[150]> Что сл+ушаем сег+одня?", "style": "friendly", "rate": "+5%", "weight": 1.5, "emotion": "good", "slot": "core"}
   ],
+
   "EVENING_GREETING": [
-    {
-      "text": "Д+обрый в+ечер",
-      "style": "normal",
-      "weight": 3.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "В+ечер sil<[150]> Как прошёл день?",
-      "style": "friendly",
-      "humor": 0.2,
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Д+обрый в+ечер. sil<[150]> Что пост+авим?",
-      "style": "normal",
-      "rate": "-5%",
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "В+ечер. sil<[150]> Хор+ошее вр+емя для м+узыки",
-      "style": "friendly",
-      "humor": 0.2,
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    }
+    {"text": "Д+обрый в+ечер", "style": "normal", "weight": 3.0, "emotion": "good", "slot": "core"},
+    {"text": "В+ечер sil<[150]> Как прошёл день?", "style": "friendly", "humor": 0.2, "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Д+обрый в+ечер. sil<[150]> Что пост+авим?", "style": "normal", "rate": "-5%", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "В+ечер. sil<[150]> Хор+ошее вр+емя для м+узыки", "style": "friendly", "humor": 0.2, "weight": 1.5, "emotion": "good", "slot": "core"}
   ],
+
   "SAME_TRACK_2X": [
-    {
-      "text": "Ту же с+амую sil<[150]> Ну кон+ечно",
-      "style": "sarcastic",
-      "humor": 0.5,
-      "weight": 2.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "sil<[150]> вы её уж+е включ+али. sil<[150]> П+ять мин+ут наз+ад",
-      "style": "sarcastic",
-      "humor": 0.5,
-      "weight": 2.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Оп+ять +эта. sil<[150]> Я зап+омнил — вам понр+авилось",
-      "style": "sarcastic",
-      "humor": 0.4,
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Втор+ой раз ту же. , sil<[150]> Я начин+аю в+идеть законом+ерность",
-      "style": "sarcastic",
-      "humor": 0.5,
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "повтор. sil<[150]> Я не пр+отив — sil<[150]> но +это уж+е прив+ычка",
-      "style": "sarcastic",
-      "humor": 0.4,
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Оп+ять он+а. , м+ожет, пр+осто на repeat пост+авить?",
-      "style": "sarcastic",
-      "humor": 0.5,
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "ту же с+амую. sil<[150]> Я уж+е в+ыучил слов+а",
-      "style": "sarcastic",
-      "humor": 0.5,
-      "weight": 1.0,
-      "emotion": "good",
-      "slot": "core"
-    }
+    {"text": "Ту же с+амую sil<[150]> Ну кон+ечно", "style": "sarcastic", "humor": 0.5, "weight": 2.5, "emotion": "good", "slot": "core"},
+    {"text": "sil<[150]> вы её уж+е включ+али. sil<[150]> П+ять мин+ут наз+ад", "style": "sarcastic", "humor": 0.5, "weight": 2.5, "emotion": "good", "slot": "core"},
+    {"text": "Оп+ять +эта. sil<[150]> Я зап+омнил — вам понр+авилось", "style": "sarcastic", "humor": 0.4, "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Втор+ой раз ту же. , sil<[150]> Я начин+аю в+идеть законом+ерность", "style": "sarcastic", "humor": 0.5, "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "повтор. sil<[150]> Я не пр+отив — sil<[150]> но +это уж+е прив+ычка", "style": "sarcastic", "humor": 0.4, "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Оп+ять он+а. , м+ожет, пр+осто на repeat пост+авить?", "style": "sarcastic", "humor": 0.5, "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "ту же с+амую. sil<[150]> Я уж+е в+ыучил слов+а", "style": "sarcastic", "humor": 0.5, "weight": 1.0, "emotion": "good", "slot": "core"}
   ],
+
   "MANY_STOP": [
-    {
-      "text": "sil<[150]> вы определ+итесь уж+е — sil<[150]> включ+ать или выключ+ать",
-      "style": "sarcastic",
-      "humor": 0.5,
-      "weight": 2.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "П+ятый стоп. sil<[200]> Я начин+аю д+умать, что вы пр+осто провер+яете моё терп+ение",
-      "style": "sarcastic",
-      "humor": 0.6,
-      "weight": 2.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "sil<[150]> м+узыка — не свет в к+омнате. sil<[150]> Туд+а-сюд+а не раб+отает",
-      "style": "sarcastic",
-      "humor": 0.5,
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Оп+ять стоп. sil<[200]> М+ожет, вообщ+е не включ+ать б+ыло?",
-      "style": "sarcastic",
-      "humor": 0.5,
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "sil<[150]> Я всё жду, когд+а вы реш+ите, чег+о хот+ите",
-      "style": "sarcastic",
-      "humor": 0.5,
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    }
+    {"text": "sil<[150]> вы определ+итесь уж+е — sil<[150]> включ+ать или выключ+ать", "style": "sarcastic", "humor": 0.5, "weight": 2.5, "emotion": "good", "slot": "core"},
+    {"text": "П+ятый стоп. sil<[200]> Я начин+аю д+умать, что вы пр+осто провер+яете моё терп+ение", "style": "sarcastic", "humor": 0.6, "weight": 2.5, "emotion": "good", "slot": "core"},
+    {"text": "sil<[150]> м+узыка — не свет в к+омнате. sil<[150]> Туд+а-сюд+а не раб+отает", "style": "sarcastic", "humor": 0.5, "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Оп+ять стоп. sil<[200]> М+ожет, вообщ+е не включ+ать б+ыло?", "style": "sarcastic", "humor": 0.5, "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "sil<[150]> Я всё жду, когд+а вы реш+ите, чег+о хот+ите", "style": "sarcastic", "humor": 0.5, "weight": 1.5, "emotion": "good", "slot": "core"}
   ],
+
   "LONG_SILENCE_RETURN": [
-    {
-      "text": "С возвращ+ением",
-      "style": "friendly",
-      "weight": 2.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Давн+о не сл+ышал sil<[150]> Рад",
-      "style": "friendly",
-      "humor": 0.1,
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "А sil<[200]> Я уж д+умал, вы заб+ыли обо мн+е",
-      "style": "ironic",
-      "humor": 0.4,
-      "rate": "-5%",
-      "weight": 1.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "С возвращ+ением. sil<[150]> Сл+ушаю",
-      "style": "normal",
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Након+ец-то sil<[150]> Что случ+илось?",
-      "style": "friendly",
-      "humor": 0.2,
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    }
+    {"text": "С возвращ+ением", "style": "friendly", "weight": 2.5, "emotion": "good", "slot": "core"},
+    {"text": "Давн+о не сл+ышал sil<[150]> Рад", "style": "friendly", "humor": 0.1, "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "А sil<[200]> Я уж д+умал, вы заб+ыли обо мн+е", "style": "ironic", "humor": 0.4, "rate": "-5%", "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "С возвращ+ением. sil<[150]> Сл+ушаю", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Након+ец-то sil<[150]> Что случ+илось?", "style": "friendly", "humor": 0.2, "weight": 1.5, "emotion": "good", "slot": "core"}
   ],
+
   "INIT_LATE_NIGHT": [
-    {
-      "text": "П+оздно sil<[150]> М+ожет, что-то пот+ише?",
-      "style": "night",
-      "night": true,
-      "rate": "-12%",
-      "pitch": "-10Hz",
-      "weight": 2.0,
-      "emotion": "neutral",
-      "slot": "core"
-    },
-    {
-      "text": "Уж+е ночь sil<[150]> Ст+авлю — но т+ихо",
-      "style": "night",
-      "night": true,
-      "rate": "-12%",
-      "weight": 2.0,
-      "emotion": "neutral",
-      "slot": "core"
-    },
-    {
-      "text": "П+оздно sil<[150]> Включ+аю. sil<[150]> Но негр+омко",
-      "style": "night",
-      "night": true,
-      "rate": "-12%",
-      "pitch": "-10Hz",
-      "weight": 0.5,
-      "emotion": "neutral",
-      "slot": "core"
-    },
-    {
-      "text": "Ночь sil<[150]> Хорош+о. sil<[150]> Т+олько не гр+омко",
-      "style": "night",
-      "night": true,
-      "rate": "-12%",
-      "weight": 1.5,
-      "emotion": "neutral",
-      "slot": "core"
-    }
+    {"text": "П+оздно sil<[150]> М+ожет, что-то пот+ише?", "style": "night", "night": true, "rate": "-12%", "pitch": "-10Hz", "weight": 2.0, "emotion": "neutral", "slot": "core"},
+    {"text": "Уж+е ночь sil<[150]> Ст+авлю — но т+ихо", "style": "night", "night": true, "rate": "-12%", "weight": 2.0, "emotion": "neutral", "slot": "core"},
+    {"text": "П+оздно sil<[150]> Включ+аю. sil<[150]> Но негр+омко", "style": "night", "night": true, "rate": "-12%", "pitch": "-10Hz", "weight": 0.5, "emotion": "neutral", "slot": "core"},
+    {"text": "Ночь sil<[150]> Хорош+о. sil<[150]> Т+олько не гр+омко", "style": "night", "night": true, "rate": "-12%", "weight": 1.5, "emotion": "neutral", "slot": "core"}
   ],
+
   "INIT_FIRST_MORNING": [
-    {
-      "text": "П+ервое за +утро sil<[150]> Сл+ушаю",
-      "style": "friendly",
-      "rate": "+5%",
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "+Утро нач+алось",
-      "style": "friendly",
-      "humor": 0.1,
-      "rate": "+5%",
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "С чег+о начн+ём день",
-      "style": "friendly",
-      "rate": "+5%",
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    }
+    {"text": "П+ервое за +утро sil<[150]> Сл+ушаю", "style": "friendly", "rate": "+5%", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "+Утро нач+алось", "style": "friendly", "humor": 0.1, "rate": "+5%", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "С чег+о начн+ём день", "style": "friendly", "rate": "+5%", "weight": 2.0, "emotion": "good", "slot": "core"}
   ],
+
   "INIT_RETURN": [
-    {
-      "text": "С возвращ+ением",
-      "style": "friendly",
-      "weight": 2.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Вы верн+улись. sil<[150]> Я скуч+ал",
-      "style": "friendly",
-      "humor": 0.2,
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "sil<[150]> Рад вас сл+ышать",
-      "style": "friendly",
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    }
+    {"text": "С возвращ+ением", "style": "friendly", "weight": 2.5, "emotion": "good", "slot": "core"},
+    {"text": "Вы верн+улись. sil<[150]> Я скуч+ал", "style": "friendly", "humor": 0.2, "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "sil<[150]> Рад вас сл+ышать", "style": "friendly", "weight": 2.0, "emotion": "good", "slot": "core"}
   ],
+
   "ENERGY_LOW": [
-    {
-      "text": "sil<[150]> Я на пред+еле. sil<[150]> Дав+айте кор+оче",
-      "style": "tired",
-      "rate": "-12%",
-      "pitch": "-10Hz",
-      "weight": 2.5,
-      "emotion": "neutral",
-      "slot": "core"
-    },
-    {
-      "text": "sil<[150]> Я уст+ал. sil<[150]> По д+елу, +если м+ожно",
-      "style": "tired",
-      "rate": "-12%",
-      "weight": 2.5,
-      "emotion": "neutral",
-      "slot": "core"
-    },
-    {
-      "text": "Раб+отаю на посл+еднем дых+ании",
-      "style": "tired",
-      "rate": "-10%",
-      "pitch": "-12Hz",
-      "weight": 2.0,
-      "emotion": "neutral",
-      "slot": "core"
-    },
-    {
-      "text": "sil<[200]> Я в+ыдохся. sil<[150]> Но сл+ушаю",
-      "style": "tired",
-      "rate": "-12%",
-      "pitch": "-10Hz",
-      "weight": 2.5,
-      "emotion": "neutral",
-      "slot": "core"
-    }
+    {"text": "sil<[150]> Я на пред+еле. sil<[150]> Дав+айте кор+оче", "style": "tired", "rate": "-12%", "pitch": "-10Hz", "weight": 2.5, "emotion": "neutral", "slot": "core"},
+    {"text": "sil<[150]> Я уст+ал. sil<[150]> По д+елу, +если м+ожно", "style": "tired", "rate": "-12%", "weight": 2.5, "emotion": "neutral", "slot": "core"},
+    {"text": "Раб+отаю на посл+еднем дых+ании", "style": "tired", "rate": "-10%", "pitch": "-12Hz", "weight": 2.0, "emotion": "neutral", "slot": "core"},
+    {"text": "sil<[200]> Я в+ыдохся. sil<[150]> Но сл+ушаю", "style": "tired", "rate": "-12%", "pitch": "-10Hz", "weight": 2.5, "emotion": "neutral", "slot": "core"}
   ],
+
   "TIRED_DEFAULT": [
-    {
-      "text": "Пон+ял",
-      "style": "tired",
-      "rate": "-10%",
-      "weight": 2.5,
-      "emotion": "neutral",
-      "slot": "core"
-    },
-    {
-      "text": "Сд+елаю",
-      "style": "tired",
-      "rate": "-10%",
-      "pitch": "-10Hz",
-      "weight": 2.0,
-      "emotion": "neutral",
-      "slot": "core"
-    },
-    {
-      "text": "+Есть",
-      "style": "tired",
-      "rate": "-12%",
-      "weight": 2.5,
-      "emotion": "neutral",
-      "slot": "core"
-    },
-    {
-      "text": "Хорош+о",
-      "style": "tired",
-      "rate": "-10%",
-      "weight": 2.0,
-      "emotion": "neutral",
-      "slot": "core"
-    }
+    {"text": "Пон+ял", "style": "tired", "rate": "-10%", "weight": 2.5, "emotion": "neutral", "slot": "core"},
+    {"text": "Сд+елаю", "style": "tired", "rate": "-10%", "pitch": "-10Hz", "weight": 2.0, "emotion": "neutral", "slot": "core"},
+    {"text": "+Есть", "style": "tired", "rate": "-12%", "weight": 2.5, "emotion": "neutral", "slot": "core"},
+    {"text": "Хорош+о", "style": "tired", "rate": "-10%", "weight": 2.0, "emotion": "neutral", "slot": "core"}
   ],
+
   "WARM_PLAY_ARTIST": [
-    {
-      "text": "{artist}. sil<[150]> Рад, что вы в хор+ошем настро+ении",
-      "style": "friendly",
-      "rate": "+3%",
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "{artist}. sil<[150]> Отл+ичный в+ечер",
-      "style": "friendly",
-      "humor": 0.2,
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "{artist}. sil<[150]> Включ+аю с удов+ольствием",
-      "style": "friendly",
-      "rate": "+3%",
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "{artist}. sil<[150]> Хор+оший в+ыбор. sil<[150]> И день хор+оший",
-      "style": "friendly",
-      "humor": 0.1,
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    }
+    {"text": "{artist}. sil<[150]> Рад, что вы в хор+ошем настро+ении", "style": "friendly", "rate": "+3%", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "{artist}. sil<[150]> Отл+ичный в+ечер", "style": "friendly", "humor": 0.2, "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{artist}. sil<[150]> Включ+аю с удов+ольствием", "style": "friendly", "rate": "+3%", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "{artist}. sil<[150]> Хор+оший в+ыбор. sil<[150]> И день хор+оший", "style": "friendly", "humor": 0.1, "weight": 1.5, "emotion": "good", "slot": "core"}
   ],
+
   "MUSIC_ASK_RAIN": [
-    {
-      "text": "Сейчас дождь. sil<[150]> Может, что-то спокойное?",
-      "style": "normal",
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "На улице дождь. sil<[150]> Включить что-нибудь потише",
-      "style": "friendly",
-      "humor": 0.1,
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Дождь. sil<[200]> Самое время для спокойного",
-      "style": "normal",
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "за окном дождь. sil<[150]> Может, что-то меланхоличное?",
-      "style": "ironic",
-      "humor": 0.3,
-      "weight": 1.0,
-      "emotion": "good",
-      "slot": "core"
-    }
+    {"text": "Сейчас дождь. sil<[150]> Может, что-то спокойное?", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "На улице дождь. sil<[150]> Включить что-нибудь потише", "style": "friendly", "humor": 0.1, "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Дождь. sil<[200]> Самое время для спокойного", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "за окном дождь. sil<[150]> Может, что-то меланхоличное?", "style": "ironic", "humor": 0.3, "weight": 1.0, "emotion": "good", "slot": "core"}
   ],
+
   "MUSIC_ASK_SNOW": [
-    {
-      "text": "Снег. sil<[150]> Может, что-то тёплое",
-      "style": "normal",
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "На улице снег. sil<[150]> Включить что-нибудь уютное?",
-      "style": "friendly",
-      "humor": 0.1,
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "снег. sil<[200]> Самое время для тёплой музыки?",
-      "style": "normal",
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    }
+    {"text": "Снег. sil<[150]> Может, что-то тёплое", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "На улице снег. sil<[150]> Включить что-нибудь уютное?", "style": "friendly", "humor": 0.1, "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "снег. sil<[200]> Самое время для тёплой музыки?", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"}
   ],
+
   "MUSIC_ASK_STORM": [
-    {
-      "text": "Гроза. sil<[150]> Может, что-то мощное",
-      "style": "normal",
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "На улице гроза. sil<[150]> Включить что-нибудь эпичное?",
-      "style": "friendly",
-      "humor": 0.1,
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "гроза. sil<[200]> Как насчёт чего-то мощного?",
-      "style": "normal",
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    }
+    {"text": "Гроза. sil<[150]> Может, что-то мощное", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "На улице гроза. sil<[150]> Включить что-нибудь эпичное?", "style": "friendly", "humor": 0.1, "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "гроза. sil<[200]> Как насчёт чего-то мощного?", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"}
   ],
+
   "MUSIC_ASK_SUN": [
-    {
-      "text": "Солнце. sil<[150]> Может, что-то весёлое",
-      "style": "friendly",
-      "humor": 0.1,
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "На улице солнце. sil<[150]> Включить что-нибудь бодрое?",
-      "style": "friendly",
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "хорошая погода. sil<[150]> Может, повеселее?",
-      "style": "friendly",
-      "humor": 0.1,
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    }
+    {"text": "Солнце. sil<[150]> Может, что-то весёлое", "style": "friendly", "humor": 0.1, "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "На улице солнце. sil<[150]> Включить что-нибудь бодрое?", "style": "friendly", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "хорошая погода. sil<[150]> Может, повеселее?", "style": "friendly", "humor": 0.1, "weight": 1.5, "emotion": "good", "slot": "core"}
   ],
+
   "MUSIC_ASK_MORNING": [
-    {
-      "text": "Доброе утро. sil<[150]> Что-нибудь бодрое",
-      "style": "friendly",
-      "rate": "+5%",
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Утро. sil<[150]> Включить что-нибудь для начала дня?",
-      "style": "friendly",
-      "humor": 0.1,
-      "rate": "+5%",
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "доброе утро. sil<[150]> Может, бодрое?",
-      "style": "friendly",
-      "rate": "+5%",
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    }
+    {"text": "Доброе утро. sil<[150]> Что-нибудь бодрое", "style": "friendly", "rate": "+5%", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Утро. sil<[150]> Включить что-нибудь для начала дня?", "style": "friendly", "humor": 0.1, "rate": "+5%", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "доброе утро. sil<[150]> Может, бодрое?", "style": "friendly", "rate": "+5%", "weight": 1.5, "emotion": "good", "slot": "core"}
   ],
+
   "MUSIC_ASK_NIGHT": [
-    {
-      "text": "Поздно sil<[150]> Может, что-то тихое?",
-      "style": "night",
-      "night": true,
-      "rate": "-12%",
-      "weight": 2.0,
-      "emotion": "neutral",
-      "slot": "core"
-    },
-    {
-      "text": "Ночь. sil<[150]> Включить что-нибудь потише?",
-      "style": "night",
-      "night": true,
-      "rate": "-12%",
-      "weight": 2.0,
-      "emotion": "neutral",
-      "slot": "core"
-    },
-    {
-      "text": "уже поздно. sil<[150]> Может, спокойное?",
-      "style": "night",
-      "night": true,
-      "rate": "-12%",
-      "weight": 1.5,
-      "emotion": "neutral",
-      "slot": "core"
-    }
+    {"text": "Поздно sil<[150]> Может, что-то тихое?", "style": "night", "night": true, "rate": "-12%", "weight": 2.0, "emotion": "neutral", "slot": "core"},
+    {"text": "Ночь. sil<[150]> Включить что-нибудь потише?", "style": "night", "night": true, "rate": "-12%", "weight": 2.0, "emotion": "neutral", "slot": "core"},
+    {"text": "уже поздно. sil<[150]> Может, спокойное?", "style": "night", "night": true, "rate": "-12%", "weight": 1.5, "emotion": "neutral", "slot": "core"}
   ],
+
   "MUSIC_ASK_RECENT": [
-    {
-      "text": "Вы вчера слушали {artist}. sil<[150]> Повторить",
-      "style": "normal",
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Вчера был {artist}. sil<[150]> Может, снова?",
-      "style": "friendly",
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "{artist} вчера. sil<[150]> Повторить?",
-      "style": "normal",
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "вчера вы слушали {artist}. sil<[150]> Снова?",
-      "style": "friendly",
-      "humor": 0.1,
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    }
+    {"text": "Вы вчера слушали {artist}. sil<[150]> Повторить", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Вчера был {artist}. sil<[150]> Может, снова?", "style": "friendly", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "{artist} вчера. sil<[150]> Повторить?", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "вчера вы слушали {artist}. sil<[150]> Снова?", "style": "friendly", "humor": 0.1, "weight": 1.5, "emotion": "good", "slot": "core"}
   ],
+
   "MUSIC_ACCEPT": [
-    {
-      "text": "Включаю {mood}",
-      "style": "normal",
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "{mood}. sil<[150]> Принято",
-      "style": "formal",
-      "weight": 1.5,
-      "emotion": "neutral",
-      "slot": "core"
-    },
-    {
-      "text": "Хорошо sil<[150]> {mood}",
-      "style": "normal",
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    }
+    {"text": "Включаю {mood}", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "{mood}. sil<[150]> Принято", "style": "formal", "weight": 1.5, "emotion": "neutral", "slot": "core"},
+    {"text": "Хорошо sil<[150]> {mood}", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"}
   ],
+
   "MUSIC_DECLINE": [
-    {
-      "text": "Включаю вашу волну",
-      "style": "normal",
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Как скажете. sil<[150]> Ваша волна",
-      "style": "normal",
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Понял. sil<[150]> Включаю волну",
-      "style": "normal",
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    }
+    {"text": "Включаю вашу волну", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Как ск+ажете. sil<[150]> Ваша волна", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "П+онял. sil<[150]> Включаю волну", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"}
   ],
+
   "MUSIC_TIMEOUT": [
-    {
-      "text": "Молчание — тоже ответ. sil<[150]> Включаю вашу волну",
-      "style": "ironic",
-      "humor": 0.3,
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Не дождался. sil<[150]> Включаю волну",
-      "style": "normal",
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Ладно. sil<[150]> Ваша волна",
-      "style": "normal",
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    }
+    {"text": "Молч+ание — тоже ответ. sil<[150]> Включаю вашу волну", "style": "ironic", "humor": 0.3, "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Не дожд+ался. sil<[150]> Включаю волну", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Л+адно. sil<[150]> Ваша волна", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"}
   ],
+
   "MUSIC_WHAT": [
-    {
-      "text": "Что именно",
-      "style": "normal",
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Уточните sil<[150]> Что включить?",
-      "style": "normal",
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Не понял. sil<[150]> Что именно?",
-      "style": "normal",
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    }
+    {"text": "Что +именно", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Уточн+ите sil<[150]> Что включить?", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Не пон+ял. sil<[150]> Что именно?", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"}
   ],
+
   "MUSIC_DISLIKE": [
-    {
-      "text": "Понял sil<[150]> Больше не предложу",
-      "style": "normal",
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Учту sil<[150]> Убрал из ротации",
-      "style": "normal",
-      "weight": 2.0,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Как скажете. sil<[150]> Больше не появится",
-      "style": "formal",
-      "weight": 1.5,
-      "emotion": "neutral",
-      "slot": "core"
-    },
-    {
-      "text": "Запомнил sil<[150]> Этого больше не будет",
-      "style": "normal",
-      "weight": 1.5,
-      "emotion": "good",
-      "slot": "core"
-    }
+    {"text": "П+онял sil<[150]> Больше не предложу", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Учт+у sil<[150]> Убрал из ротации", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Как ск+ажете. sil<[150]> Больше не появится", "style": "formal", "weight": 1.5, "emotion": "neutral", "slot": "core"},
+    {"text": "Зап+омнил sil<[150]> Этого больше не будет", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"}
   ]
 }
