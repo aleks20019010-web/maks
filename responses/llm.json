@@ -82,5 +82,25 @@
       "emotion": "good",
       "slot": "core"
     }
+  ],
+  "LLM_CORE": [
+    {
+      "text": "{answer}",
+      "style": "normal",
+      "emotion": "neutral",
+      "slot": "core"
+    },
+    {
+      "text": "{answer}",
+      "style": "normal",
+      "emotion": "neutral",
+      "slot": "core"
+    },
+    {
+      "text": "{answer}",
+      "style": "normal",
+      "emotion": "neutral",
+      "slot": "core"
+    }
   ]
 }

@@ -150,5 +150,9 @@
   "LLM_THINKING": {"core": "LLM_THINKING"},
   "LLM_ERROR": {"core": "LLM_ERROR"},
   "LLM_TOO_LONG": {"core": "LLM_TOO_LONG"},
-  "LLM_FALLBACK": {"core": "LLM_FALLBACK"}
+  "LLM_FALLBACK": {"core": "LLM_FALLBACK"},
+
+  "llm_answer": {"opening": "OPENING_LLM", "core": "LLM_CORE", "closing": "CLOSING_LLM"},
+  "llm_answer_night": {"core": "LLM_CORE"},
+  "llm_answer_friendly": {"opening": "OPENING_LLM_FRIENDLY", "core": "LLM_CORE", "closing": "CLOSING_LLM"}
 }

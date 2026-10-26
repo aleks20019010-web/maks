@@ -12,6 +12,9 @@
 # Между частями добавляется sil<[100]> (пауза), если часть не заканчивается
 # на точку/паузу. Чтобы TTS не склеивал «волну Поехали» в одно слово.
 #
+# FIX: добавлена подстановка {answer} (и любых {key} из subs) в фразы.
+# Нужно для llm_answer: LLM_CORE = "{answer}" → подставляется текст LLM.
+#
 # Если phrase_set нет в composer.json — возвращает None (fallback на ResponseBuilder).
 
 import os
@@ -30,19 +33,27 @@ _END_MARKS = (".", "!", "?", "…", "sil<[")
 
 
 def _ends_with_pause(text: str) -> bool:
-    """Заканчивается ли текст на точку/паузу (значит, пауза уже есть)."""
     t = (text or "").rstrip()
     if not t:
         return False
     if t.endswith(_END_MARKS):
         return True
-    # sil<[N]> в конце
     if t.endswith(">"):
-        # проверим, что это sil<[...]>
         idx = t.rfind("sil<[")
         if idx != -1 and t.endswith(">"):
             return True
     return False
+
+
+def _substitute(text: str, subs: dict) -> str:
+    """Подставить {key} из subs в text. Неизвестные ключи — оставить как есть."""
+    if not text or "{" not in text:
+        return text
+    for key, value in subs.items():
+        if value is None:
+            continue
+        text = text.replace("{" + key + "}", str(value))
+    return text
 
 
 class Composer:
@@ -72,11 +83,6 @@ class Composer:
         self._load()
 
     def _slots_for(self, phrase_set: str):
-        """Вернуть список (slot, phrase_set) для сборки.
-
-        Новый формат: {"opening": "OPENING_MUSIC", "core": "PLAY_PLAYLIST", "closing": "CLOSING_MUSIC"}
-        Старый формат: ["opening", "core", "closing"]
-        """
         rule = self._rules.get(phrase_set)
         if not rule:
             return None
@@ -139,6 +145,8 @@ class Composer:
             text = phrase.get("text", "")
             if not text:
                 continue
+            # FIX: подстановка {answer} и других {key} из subs
+            text = _substitute(text, subs)
             parts.append(text)
             if slot == "core" and core_phrase is None:
                 core_phrase = phrase
@@ -165,11 +173,6 @@ class Composer:
 
 
 def _join_parts(parts: list) -> str:
-    """Склеить части с паузой между.
-
-    Если часть не заканчивается на точку/паузу — добавляем sil<[100]>,
-    чтобы TTS не склеивал «волну Поехали» в одно слово.
-    """
     cleaned = []
     for p in parts:
         p = (p or "").strip()

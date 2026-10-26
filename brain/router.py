@@ -1,23 +1,15 @@
 # brain/router.py
 # Роутер команд: выбирает навык по тексту и вызывает его.
 #
-# F1: напоминания — «напомни/напомнить/запомни/запомнить X», «когда X?»,
-#     «я ничего не забыл?», «что я забыл?», «готово».
-# pending_music_ask — ответ на вопрос music (погода/вчерашнее/время).
+# ВНЕ ДИАЛОГА (source="voice", "voice_hot"):
+#   reminders → pending → skills → LLM → NOT_UNDERSTOOD
+#   Router решает первым.
 #
-# LLM fallback: если router не понял — пробуем LLM (K+).
-# Если LLM не помогла — NOT_UNDERSTOOD.
-#
-# FIX: process_command принимает source.
-#   - source="voice_dialog" (диалоговый режим после ответа LLM):
-#     сначала LLM (если не явное «напомни»), потом reminders/skills.
-#     Это чтобы «когда он родился» уходило в LLM, а не в reminders.
-#   - остальные source: reminders → pending → skills → LLM.
-#
-# FIX: регекс «когда X» в _handle_reminders сужен до явных напоминаний:
-#   «когда я должен/должна/надо/нужно/планирую/собираюсь X».
-#   «когда он родился» больше не ловится — уходит в LLM.
-#   «что с X» вынесен в отдельный регекс.
+# В ДИАЛОГЕ (source="voice_dialog"):
+#   smalltalk → LLM → (LLM вернёт command → process_command → router)
+#   Router обрабатывает только smalltalk. Всё остальное — LLM.
+#   Если LLM вернула {"type": "command"} — skill.py вызовет process_command,
+#   и router обработает команду (music, controls, ...) уже как обычную.
 
 import re
 import threading
@@ -53,7 +45,6 @@ _REMINDER_LIST_PHRASES = (
     "мои напоминания", "список напоминаний",
 )
 
-# Явные напоминания для _is_explicit_reminder
 _REMINDER_DONE_PHRASES = (
     "готово", "сделано", "я сделал", "я сделала",
     "я выполнил", "я выполнила",
@@ -93,17 +84,46 @@ def process_command(command: str, source: str = "voice"):
     if cmd_lower in ("выход", "exit", "quit"):
         return "exit"
 
-    # ── Диалоговый режим: сначала LLM (если не явное напоминание) ──
+    # ── «Стоп»/«хватит» в диалоге — отменить LLM и TTS ──
+    if source == "voice_dialog" and cmd_lower in ("стоп", "хватит", "достаточно", "замолчи"):
+        try:
+            from brain.skills.llm.skill import cancel_all
+            cancel_all()
+        except Exception as e:
+            log(f"router: cancel_all: {e}", tag="BRAIN", level="WARN")
+        log(f"router: cancel_all ({cmd_lower})", tag="BRAIN")
+        _respond_and_say("STOP")
+        return None
+
+    # ── ДИАЛОГ: smalltalk → LLM ──
     if source == "voice_dialog":
-        if not _is_explicit_reminder(cmd_lower):
+        if _is_explicit_reminder(cmd_lower):
+            if _handle_reminders(cmd_lower):
+                return None
+        else:
+            # Smalltalk — router сам, до LLM
+            handler = skills_base.find_handler(command)
+            if handler and handler.name == "smalltalk":
+                log(f"router: → smalltalk (dialog)", tag="BRAIN")
+                try:
+                    handler.handle(command)
+                except Exception as e:
+                    from brain.errors import handle_error
+                    handle_error(e, context="skill:smalltalk", speak=True)
+                return None
+            # Всё остальное — LLM (LLM вернёт command, если поймёт)
             if _try_llm_fallback(command):
                 return None
-        # LLM не помогла или явное напоминание — идём обычным путём
-        if _handle_reminders(cmd_lower):
-            return None
-    else:
-        if _handle_reminders(cmd_lower):
-            return None
+            # LLM не помогла — reminders на всякий случай
+            if _handle_reminders(cmd_lower):
+                return None
+        # Если дошли сюда — ничего не сработало
+        _respond_and_say("NOT_UNDERSTOOD")
+        return None
+
+    # ── ВНЕ ДИАЛОГА: router решает первым ──
+    if _handle_reminders(cmd_lower):
+        return None
 
     if _handle_pending_music(cmd_lower):
         return None
@@ -137,11 +157,9 @@ def process_command(command: str, source: str = "voice"):
     log(f"router: не понял «{command}»", tag="BRAIN")
     metrics.inc("not_understood")
 
-    # LLM fallback
     if _try_llm_fallback(command):
         return None
 
-    # Не помогло — NOT_UNDERSTOOD
     words = cmd_lower.split()
     if len(words) <= 1:
         _respond_and_say('NOT_UNDERSTOOD_SHORT')
@@ -154,7 +172,6 @@ def process_command(command: str, source: str = "voice"):
 
 # ── LLM fallback ─────────────────────────────────────────────
 def _try_llm_fallback(command: str) -> bool:
-    """Попробовать LLM fallback. True — если LLM ответил/выполнил."""
     try:
         from brain.skills.llm import skill as llm_skill
         handler = llm_skill.LLMSkill()
@@ -166,7 +183,6 @@ def _try_llm_fallback(command: str) -> bool:
 
 # ── Явное напоминание? ───────────────────────────────────────
 def _is_explicit_reminder(cmd_lower: str) -> bool:
-    """Явное напоминание: «напомни ...», «что я забыл», «готово»."""
     if any(cmd_lower.startswith(t + " ") or cmd_lower == t for t in _REMINDER_TRIGGERS):
         return True
     if any(phrase in cmd_lower for phrase in _REMINDER_LIST_PHRASES):
@@ -221,8 +237,6 @@ def _handle_reminders(cmd_lower: str) -> bool:
         _respond_and_say("PENDING_LIST", items="; ".join(lines), count=len(items))
         return True
 
-    # «когда я должен/должна/надо/нужно/планирую/собираюсь X?»
-    # FIX: сужено — «когда он родился» больше не ловится.
     m = re.match(
         r'^когда\s+(?:я\s+)?(?:должен|должна|надо|нужно|планирую|собираюсь|мне\s+надо|мне\s+нужно)\s+(.+?)\??$',
         cmd_lower,
@@ -241,7 +255,6 @@ def _handle_reminders(cmd_lower: str) -> bool:
             _respond_and_say("REMINDER_NOT_FOUND", text=text)
         return True
 
-    # «что с X?»
     m2 = re.match(r'^что\s+с\s+(.+?)\??$', cmd_lower)
     if m2:
         text = m2.group(1).strip()

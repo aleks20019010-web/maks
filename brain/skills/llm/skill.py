@@ -1,42 +1,27 @@
 # brain/skills/llm/skill.py
 # LLM-скил — точка входа.
 #
-# Режимы:
-#   A. Fallback (router не понял) → LLM решает: command / answer / unknown.
-#   B. Явный вопрос (сессия открыта или «расскажи», «почему») → LLM отвечает.
+# АРХИТЕКТУРА (потоки):
+#   brain (главный) → llm_queue → llm_worker → tts_queue → tts_worker → TTS
 #
-# Сессия:
-#   - открывается — после ответа LLM на вопрос.
-#   - закрывается — явная команда / тишина 60 сек / «хватит».
+#   brain НЕ блокируется на _call_llm. Он кладёт задачу в llm_queue и сразу
+#   возвращается к чтению brain_inbox. llm_worker обрабатывает по одной
+#   (порядок гарантирован, история последовательна). tts_worker отправляет
+#   ответы в TTS строго по порядку номеров.
 #
-# История — в _history.py.
-# Парсинг — в _parser.py.
-# Whitelist — в _whitelist.py.
-# Промпт — в _prompt.py.
+# ОТМЕНА:
+#   threading.Event _cancelled. «Стоп»/«хватит» → set(). llm_worker и
+#   tts_worker проверяют is_set() перед работой и после _call_llm.
 #
-# Ответ LLM:
-#   - command → router.process_command() повторно.
-#   - answer → engine.process_llm_answer() → TTS.
-#   - unknown → «Не понял».
-#
-# FIX: перед _call_llm — _respond_and_say("LLM_THINKING") — фраза «Думаю»,
-# только вне диалога (session_open.flag свежий < 20 сек — не говорим).
-#
-# FIX: reasoning отключён (extra_body={"thinking": {"type": "disabled"}}).
-#
-# FIX: добавлены замеры времени (T+...).
-#
-# FIX: диалоговый режим — после ответа LLM пишем data/session_open.flag.
-#
-# ДВА РЕЖИМА ОТВЕТА:
-#   - обычный: {"short": "..."} — быстро, одно предложение.
-#   - подробный: {"full": "...", "short": "...", "explicit_detail": true} —
-#     только если пользователь явно попросил «подробнее / расскажи / объясни».
-#
-# FIX: в _call_llm добавлен timeout=15.0 — иначе SDK ждёт 600 секунд
-# (10 минут), и brain встаёт колом. AITUNNEL рекомендует явно задавать timeout.
+# ПРОВАЙДЕР:
+#   provider: {"sort": "latency"} — AITUNNEL выбирает провайдера с минимальной
+#   задержкой до первого токена. Без этого — балансировка по загрузке,
+#   которая может направить запрос к медленному провайдеру (наблюдалось 32с).
+#   Документация: https://aitunnel.ru/docs/provider [citation:1]
 
 import os
+import queue
+import threading
 import time
 
 from brain.skills.base import Skill, register
@@ -46,6 +31,54 @@ from shared.log import log
 from brain.skills.llm import _prompt, _parser, _history, _session, _whitelist
 
 
+# ==================== ГЛОБАЛЬНЫЕ ОЧЕРЕДИ И ФЛАГИ ====================
+
+_llm_queue: "queue.Queue[tuple[int, str, bool]]" = queue.Queue()
+_tts_queue: "queue.Queue[tuple[int, object]]" = queue.Queue()
+_cancelled = threading.Event()
+
+_request_counter = 0
+_counter_lock = threading.Lock()
+
+_history_lock = threading.Lock()
+
+_engine_ref = None
+
+_workers_started = False
+_workers_lock = threading.Lock()
+
+
+def set_engine(engine):
+    global _engine_ref
+    _engine_ref = engine
+
+
+def cancel_all():
+    _cancelled.set()
+    while not _llm_queue.empty():
+        try:
+            _llm_queue.get_nowait()
+        except queue.Empty:
+            break
+    while not _tts_queue.empty():
+        try:
+            _tts_queue.get_nowait()
+        except queue.Empty:
+            break
+    log("llm: cancelled all", tag="BRAIN")
+
+
+def reset_cancel():
+    _cancelled.clear()
+
+
+def _next_id() -> int:
+    global _request_counter
+    with _counter_lock:
+        _request_counter += 1
+        return _request_counter
+
+
 # ==================== КЛИЕНТ ====================
 
 _client = None
@@ -53,7 +86,6 @@ _client_error = None
 
 
 def _get_client():
-    """Ленивый клиент OpenAI (AITUNNEL)."""
     global _client, _client_error
     if _client is not None:
         return _client
@@ -88,7 +120,7 @@ def _get_client():
         return None
 
     try:
-        _client = OpenAI(api_key=key, base_url="https://api.aitunnel.ru/v1/")
+        _client = OpenAI(api_key=key, base_url="https://api.aitunnel.ru/v1/", timeout=15.0)
     except Exception as e:
         _client_error = f"OpenAI init: {e}"
         log(f"llm: {_client_error}", tag="BRAIN", level="ERROR")
@@ -100,7 +132,6 @@ def _get_client():
 # ==================== ДИАЛОГ ====================
 
 def _in_dialog() -> bool:
-    """Диалоговый режим: brain ответил < 20 сек назад."""
     try:
         import pathlib
         flag = pathlib.Path("data/session_open.flag")
@@ -127,22 +158,16 @@ _DETAIL_TRIGGERS = (
 
 
 def _wants_detail(text: str) -> bool:
-    """Пользователь явно просит подробный ответ?"""
     tl = text.lower().strip()
     if not tl:
         return False
-    for trigger in _DETAIL_TRIGGERS:
-        if trigger in tl:
-            return True
-    return False
+    return any(trigger in tl for trigger in _DETAIL_TRIGGERS)
 
 
 # ==================== КОНТЕКСТ ====================
 
 def _build_context() -> dict:
-    """Собрать контекст: что играет, погода, время, mood, energy."""
     ctx = {}
-
     try:
         from shared import state
         cur = state.get_current() or {}
@@ -150,7 +175,6 @@ def _build_context() -> dict:
             ctx["current_track"] = f"{cur.get('title', '?')} — {cur.get('artist', '?')}"
     except Exception:
         pass
-
     try:
         from personality_core import self_state as _ss
         from datetime import datetime
@@ -168,21 +192,14 @@ def _build_context() -> dict:
         ctx["energy"] = st.energy
     except Exception:
         pass
-
     return ctx
 
 
 # ==================== LLM-ЗАПРОС ====================
 
 def _call_llm(user_text: str, detail: bool = False) -> str | None:
-    """Отправить запрос в LLM. detail=True — развёрнутый ответ.
-    
-    timeout=30.0 — критично: по умолчанию OpenAI SDK ждёт 600 секунд,
-    и brain зависает на 10 минут (наблюдалось 602с в логе).
-    """
     client = _get_client()
     if client is None:
-        print("[LLM DEBUG] _call_llm: client is None")
         return None
 
     t0 = time.time()
@@ -198,8 +215,11 @@ def _call_llm(user_text: str, detail: bool = False) -> str | None:
             model="deepseek-v4-flash-0731",
             messages=messages,
             max_tokens=1500,
-            timeout=30.0,
-            extra_body={"thinking": {"type": "disabled"}},
+            timeout=15.0,
+            extra_body={
+                "thinking": {"type": "disabled"},
+                "provider": {"sort": "latency"},
+            },
         )
         t3 = time.time()
         print(f"[LLM T] chat.completions.create: {t3-t2:.2f}s")
@@ -212,162 +232,171 @@ def _call_llm(user_text: str, detail: bool = False) -> str | None:
         return None
 
 
-# ==================== СКИЛ ====================
+# ==================== ПОТОКИ ====================
 
-class LLMSkill(Skill):
-    name = "llm"
-    priority = 100  # самый низкий — fallback
+def _llm_worker():
+    log("llm: llm_worker запущен", tag="BRAIN")
+    while True:
+        try:
+            req_id, user_text, detail = _llm_queue.get(timeout=1.0)
+        except queue.Empty:
+            continue
 
-    def can_handle(self, text: str) -> bool:
-        return True
+        if _cancelled.is_set():
+            log(f"llm: req {req_id} cancelled before start", tag="BRAIN")
+            continue
 
-    def handle(self, text: str) -> bool:
-        """Обработать запрос через LLM."""
-        t_start = time.time()
-        print(f"[LLM DEBUG] handle: text={text!r}")
+        print(f"[LLM DEBUG] llm_worker: req={req_id} text={user_text!r} detail={detail}")
 
-        detail = _wants_detail(text)
-        print(f"[LLM DEBUG] handle: detail={detail}")
-
-        # Фраза перед LLM — только вне диалога
         if not _in_dialog():
-            t0 = time.time()
             _respond_and_say("LLM_THINKING")
-            t1 = time.time()
-            print(f"[LLM T] _respond_and_say(LLM_THINKING): {t1-t0:.2f}s")
         else:
             print("[LLM T] _respond_and_say(LLM_THINKING): skipped (dialog)")
 
-        t2 = time.time()
-        raw = _call_llm(text, detail=detail)
-        t3 = time.time()
-        print(f"[LLM T] _call_llm: {t3-t2:.2f}s")
+        raw = _call_llm(user_text, detail=detail)
+
+        if _cancelled.is_set():
+            log(f"llm: req {req_id} cancelled after llm", tag="BRAIN")
+            continue
 
         if raw is None:
-            print("[LLM DEBUG] handle: raw is None → LLM_ERROR")
-            _respond_and_say("LLM_ERROR")
-            return True
+            _tts_queue.put((req_id, None))
+            continue
 
-        t4 = time.time()
         parsed = _parser.parse_response(raw)
-        t5 = time.time()
-        print(f"[LLM T] _parser.parse_response: {t5-t4:.2f}s")
-
         if parsed is None:
-            print("[LLM DEBUG] handle: parsed is None → LLM_ERROR")
-            _respond_and_say("LLM_ERROR")
-            return True
+            _tts_queue.put((req_id, None))
+            continue
 
         ptype = parsed.get("type")
-        print(f"[LLM DEBUG] handle: ptype={ptype!r}")
+        print(f"[LLM DEBUG] llm_worker: req={req_id} ptype={ptype!r}")
 
         if ptype == "command":
             cmd = parsed.get("text", "")
             log(f"llm: command → {cmd!r}", tag="BRAIN")
             from brain.router import process_command
             try:
-                t6 = time.time()
                 process_command(cmd)
-                t7 = time.time()
-                print(f"[LLM T] process_command: {t7-t6:.2f}s")
             except Exception as e:
                 log(f"llm: process_command({cmd!r}): {e}", tag="BRAIN", level="WARN")
-                _respond_and_say("LLM_ERROR")
-            return True
+            continue
 
         if ptype == "answer":
-            self._handle_answer(parsed, text, detail=detail)
-            t_end = time.time()
-            print(f"[LLM T] handle total: {t_end-t_start:.2f}s")
-            return True
+            try:
+                from brain.skills._helpers import _engine
+                if _engine is None:
+                    _tts_queue.put((req_id, None))
+                    continue
 
-        log(f"llm: unknown for {text!r}", tag="BRAIN")
-        _respond_and_say("NOT_UNDERSTOOD")
+                if detail:
+                    text = parsed.get("full") or parsed.get("short") or parsed.get("minimal")
+                else:
+                    text = parsed.get("short") or parsed.get("full") or parsed.get("minimal")
+
+                if not text:
+                    _tts_queue.put((req_id, None))
+                    continue
+
+                response = _engine.process_llm_answer(text, parsed.get("explicit_detail", False))
+
+                with _history_lock:
+                    _history.get().add("user", user_text)
+                    _history.get().add("assistant", text)
+
+                try:
+                    import pathlib
+                    flag = pathlib.Path("data/session_open.flag")
+                    flag.parent.mkdir(exist_ok=True)
+                    flag.write_text(str(time.time()))
+                except Exception:
+                    pass
+
+                _tts_queue.put((req_id, response))
+
+            except Exception as e:
+                print(f"[LLM DEBUG] llm_worker answer: EXCEPTION: {e}")
+                log(f"llm: answer: {e}", tag="BRAIN", level="WARN")
+                _tts_queue.put((req_id, None))
+            continue
+
+        log(f"llm: unknown for {user_text!r}", tag="BRAIN")
+        _tts_queue.put((req_id, "NOT_UNDERSTOOD"))
+
+
+def _tts_worker():
+    log("llm: tts_worker запущен", tag="BRAIN")
+    next_id = 1
+    buffer = {}
+
+    while True:
+        try:
+            req_id, response = _tts_queue.get(timeout=1.0)
+        except queue.Empty:
+            continue
+
+        buffer[req_id] = response
+
+        while next_id in buffer:
+            resp = buffer.pop(next_id)
+
+            if _cancelled.is_set():
+                log(f"llm: tts req {next_id} cancelled", tag="BRAIN")
+                next_id += 1
+                continue
+
+            if resp is None:
+                _respond_and_say("LLM_ERROR")
+            elif resp == "NOT_UNDERSTOOD":
+                _respond_and_say("NOT_UNDERSTOOD")
+            else:
+                from shared import ipc, protocol
+                ipc.put(protocol.TTS_INBOX, protocol.say(
+                    text=resp.text,
+                    sync=True,
+                    rate=resp.rate,
+                    pitch=resp.pitch,
+                    emotion=resp.emotion,
+                ))
+
+            next_id += 1
+
+
+def _start_workers():
+    global _workers_started
+    with _workers_lock:
+        if _workers_started:
+            return
+        _workers_started = True
+
+    t1 = threading.Thread(target=_llm_worker, daemon=True, name="llm_worker")
+    t1.start()
+
+    t2 = threading.Thread(target=_tts_worker, daemon=True, name="tts_worker")
+    t2.start()
+
+    log("llm: воркеры запущены (llm_worker, tts_worker)", tag="BRAIN")
+
+
+# ==================== СКИЛ ====================
+
+class LLMSkill(Skill):
+    name = "llm"
+    priority = 100
+
+    def can_handle(self, text: str) -> bool:
         return True
 
-    def _handle_answer(self, parsed: dict, user_text: str, detail: bool = False) -> None:
-        """Ответ LLM → engine.process_llm_answer → TTS."""
-        t_start = time.time()
-        print(f"[LLM DEBUG] _handle_answer: parsed={parsed} detail={detail}")
-        try:
-            t0 = time.time()
-            from brain.skills._helpers import _engine
-            t1 = time.time()
-            print(f"[LLM T] import _engine: {t1-t0:.2f}s")
-            print(f"[LLM DEBUG] _handle_answer: _engine={_engine is not None}")
-            if _engine is None:
-                _respond_and_say("LLM_ERROR")
-                return
+    def handle(self, text: str) -> bool:
+        _start_workers()
+        reset_cancel()
 
-            t2 = time.time()
-            from personality_core import self_state as _ss
-            from personality_core import prosody as _prosody
-            st = _ss.get()
-            style = _prosody.get_answer_style(st, parsed.get("explicit_detail", False))
-            t3 = time.time()
-            print(f"[LLM T] self_state + get_answer_style: {t3-t2:.2f}s")
-            print(f"[LLM DEBUG] _handle_answer: style={style}")
+        detail = _wants_detail(text)
+        req_id = _next_id()
 
-            # detail → full (fallback short), иначе short (fallback full/minimal)
-            if detail:
-                text = parsed.get("full") or parsed.get("short") or parsed.get("minimal")
-            else:
-                text = parsed.get("short") or parsed.get("full") or parsed.get("minimal")
+        print(f"[LLM DEBUG] handle: req={req_id} text={text!r} detail={detail}")
+        _llm_queue.put((req_id, text, detail))
 
-            print(f"[LLM DEBUG] _handle_answer: text={text!r}")
-            if not text:
-                _respond_and_say("LLM_ERROR")
-                return
-
-            t4 = time.time()
-            response = _engine.process_llm_answer(text, parsed.get("explicit_detail", False))
-            t5 = time.time()
-            print(f"[LLM T] process_llm_answer: {t5-t4:.2f}s")
-            print(f"[LLM DEBUG] _handle_answer: response={response}")
-
-            if response and response.text:
-                from shared import ipc, protocol
-                t6 = time.time()
-                ipc.put(protocol.TTS_INBOX, protocol.say(
-                    text=response.text,
-                    sync=True,
-                    rate=response.rate,
-                    pitch=response.pitch,
-                    emotion=response.emotion,
-                ))
-                t7 = time.time()
-                print(f"[LLM T] ipc.put(sync=True): {t7-t6:.2f}s")
-
-            t8 = time.time()
-            sess = _session.get()
-            sess.open()
-            sess.touch()
-            t9 = time.time()
-            print(f"[LLM T] session.open+touch: {t9-t8:.2f}s")
-
-            t10 = time.time()
-            _history.get().add("user", user_text)
-            _history.get().add("assistant", text)
-            t11 = time.time()
-            print(f"[LLM T] history.add x2: {t11-t10:.2f}s")
-
-            # Диалоговый режим: 20 сек ASR пропускает без wake word
-            try:
-                import pathlib
-                flag = pathlib.Path("data/session_open.flag")
-                flag.parent.mkdir(exist_ok=True)
-                flag.write_text(str(time.time()))
-            except Exception:
-                pass
-
-            log(f"llm: answer (style={style}, detail={detail})", tag="BRAIN")
-            t_end = time.time()
-            print(f"[LLM T] _handle_answer total: {t_end-t_start:.2f}s")
-
-        except Exception as e:
-            print(f"[LLM DEBUG] _handle_answer: EXCEPTION: {e}")
-            log(f"llm: _handle_answer: {e}", tag="BRAIN", level="WARN")
-            _respond_and_say("LLM_ERROR")
+        return True
 
 
 register(LLMSkill())

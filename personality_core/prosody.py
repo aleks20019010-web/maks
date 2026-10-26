@@ -9,6 +9,10 @@
 #
 # Словарь ударений — в personality_core/stress_words.json.
 # Загружается при импорте. Можно пополнять без правки кода.
+#
+# FIX: запятая и точка МЕЖДУ ЦИФРАМИ (4,6 / 4.6) — десятичный разделитель,
+# не пауза. Раньше «4,6» → «4 sil<[50]> 6», TTS читал «четыре, пауза, шесть».
+# Теперь: re.sub(r'(?<!\d),(?!\d)') и re.sub(r'(?<!\d)\.(?!\d)').
 
 import os
 import json
@@ -122,7 +126,7 @@ def get_rate_pitch_emotion(self_state, style: str) -> dict:
 # РАЗМЕТКА ТЕКСТА
 # ============================================================
 PAUSE_COMMA = "sil<[50]>"
-PAUSE_DOT = "sil<[150]>"
+PAUSE_DOT = "sil<[100]>"
 PAUSE_DASH = "sil<[75]>"
 PAUSE_SEMICOLON = "sil<[100]>"
 
@@ -145,12 +149,17 @@ def apply_prosody(text: str) -> str:
     if not text:
         return text
 
-    # Паузы вместо знаков
-    text = text.replace(",", f" {PAUSE_COMMA} ")
+    # ── Паузы вместо знаков ──
+    # FIX: запятая МЕЖДУ ЦИФРАМИ (4,6) — десятичный разделитель, не пауза.
+    text = re.sub(r'(?<!\d),(?!\d)', f' {PAUSE_COMMA} ', text)
+
     text = text.replace(";", f" {PAUSE_SEMICOLON} ")
     text = text.replace("—", f" {PAUSE_DASH} ")
     text = text.replace("–", f" {PAUSE_DASH} ")
-    text = text.replace(".", f" {PAUSE_DOT} ")
+
+    # FIX: точка МЕЖДУ ЦИФРАМИ (4.6) — десятичный разделитель, не пауза.
+    # Но точка в конце предложения (не между цифрами) — заменяется.
+    text = re.sub(r'(?<!\d)\.(?!\d)', f' {PAUSE_DOT} ', text)
 
     # Ударения
     text = _apply_stress(text)

@@ -9,7 +9,8 @@ Engine сам ничего не решает — он склеивает сло�
 Плюс: обновляет self_state (mood, energy, valence, arousal).
 Плюс: обновляет mind_stream (контекст сессии).
 Плюс: отмечает сработавшие правила для cooldown.
-Плюс: process_llm_answer — сборка ответа LLM с prosody.
+Плюс: process_llm_answer — сборка ответа LLM через composer (opening + core + closing)
+      + prosody на финальный текст (паузы + ударения).
 Плюс: prosody для обычных фраз — тон по mood/energy + style.
 
 СОВМЕСТИМОСТЬ:
@@ -67,27 +68,88 @@ class PersonalityEngine:
         explicit_detail: bool = False,
         context: Optional[Context] = None,
     ) -> JarvisResponse:
+        """Собрать ответ LLM через composer + prosody.
+
+        LLM даёт смысл (text). Composer оборачивает в личность Макса:
+        OPENING_LLM + LLM_CORE({answer}) + CLOSING_LLM.
+        Затем prosody применяется ко ВСЕМУ финальному тексту:
+        запятые/точки/тире → sil<[...]>, ударения из stress_words.json.
+        """
         from personality_core import self_state as _self_state
         from personality_core import prosody as _prosody
         from personality_core import style as _style
 
         st = _self_state.get()
 
-        marked = _prosody.apply_prosody(text)
-
+        # 1. Определить style
         if context is not None:
             current_style = _style.pick_style(context)
         else:
             current_style = _style.pick_style_from_state(st)
 
-        rpe = _prosody.get_rate_pitch_emotion(st, current_style)
+        # 2. Выбрать правило composer по style
+        if current_style == "night":
+            rule_name = "llm_answer_night"
+        elif current_style == "friendly":
+            rule_name = "llm_answer_friendly"
+        else:
+            rule_name = "llm_answer"
 
+        # 3. Payload: answer — текст LLM (сырой, prosody применим в конце)
+        payload = {
+            "answer": text,
+            "explicit_detail": explicit_detail,
+            "style": current_style,
+        }
+
+        # 4. Composer
+        composed = None
+        try:
+            if context is not None:
+                ctx = context
+            else:
+                from personality_core.types import Event
+                event = Event(type="command", name="llm_answer", data=payload)
+                ctx = self._context_builder.build(event)
+
+            if not hasattr(ctx, "_payload") or ctx._payload is None:
+                ctx._payload = {}
+            ctx._payload.update(payload)
+
+            from personality_core.policy import PolicyResult
+            policy = PolicyResult(
+                rule_name=rule_name,
+                phrase_set=rule_name,
+                payload=payload,
+            )
+            composed = self._composer.compose(policy, ctx)
+        except Exception as e:
+            print(f"⚠ engine: composer llm_answer: {e}")
+            composed = None
+
+        # 5. Prosody ко всему финальному тексту (composer + LLM)
+        if composed is not None and composed.text:
+            composed.text = _prosody.apply_prosody(composed.text)
+
+            rpe = _prosody.get_rate_pitch_emotion(st, current_style)
+            if composed.rate is None and rpe.get("rate"):
+                composed.rate = rpe["rate"]
+            if composed.pitch is None and rpe.get("pitch"):
+                composed.pitch = rpe["pitch"]
+            if composed.emotion is None and rpe.get("emotion"):
+                composed.emotion = rpe["emotion"]
+            composed.explain = f"llm_answer style={current_style} (composer+prosody)"
+            return composed
+
+        # Fallback: prosody поверх текста (как было)
+        marked = _prosody.apply_prosody(text)
+        rpe = _prosody.get_rate_pitch_emotion(st, current_style)
         return JarvisResponse(
             text=marked,
             rate=rpe.get("rate"),
             pitch=rpe.get("pitch"),
             emotion=rpe.get("emotion"),
-            explain=f"llm_answer style={current_style}",
+            explain=f"llm_answer style={current_style} (fallback)",
         )
 
     def pick(self, event: str, **kw) -> Optional[str]:

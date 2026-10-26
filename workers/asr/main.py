@@ -14,15 +14,25 @@ FIX: echo-фильтр не считает echo, если распознанно
 FIX: порог echo поднят с 0.6 до 0.85.
 
 ОТКАТ: динамическая грамматика (IDLE/FULL) убрана.
-Причина: Vosk SetGrammar на работающем распознавателе нестабилен
-('Can't add speaker model to already running recognizer',
- 'NoneType' object has no attribute 'encode',
- 'Expecting array of strings, got: []').
 Один KaldiRecognizer(model, rate) без грамматики — полный диапазон.
-ASR фильтрует фоновый разговор через _session_open() и wake/hot.
+
+ФИЛЬТР ДИАЛОГА:
+  В диалоговом режиме (20 сек после ответа LLM) в brain пропускаются
+  только осмысленные фразы:
+    - короткие осмысленные (_SHORT_OK): спасибо, привет, да, нет и т.д.,
+    - слова/фразы из responses/commands.json (включи, погода, пауза...),
+    - есть вопросительное слово (что, кто, где, когда, почему, как...),
+    - или триггер подробности (расскажи, объясни, подробнее...),
+    - или длина >= 3 слов.
+  Короткие бессвязные фразы («собой», «музыку») → [v] dialog-skip,
+  не доходят до brain, не тратят LLM.
+
+  commands.json — ТОЛЬКО для ASR. Это словарь «похоже на команду»,
+  ASR не знает, что с ними делает router. Просто пропускает.
 """
 
 import json
+import os
 import queue
 import sys
 import threading
@@ -46,6 +56,8 @@ DEDUP_WINDOW_SEC = 1.0
 HOT_WORDS_RELOAD_SEC = 30.0
 DIALOG_SESSION_SEC = 20.0
 
+_COMMANDS_FILE = "commands.json"
+
 
 # ── Внутренние состояния ────────────────────────────────────────
 _waiting_for_command = False
@@ -67,6 +79,26 @@ def _get_wake_words() -> set:
         return set(w.lower() for w in cfg.WAKE_WORDS)
     except Exception:
         return set()
+
+
+# ── Commands (для фильтра диалога) ─────────────────────────────
+def _get_command_words() -> set:
+    """Слова/фразы из responses/commands.json — «похоже на команду».
+
+    ASR не знает, что с ними делает router. Просто пропускает в диалоге.
+    """
+    path = os.path.join(cfg.BASE_DIR, "responses", _COMMANDS_FILE)
+    if not os.path.exists(path):
+        return set()
+    try:
+        with open(path, "r", encoding="utf-8-sig") as f:
+            data = json.load(f)
+        words = data.get("words", [])
+        if isinstance(words, list):
+            return set(w.lower().strip() for w in words if w)
+    except Exception as e:
+        log(f"asr: commands.json: {e}", tag="ASR", level="WARN")
+    return set()
 
 
 def _is_command_word(text: str) -> bool:
@@ -126,6 +158,59 @@ def _session_open() -> bool:
         return (time.time() - ts) < DIALOG_SESSION_SEC
     except Exception:
         return False
+
+
+# ── Фильтр диалога ─────────────────────────────────────────────
+_QUESTION_WORDS = (
+    "что", "кто", "где", "когда", "почему", "как", "зачем",
+    "сколько", "какой", "какая", "какие", "куда", "откуда", "чей",
+)
+
+_DETAIL_WORDS = (
+    "подробнее", "подробней", "поподробнее",
+    "расскажи", "рассказывай",
+    "объясни", "объясняй",
+    "поясни", "разъясни",
+    "в деталях", "детально",
+    "продолжай",
+)
+
+_SHORT_OK = (
+    "спасибо", "благодарю", "привет", "здравствуй", "пока",
+    "да", "нет", "конечно", "хорошо", "ладно", "ясно",
+    "понял", "поняла", "ок", "окей", "ага", "угу",
+    "молодец", "умница", "правильно", "верно",
+    "стоп", "хватит", "достаточно", "замолчи",
+    "расскажи", "объясни", "подробнее", "продолжай",
+)
+
+
+def _is_meaningful_dialog(text_lower: str, command_words: set) -> bool:
+    """Похоже ли на осмысленный запрос в диалоге?
+
+    Пропускаем, если:
+      - короткая осмысленная фраза (_SHORT_OK),
+      - содержит слово/фразу из commands.json,
+      - есть вопросительное слово,
+      - или триггер подробности,
+      - или длина >= 3 слов.
+    Иначе — [v] dialog-skip.
+    """
+    if not text_lower:
+        return False
+    if text_lower.strip() in _SHORT_OK:
+        return True
+    if command_words:
+        for w in command_words:
+            if w in text_lower:
+                return True
+    if any(w in text_lower for w in _QUESTION_WORDS):
+        return True
+    if any(w in text_lower for w in _DETAIL_WORDS):
+        return True
+    if len(text_lower.split()) >= 3:
+        return True
+    return False
 
 
 # ── Wake word ──────────────────────────────────────────────────
@@ -202,12 +287,14 @@ def main():
         log(f"asr: Vosk не загрузился: {e}", tag="ASR", level="ERROR")
         sys.exit(1)
 
-    # Один распознаватель, полный диапазон, без грамматики
     rec = KaldiRecognizer(model, cfg.VOSK_RATE)
     mic_channels = 1
 
     hot_words = _get_hot_words()
     log(f"asr: HOT WORDS: {len(hot_words)}", tag="ASR")
+
+    command_words = _get_command_words()
+    log(f"asr: COMMAND WORDS: {len(command_words)}", tag="ASR")
 
     # ── Очереди ──
     near_q = queue.Queue(maxsize=50)
@@ -236,6 +323,7 @@ def main():
     _last_sent_text = ""
     _last_sent_time = 0.0
     _last_hw_reload = time.time()
+    _last_cmd_reload = time.time()
 
     def callback(indata, frames, time_info, status):
         audio = np.frombuffer(bytes(indata), dtype=np.int16)
@@ -281,6 +369,13 @@ def main():
                     hot_words = new_hw
                     log(f"asr: HOT WORDS перезагружены: {len(hot_words)}", tag="ASR")
                 _last_hw_reload = now
+
+            if now - _last_cmd_reload > HOT_WORDS_RELOAD_SEC:
+                new_cmd = _get_command_words()
+                if new_cmd != command_words:
+                    command_words = new_cmd
+                    log(f"asr: COMMAND WORDS перезагружены: {len(command_words)}", tag="ASR")
+                _last_cmd_reload = now
 
             speaking = _tts_speaking()
 
@@ -347,6 +442,9 @@ def main():
                 if text_lower in ("хватит", "достаточно", "стоп", "замолчи"):
                     log(f"asr: [ДИАЛОГ] {text} → idle", tag="ASR")
                     ipc.put(protocol.BRAIN_INBOX, protocol.command(text, source="voice_dialog"))
+                    continue
+                if not _is_meaningful_dialog(text_lower, command_words):
+                    log(f"asr: [v] {text} (dialog-skip)", tag="ASR")
                     continue
                 log(f"asr: [ДИАЛОГ] {text}", tag="ASR")
                 ipc.put(protocol.BRAIN_INBOX, protocol.command(text, source="voice_dialog"))
