@@ -1,20 +1,24 @@
-# ===== РЎРµРєСЂРµС‚С‹ =====
+# ===== Секреты =====
 config/secrets.json
 config/token.txt
+config/llm_key.txt
 config/yandex_key.txt
 config/yandex_folder.txt
+config/weather_key.txt
+config/paths.json
 .env
 *.key
 
-# ===== Р”Р°РЅРЅС‹Рµ =====
+# ===== Данные =====
 data/
 !data/.gitkeep
 memory/data/
+data/session_open.flag
 
-# ===== РњРѕРґРµР»Рё =====
+# ===== Модели =====
 models/
 
-# ===== РљСЌС€ =====
+# ===== Кэш =====
 cache/
 __pycache__/
 *.pyc
@@ -22,19 +26,24 @@ __pycache__/
 *.pyd
 .pytest_cache/
 
-# ===== Р›РѕРіРё =====
+# ===== Логи =====
 logs/
 *.log
 
-# ===== РђСЂС…РёРІ =====
+# ===== Архив =====
 _archive/
 
-# ===== Р’СЂРµРјРµРЅРЅС‹Рµ =====
+# ===== Временные =====
 *.tmp
 *.bak
 *.swp
 *~
 _tts_*.mp3
+Новый текстовый документ.txt
+
+# ===== Дамп проекта (merge_code.py) =====
+full_project_code.txt
+merge_code.py
 
 # ===== IDE =====
 .vscode/
@@ -42,17 +51,4 @@ _tts_*.mp3
 
 # ===== OS =====
 Thumbs.db
-.DS_Storeconfig/weather_key.txt
-
-# Секреты
-config/weather_key.txt
-config/llm_key.txt
-data/session_open.flag
-*.txt
-config/llm_key.txt
-data/session_open.flag
-brain/skills/llm/Новый текстовый документ.txt
-tools/Новый текстовый документ.txt
-config/paths.json
-full_project_code.txt
-merge_code.py
+.DS_Store
