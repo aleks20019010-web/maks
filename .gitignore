@@ -54,3 +54,5 @@ data/session_open.flag
 brain/skills/llm/Новый текстовый документ.txt
 tools/Новый текстовый документ.txt
 config/paths.json
+full_project_code.txt
+merge_code.py

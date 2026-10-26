@@ -10,6 +10,10 @@ FIX: имя файла с timestamp_ns вместо uuid.hex.
 Теперь: f"{time.time_ns()}_{uuid.uuid4().hex}.json" — сортировка по имени
 = сортировка по времени. Старое сообщение всегда первым.
 
+FIX: IPC_DIR — от cfg.DATA_DIR, а не относительный "data/ipc".
+Раньше: работал только если cwd = D:\\Maks. Если воркер запущен
+из другой папки — IPC ломался. Теперь — абсолютный путь от BASE_DIR.
+
 Использование:
     from shared import ipc
     ipc.put(protocol.BRAIN_INBOX, msg)
@@ -25,9 +29,11 @@ import time
 import uuid
 from typing import Optional
 
+from shared import config as cfg
 from shared.protocol import Message
 
-IPC_DIR = "data/ipc"
+# FIX: абсолютный путь от BASE_DIR, не относительный "data/ipc"
+IPC_DIR = str(cfg.DATA_DIR / "ipc")
 
 
 def _topic_dir(topic: str) -> str:
@@ -105,7 +111,7 @@ def init(clean: bool = False):
     os.makedirs(IPC_DIR, exist_ok=True)
 
     if not clean:
-        return
+        return 0
 
     removed = 0
     for entry in os.listdir(IPC_DIR):
