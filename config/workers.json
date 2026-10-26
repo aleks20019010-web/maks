@@ -3,7 +3,7 @@
     {
       "name": "brain",
       "cmd": ["python", "-m", "brain.main"],
-      "cwd": "D:\\Maks",
+      "cwd": ".",
       "auto_restart": true,
       "critical": true,
       "ram_limit_mb": 500
@@ -11,7 +11,7 @@
     {
       "name": "asr",
       "cmd": ["python", "-m", "workers.asr.main"],
-      "cwd": "D:\\Maks",
+      "cwd": ".",
       "auto_restart": true,
       "critical": false,
       "ram_limit_mb": 1000
@@ -19,7 +19,7 @@
     {
       "name": "tts",
       "cmd": ["python", "-m", "workers.tts.main"],
-      "cwd": "D:\\Maks",
+      "cwd": ".",
       "auto_restart": true,
       "critical": false,
       "ram_limit_mb": 300
@@ -27,7 +27,7 @@
     {
       "name": "music",
       "cmd": ["python", "-m", "workers.music.main"],
-      "cwd": "D:\\Maks",
+      "cwd": ".",
       "auto_restart": true,
       "critical": false,
       "ram_limit_mb": 500
