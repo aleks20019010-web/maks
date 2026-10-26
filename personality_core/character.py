@@ -4,6 +4,9 @@
 #
 # Живёт ОТДЕЛЬНО от Context — статичен, не меняется между вызовами.
 # Context получает ссылку — правила читают через ctx.character.
+#
+# FIX: DEFAULT_CHARACTER["name"] = "Макс" (было "Jarvis").
+# В логах при отсутствии config/personality.json было «Jarvis».
 
 import os
 import json
@@ -14,7 +17,7 @@ from dataclasses import dataclass
 # КОНСТАНТЫ
 # ============================================================
 DEFAULT_CHARACTER = {
-    "name": "Jarvis",
+    "name": "Макс",
     "style": "calm_confident",
     "humor": 0.35,
     "sarcasm": 0.15,
@@ -42,7 +45,7 @@ class Character:
         1.5 — непредсказуемый, редкие фразы выпадают часто
     """
     # --- Из personality.json ---
-    name: str = "Jarvis"
+    name: str = "Макс"
     style: str = "calm_confident"   # глобальный тон (не то же, что style фразы)
     humor: float = 0.35
     sarcasm: float = 0.15
@@ -113,7 +116,7 @@ def get(base_dir: str | None = None) -> Character:
     """Вернуть синглтон Character.
 
     При первом вызове — загружает из config/personality.json.
-    base_dir — путь к D:\\Jarvis (если первый вызов).
+    base_dir — путь к D:\\Maks (если первый вызов).
     """
     global _character
     if _character is None:
