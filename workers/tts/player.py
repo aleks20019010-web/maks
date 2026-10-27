@@ -1,5 +1,13 @@
 # workers/tts/player.py
 # VLC-плеер для TTS + ducking музыки через IPC (pause/resume).
+#
+# FIX (2026-10-27): p.release() в finally. Раньше: p.stop() только.
+# stop() останавливает воспроизведение, но НЕ освобождает C-объект
+# libvlc_media_player_t. Без release() — C-объект живёт до gc.collect()
+# (refcount), а на Windows с python-vlc __del__ может не сработать.
+# TTS worker — долгоживущий, вызывает play_tts_file каждую фразу.
+# Если __del__ не срабатывает — тысячи libvlc_media_player_t в памяти,
+# WorkingSet растёт. release() освобождает явно.
 
 import os
 import time
@@ -15,9 +23,11 @@ TTS_VOLUME = 100
 
 
 def play_tts_file(file_path: str) -> bool:
-    """Проиграть mp3. Останавливает после окончания."""
+    """Проиграть mp3. Останавливает и освобождает плеер после окончания."""
     if not os.path.exists(file_path):
         return False
+
+    p = None
     try:
         p = vlc.MediaPlayer(file_path)
         try:
@@ -36,14 +46,20 @@ def play_tts_file(file_path: str) -> bool:
                 break
             time.sleep(0.15)
             waited += 0.15
-        try:
-            p.stop()
-        except Exception:
-            pass
         return True
     except Exception as e:
         log(f"tts: play error: {e}", tag="TTS", level="ERROR")
         return False
+    finally:
+        if p is not None:
+            try:
+                p.stop()
+            except Exception:
+                pass
+            try:
+                p.release()
+            except Exception:
+                pass
 
 
 def duck_music_on():

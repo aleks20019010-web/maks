@@ -13,38 +13,36 @@
 #   КАЖДЫЙ req_id попадает в _tts_queue, даже command/cancel/error —
 #   со статусом "NO_TTS" (ничего не говорить).
 #
-# FIX 2: отмена через generation_id. cancel_all() НЕ очищает очереди —
-#   только _generation += 1. Старые запросы сами увидят _is_cancelled(gen)
-#   → NO_TTS → пропустятся. next_id идёт последовательно, НИКОГДА не рвётся.
+# FIX 2 (ПРАВИЛЬНЫЙ): отмена через generation_id. cancel_all() НЕ очищает
+#   очереди — только _generation += 1. Старые запросы сами увидят
+#   _is_cancelled(gen) → положат NO_TTS → пропустятся. next_id идёт
+#   последовательно, НИКОГДА не рвётся.
 #
-# FIX 3: cancel_all() закрывает сессию (_session.get().close()).
-#   Иначе _history живёт после «хватит», и следующий вопрос получит
-#   старый контекст. Session.close() вызывает _history.clear().
+#   Раньше: cancel_all() очищал _llm_queue и _tts_queue, и next_id в
+#   _tts_worker «зависал» на пропущенном номере. Следующий ответ ждал
+#   next_id, которого нет → очередь стояла.
 #
-# FIX 4: _llm_worker обёрнут во внешний try/except.
-#   Если _respond_and_say("LLM_THINKING") или _engine.process_llm_answer
-#   бросит — поток НЕ умирает, req_id попадает в _tts_queue со статусом
-#   NO_TTS. Без этого tts_worker зависал на next_id, которого никто не
-#   положит. Очередь жива — Макс жив.
+# FIX 3: cancel_all() очищает историю диалога напрямую.
+#   Раньше: _session.get().close() → _history.get().clear().
+#   Теперь: _session.py удалён (мёртвый код — Session.open/is_active/
+#   should_close_by_text не вызывались). cancel_all() → _history.get().clear()
+#   напрямую. _in_dialog() — читает session_open.flag (как и раньше).
 #
-# FIX (день 28, аудит 1.2): _engine читается через модуль _helpers, а не
-#   через `from brain.skills._helpers import _engine`. Причина: `from X
-#   import Y` делает снимок значения на момент импорта. Если llm_worker
-#   стартует до set_engine — _engine навсегда None. Теперь: _helpers._engine,
-#   всегда актуальное значение.
-#
-# FIX (день 28, аудит 2.6): убран _history_lock. History.add сам
-#   потокобезопасен (History._lock внутри _history.py). Второй лок был
-#   избыточен.
-#
-# ПРОВАЙДЕР: provider: {"sort": "latency"} — AITUNNEL выбирает провайдера
-#   с минимальной задержкой до первого токена.
+# ПРОВАЙДЕР:
+#   provider: {"sort": "latency"} — AITUNNEL выбирает провайдера с минимальной
+#   задержкой до первого токена.
 #
 # FIX: process_command(cmd, source=CommandSource.SYSTEM). CommandSource enum.
 # FIX: _in_dialog() и session_open.flag — через cfg.DATA_DIR.
 # FIX: llm_key.txt — через cfg.CONFIG_DIR.
 # FIX: _whitelist.is_command_allowed(cmd) — LLM-команда проверяется перед
 #      выполнением. Запрещённые (формат, shutdown) → NOT_UNDERSTOOD.
+#
+# FIX (2026-10-27): _llm_worker — внешний try/except вокруг тела.
+#   Раньше: если _respond_and_say("LLM_THINKING") или process_command
+#   бросали, _tts_queue.put((req_id, ...)) не выполнялся → tts_worker
+#   ждал next_id, которого нет → очередь стояла навсегда.
+#   Теперь: try/except вокруг тела, в except — _tts_queue.put((req_id, "NO_TTS")).
 
 import queue
 import threading
@@ -56,7 +54,7 @@ from shared.log import log
 from shared import config as cfg
 from shared.sources import CommandSource
 
-from brain.skills.llm import _prompt, _parser, _history, _session, _whitelist
+from brain.skills.llm import _prompt, _parser, _history, _whitelist
 
 
 # ==================== ГЛОБАЛЬНЫЕ ОЧЕРЕДИ И ФЛАГИ ====================
@@ -70,6 +68,8 @@ _generation_lock = threading.Lock()
 
 _request_counter = 0
 _counter_lock = threading.Lock()
+
+_history_lock = threading.Lock()
 
 _engine_ref = None
 
@@ -85,21 +85,24 @@ def set_engine(engine):
 def cancel_all():
     """Отменить всё: увеличить generation.
 
-    FIX 2: НЕ очищаем очереди. Старые запросы сами увидят _is_cancelled(gen)
-    → NO_TTS → пропустятся. next_id не рвётся.
+    FIX 2 (ПРАВИЛЬНЫЙ): НЕ очищаем очереди. Старые запросы сами увидят
+    _is_cancelled(gen) → NO_TTS → пропустятся. next_id не рвётся.
 
-    FIX 3: закрываем сессию — иначе _history живёт после «хватит»,
-    и следующий вопрос получит старый контекст.
+    FIX 3: очищаем историю диалога напрямую (не через _session).
+    Иначе _history живёт после «хватит», и следующий вопрос получит
+    старый контекст.
     """
     global _generation
     with _generation_lock:
         _generation += 1
         gen = _generation
 
+    # Очистить историю диалога напрямую
     try:
-        _session.get().close()
+        with _history_lock:
+            _history.get().clear()
     except Exception as e:
-        log(f"llm: cancel_all session.close: {e}", tag="BRAIN", level="WARN")
+        log(f"llm: cancel_all history.clear: {e}", tag="BRAIN", level="WARN")
 
     log(f"llm: cancelled all (gen={gen})", tag="BRAIN")
 
@@ -282,8 +285,12 @@ def _llm_worker():
         except queue.Empty:
             continue
 
-        # FIX 4: весь код обработки — под внешним try/except.
+        # FIX (2026-10-27): внешний try/except вокруг тела.
+        # Если _respond_and_say("LLM_THINKING") или process_command бросят —
+        # _tts_queue.put((req_id, ...)) не выполнится, tts_worker ждёт next_id
+        # навсегда. Теперь: except → _tts_queue.put((req_id, "NO_TTS")).
         try:
+            # Отмена до старта
             if _is_cancelled(gen):
                 log(f"llm: req {req_id} cancelled before start (gen={gen})", tag="BRAIN")
                 _tts_queue.put((req_id, "NO_TTS"))
@@ -298,6 +305,7 @@ def _llm_worker():
 
             raw = _call_llm(user_text, detail=detail)
 
+            # Отмена после LLM
             if _is_cancelled(gen):
                 log(f"llm: req {req_id} cancelled after llm (gen={gen})", tag="BRAIN")
                 _tts_queue.put((req_id, "NO_TTS"))
@@ -319,6 +327,7 @@ def _llm_worker():
                 cmd = parsed.get("text", "")
                 log(f"llm: command → {cmd!r}", tag="BRAIN")
 
+                # FIX: whitelist — LLM-команда проверяется перед выполнением
                 if not _whitelist.is_command_allowed(cmd):
                     log(f"llm: command blocked by whitelist: {cmd!r}", tag="BRAIN", level="WARN")
                     _tts_queue.put((req_id, "NOT_UNDERSTOOD"))
@@ -334,10 +343,8 @@ def _llm_worker():
 
             if ptype == "answer":
                 try:
-                    # FIX (аудит 1.2): _helpers._engine, не from ... import _engine.
-                    # Снимок значения не делается — всегда актуальное.
-                    from brain.skills import _helpers
-                    if _helpers._engine is None:
+                    from brain.skills._helpers import _engine
+                    if _engine is None:
                         _tts_queue.put((req_id, None))
                         continue
 
@@ -350,11 +357,11 @@ def _llm_worker():
                         _tts_queue.put((req_id, None))
                         continue
 
-                    response = _helpers._engine.process_llm_answer(text, parsed.get("explicit_detail", False))
+                    response = _engine.process_llm_answer(text, parsed.get("explicit_detail", False))
 
-                    # FIX (аудит 2.6): _history_lock убран, History.add потокобезопасен.
-                    _history.get().add("user", user_text)
-                    _history.get().add("assistant", text)
+                    with _history_lock:
+                        _history.get().add("user", user_text)
+                        _history.get().add("assistant", text)
 
                     try:
                         flag = cfg.DATA_DIR / "session_open.flag"
@@ -374,12 +381,8 @@ def _llm_worker():
             _tts_queue.put((req_id, "NOT_UNDERSTOOD"))
 
         except Exception as e:
-            log(f"llm: worker crash req={req_id}: {type(e).__name__}: {e}",
-                tag="BRAIN", level="ERROR")
-            try:
-                _tts_queue.put((req_id, "NO_TTS"))
-            except Exception:
-                pass
+            log(f"llm: worker crash req={req_id}: {e}", tag="BRAIN", level="ERROR")
+            _tts_queue.put((req_id, "NO_TTS"))
 
 
 def _tts_worker():

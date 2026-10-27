@@ -1,7 +1,6 @@
-﻿markdown
-# Макс — архитектура
+﻿# Макс — архитектура
 
-**Версия:** 2026-10-23 (день 25)
+**Версия:** 2026-10-27 (день 27)
 **Имя:** Макс (русский дворецкий)
 **Wake word:** «макс»
 
@@ -22,75 +21,82 @@
 
 ## 2. Дерево
 D:\Maks
-├── start.bat / stop.bat / status.bat
-├── supervisor.py ✅ 4 воркера, lock, перезапуск
-├── warmup_tts.py ✅ кэш TTS, планировщик 8:00
+├── start.bat / stop.bat
+├── supervisor.py ✅ 4 воркера, lock, перезапуск, /T
+├── warmup_tts.py ✅ кэш TTS, BASE_DIR от file
 │
 ├── brain/ ✅ ядро
 │ ├── main.py ✅ цикл, tick 30с, ритуалы, привычки
 │ ├── router.py ✅ команда → навык
 │ ├── errors.py ✅ обработка ошибок
 │ ├── pending.py ✅ ожидание уточнения
-│ ├── relationship.py ✅ привычки, вес артиста, «Учту»
+│ ├── relationship.py ✅ привычки, вес артиста
 │ ├── reaction.py ✅ очередь appraisal
 │ ├── reminders.py ✅ F1 напоминания (delay/date)
 │ ├── datetime_parser.py ✅ парсинг дат
+│ ├── composer.py ✅ сборка из слотов (opening/core/closing)
 │ ├── appraisal/ ✅ G: 3 скипа → реакция → penalize
 │ │ ├── events.py / history.py / policy.py / service.py
 │ └── skills/
 │ ├── base.py / _helpers.py ✅
 │ ├── smalltalk.py ✅
 │ ├── controls.py ✅
-│ ├── music/ ✅
-│ ├── weather/ ✅
-│ └── system/ ✅
+│ ├── music/ ✅ (skill, classify, _shared — обёртка)
+│ ├── weather/ ✅ (skill, handlers, classify, sources)
+│ ├── system/ ✅ (skill, cpu, ram, disks, max_sender, cleanup)
+│ └── llm/ ✅ (skill, _parser, _prompt, _history, _whitelist)
 │
 ├── workers/ ✅
-│ ├── asr/ ✅ Vosk, hot words 36
-│ ├── tts/ ✅ Yandex, кэш, rate/pitch/emotion
-│ └── music/ ✅ VLC, очередь, prefetch (timeout 10с)
+│ ├── asr/ ✅ Vosk, hot words 42, wake по границам слов
+│ ├── tts/ ✅ Yandex, кэш, rate/pitch/emotion, p.release()
+│ └── music/ ✅ VLC, очередь, prefetch, play_index attempts ≤ 3
 │
 ├── shared/ ✅
-│ ├── config.py ✅ MEMORY_DB = data/memory.db
+│ ├── config.py ✅ BASE_DIR от file, MEMORY_DB = data/memory.db
+│ ├── music_words.py ✅ ОДИН источник: STOP_WORDS, PLAY_TRIGGERS, ...
 │ ├── log.py / protocol.py / ipc.py
 │ ├── metrics.py / yandex.py
 │ ├── audio_cache.py / lock.py / state.py
+│ └── sources.py ✅ CommandSource(str, Enum)
 │
 ├── personality_core/ ✅ ядро личности
-│ ├── engine.py ✅ оркестратор + prosody для обычных фраз
+│ ├── engine.py ✅ оркестратор + prosody + composer
 │ ├── types.py ✅ Event, Context, JarvisResponse
 │ ├── context.py ✅ ContextBuilder
 │ ├── policy.py ✅ PolicyEngine
-│ ├── phrase.py ✅ PhrasePicker (night/drowsy)
-│ ├── response.py ✅ ResponseBuilder (rate/pitch/emotion)
+│ ├── phrase.py ✅ PhrasePicker (night/drowsy/style/slot)
+│ ├── response.py ✅ ResponseBuilder (fallback)
 │ ├── self_state.py ✅ energy/mood/valence/arousal
-│ ├── mind_stream.py ✅ поток сознания (play/skip/finish/cmd/tick)
+│ ├── mind_stream.py ✅ поток сознания
 │ ├── character.py ✅ style/humor/sarcasm/formality/temperature
 │ ├── identity.py ✅ Макс (дворецкий)
 │ ├── prosody.py ✅ rate/pitch/emotion + apply_prosody
-│ ├── style.py ⚠️ заглушка (для LLM, K+)
+│ ├── style.py ✅ night/tired/formal/friendly/normal
 │ └── rules/ ✅ ~9 JSON
 │
 ├── memory/ ✅
 │ ├── engine.py ✅ одна БД
 │ ├── storage.py / events.py / aggregates.py
-│ ├── preferences.py / reader.py / writer.py
+│ └── preferences.py / reader.py / writer.py
 │
 ├── responses/ ✅
 │ ├── wake.json ✅ 59 фраз
 │ ├── smalltalk.json ✅ 80 фраз
 │ ├── errors.json ✅ 83 фразы
-│ ├── music.json ✅ 295 фраз
+│ ├── music.json ✅ 287 фраз
 │ ├── music_extra.json ✅ 37 фраз
-│ ├── weather.json ✅ 154 фразы
+│ ├── weather.json ✅ 131 фраза
 │ ├── radio.json ✅ 12 фраз
 │ ├── system.json ✅ 57 фраз
 │ ├── appraisal.json ✅ 18 фраз
 │ ├── jellyfin.json ✅ 69 фраз
 │ ├── relationship.json ✅ 18 фраз
-│ ├── rituals.json ✅ 15 фраз
+│ ├── rituals.json ✅ 56 фраз
 │ ├── calendar.json ✅ 13 фраз
-│ └── llm.json ✅ 12 фраз
+│ ├── llm.json ✅ 12 фраз
+│ ├── scripts.json ✅ 10 фраз
+│ ├── openings.json ✅ 10×12 ключей
+│ └── composer.json ✅ 135 правил
 │
 ├── config/ ✅
 │ ├── workers.json / identity.json / music_words.json
@@ -99,13 +105,16 @@ D:\Maks
 ├── data/ ✅
 │ ├── memory.db ✅ одна БД
 │ ├── relationship.json
-│ ├── tts_cache/ ✅ 121 974 mp3
+│ ├── tts_cache/ ✅ 23 902 mp3
 │ └── self_state.json ✅
 │
-├── tests/ ⚠️ 21 тест, 13/13 новых
+├── tests/ ✅ 95 passed
 ├── tools/ ✅
 ├── docs/ ✅
-└── _archive/ ✅
+│ ├── architecture.md ✅ (этот файл)
+│ ├── итоги_2026-10-27.md ✅
+│ └── ...
+└── _archive/ ✅ (архив)
 
 text
 
@@ -121,7 +130,7 @@ ASR → brain_inbox → router.process_command()
 → self_state.on_command()
 → mind_stream.on_command()
 → policy.evaluate() → phrase_set
-→ response_builder.build() → JarvisResponse
+→ composer.compose() → JarvisResponse (opening + core + closing)
 → prosody (rate/pitch/emotion) — если у фразы нет из JSON
 → protocol.say(text, rate, pitch, emotion)
 → tts_inbox → TTS worker → Yandex → VLC
@@ -131,6 +140,8 @@ text
 ### 3.2. Событие
 music → brain_inbox → _handle_event()
 → music_started: state.set_current + relationship.record_play_habit
+
+on_music_started (PLAY_ARTIST_STARTED / PLAY_TRACK_STARTED)
 → now_playing: state.set_current + respond_and_say("NOW_PLAYING")
 → track_finished / music_stopped: state.clear_current
 → wake: _maybe_ritual + respond_and_say("WAKE")
@@ -163,8 +174,8 @@ reminders worker (30 сек) → data/reminders.json
 text
 
 ### 3.6. Ритуалы (F1)
-wake → maybe_ritual()
-→ bucket = morning/day/evening/night
+wake → _maybe_ritual()
+→ bucket = morning/day/evening/night (см. time_bucket, 5 <= h < 12 — утро)
 → if not was_asked_today(f"ritual{bucket}")
 → respond_and_say(RITUAL_MORNING/EVENING/NIGHT)
 → mark_asked_today
@@ -188,29 +199,38 @@ text
 | Как работает музыка? | `workers/music/` |
 | Как работает TTS? | `workers/tts/` |
 | Как работает ASR? | `workers/asr/` |
+| Как работает LLM? | `brain/skills/llm/` |
 | Как общаются воркеры? | `shared/ipc.py` + `shared/protocol.py` |
+| Где STOP_WORDS? | `shared/music_words.py` (один источник) |
+| Где `_time_bucket`? | `brain/main.py` + `tests/test_time_bucket.py` (границы) |
 
 ---
 
-## 5. Ключевые цифры (2026-10-23)
+## 5. Ключевые цифры (2026-10-27)
 
 | Метрика | Значение |
 |---|---|
-| День проекта | 25 |
+| День проекта | 27 |
 | Воркеров | 4/4 |
-| HOT WORDS | 36 |
-| Скилов | 5 (system, controls, smalltalk, weather, music) |
-| TTS-кэш | 121 974 фраз |
+| Тесты | **95 passed** (было 89) |
+| Время тестов | **1.91s** |
+| HOT WORDS | 42 |
+| Скилов | 6 (system, controls, smalltalk, weather, music, cleanup) |
+| TTS-кэш | 23 902 mp3 |
+| Composer правил | 135 |
+| Комбинаций фраз | ~21 600 |
 | Appraisal: порог | 3 SKIP |
 | Appraisal: кулдаун | 600 сек |
-| Привычка | `habit:day` → `{"Ария": 6}` |
-| Вес КИНО | 216 → 211 |
-| Напоминания | `delay` / `date`, 2 слота |
-| Тесты | 13/13 |
-| Wake word | «макс» |
+| Напоминания | delay / date, 2 слота |
+| Wake word | «макс» (по границам слов, не «мак») |
 | AEC | выключен |
-| Prefetch timeout | 10 сек (playback) / 30 сек (download) |
+| Prefetch timeout | 10 сек |
+| play_index attempts | ≤ 3 |
 | Prosody | rate/pitch/emotion по mood/energy |
+| Style | night/tired/formal/friendly/normal |
+| `shared/music_words.py` | 1 источник, 153/156 |
+| `p.release()` | `workers/tts/player.py::play_tts_file` |
+| `_session.py` | удалён (мёртвый код) |
 
 ---
 
@@ -218,42 +238,65 @@ text
 
 - **G (appraisal)** — 3 скипа → реакция → penalize. Кулдаун 600 сек. ✅
 - **System** — CPU, RAM, диски, MAX, ACK → 3 STATUS. ✅
-- **I (relationship)** — I.2 (вес вниз), I.3 (привычки), I.5 («Учту»), I.6, I.7 (тесты). I.4 убрано. ✅
+- **I (relationship)** — I.2 (вес вниз), I.3 (привычки), I.5 («Учту»), I.6, I.7 (тесты). ✅
 - **F1 (ритуалы)** — утро/вечер/ночь, первый wake. ✅
 - **F1 (напоминания)** — delay/date, 2 слота. ✅
-- **TTS-кэш** — 121 974 фраз. ✅
+- **TTS-кэш** — 23 902 mp3. ✅
 - **Переименование** Джарвис → Макс. ✅
 - **Prefetch-фикс** — timeout 10 сек, не блокирует. ✅
 - **Prosody для обычных фраз** — rate/pitch/emotion по mood/energy. ✅
+- **Style** — night/tired/formal/friendly/normal. ✅
+- **Composer** — сборка из слотов (opening + core + closing). ✅
+- **Openings** — 10 вариантов на ключ. ✅
+- **LLM** — AITUNNEL, 2 потока (llm_worker + tts_worker), generation_id. ✅
+- **`shared/music_words.py`** — один источник правды. ✅
+- **`play_index` attempts** — ≤ 3. ✅
+- **`p.release()`** — TTS VLC-плееры не копятся. ✅
+- **`_session.py`** — удалён (мёртвый код). ✅
 
 ---
 
 ## 7. Что в планах
 
-- **M (Jellyfin, scripts)** — 3–4 часа.
+- **Discovery** (день 29–30) — `tracks_since_discovery`, `discovery_threshold` (10–20),
+  `get_discovery_track` (`play_count = 0 AND last_played IS NULL AND blacklisted = 0`),
+  `DISCOVERY_NEW` / `DISCOVERY_RETRY` / `DISCOVERY_REJECTED` (фразы есть, кода нет),
+  `test_discovery.py` — 7 тестов.
 - **O (Calendar)** — 2–3 часа.
-- **LLM (K+)** — 4–6 часов. Дизайн — в `docs/llm_design.md`.
-- **`mood`-фильтр в `phrase.py`** — 30 минут (опционально).
-- **`style.py` / `prosody.py` полные** — для LLM (K+).
-- **`composer.py`** — после LLM.
-- **`memory/habits.py`** — потом.
-- **`mind_stream` расширить** — потом.
+- **`test_music_classify.py`** — 3 теста (5 минут).
 
 ---
 
-## 8. Что не делать
+## 8. Осознанные компромиссы (не баги)
+
+- **SystemSkill: `time.sleep(2)` + `cpu_percent(interval=3)`** — brain блокируется
+  на 5–13 сек на «статус». Причина: ACK должен прозвучать до сбора данных,
+  а `cpu_percent(interval=3)` даёт реальный процент (без interval — 0% на простое).
+  Если станет мешать — `interval=1` + `sleep(1)` (2 сек вместо 5).
+- **`play_index`: `PREFETCH_WAIT_SEC=10` + `download_track=30`** — music worker
+  блокируется до 40 сек на холодную. Причина: не пропускать первый трек
+  («включи Арию» → играет Ария, а не второй трек). В обычной работе prefetch
+  успевает за 1–3 сек, блокировки нет. `attempts ≤ 3` ограничивает **сверху**:
+  3 битых подряд → сдаться (не 6 × 30 сек = 3 минуты).
+- **`self_state.save()` на каждую команду** — I/O на SSD незаметно.
+  На HDD — можно `save()` раз в 10 команд.
+- **`aliases.json` может накопить мусор** («л лампу» → «Лампочка» — ASR услышал,
+  Яндекс вернул). Это **не** баг `remember_alias` — он не может отличить
+  «пользователь так сказал» от «ASR ошибся». Один раз почистить — ок,
+  бороться в коде — перебор.
+
+---
+
+## 9. Что не делать
 
 - Не добавлять presence, sound_detected, реакции на long_silence.
 - Не добавлять initiative.py.
-- Не делать temperature «ручкой живости».
 - Не переписывать PhrasePicker.
-- Не добавлять LLM-tools сейчас (только место).
-- Не трогать system, G, I, F1, reminders, пока стабильно не проработают 1–2 дня.
-- Не трогать `responses/music.json` (раздут, appraisal — отдельно).
+- Не трогать `responses/music.json`.
 - Не включать AEC на ноуте — ждать колонок/компа.
 - Не делать volume-duck — только pause.
-- Не возвращать `reflection` / `explanation` — appraisal закрывает G.
-- Не возвращать `promises.py` — reminders покрывает.
+- Не возвращать reflection / explanation — appraisal закрывает G.
+- Не возвращать promises.py — reminders покрывает.
 
 ---
 

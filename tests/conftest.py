@@ -1,20 +1,25 @@
 # tests/conftest.py
 # Фикстуры для тестов: временная IPC-шина, временная БД, чистый memory.
+#
+# FIX: BASE_DIR = Path(__file__).parent.parent, не хардкод D:\Maks.
+# Тесты работают, где бы ни лежал проект.
 
 import os
 import sys
 import shutil
+from pathlib import Path
+
 import pytest
 
-# Патч sys.path, чтобы импортировать из D:\Maks
-BASE_DIR = r'D:\Maks'
-if BASE_DIR not in sys.path:
-    sys.path.insert(0, BASE_DIR)
+# Корень проекта — родитель папки tests/
+BASE_DIR = Path(__file__).resolve().parent.parent
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
 
 
 @pytest.fixture
 def tmp_data_dir(tmp_path):
-    r"""Временная папка для data/ (вместо D:\Maks\data)."""
+    r"""Временная папка для data/ (вместо <BASE_DIR>\data)."""
     data = tmp_path / "data"
     data.mkdir()
     yield str(data)
