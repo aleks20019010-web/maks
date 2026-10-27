@@ -17,6 +17,11 @@
 #
 # check_and_remind() — фоновый поток: раз в 30 сек проверяет слоты
 # и говорит вслух. Не зависит от wake / команды.
+#
+# FIX (день 28, 5.15): сюда переехали REMINDER_TRIGGERS, fmt_due,
+# strip_reminder_trigger из brain/router.py. Причина: они про напоминания,
+# не про маршрутизацию. router.py вызывает reminders.fmt_due(...) и
+# reminders.strip_reminder_trigger(...). Один источник правды.
 
 import json
 import os
@@ -37,6 +42,36 @@ _lock = threading.Lock()
 
 CHECK_INTERVAL_SEC = 30
 MAX_SLOT_AGE_MINUTES = 30  # если событие прошло > 30 мин — удалить, не говорить
+
+
+# ── Триггеры (используются и в router.py: _is_explicit_reminder,
+#    _strip_reminder_trigger). Публичное имя — без подчёркивания. ──
+REMINDER_TRIGGERS = ("напомни", "напомнить", "запомни", "запомнить")
+
+
+# ────────────────────────────────────────────────────────────
+# ФОРМАТИРОВАНИЕ И ПАРСИНГ (перенесено из router.py, 5.15)
+# ────────────────────────────────────────────────────────────
+_MONTHS_RU = {
+    1: "января", 2: "февраля", 3: "марта", 4: "апреля",
+    5: "мая", 6: "июня", 7: "июля", 8: "августа",
+    9: "сентября", 10: "октября", 11: "ноября", 12: "декабря",
+}
+
+
+def fmt_due(due: datetime) -> str:
+    """«29 октября в 10:00». Для фраз REMINDER_WHEN, REMINDER_ADDED_AT."""
+    month_ru = _MONTHS_RU.get(due.month, "")
+    return f"{due.day} {month_ru} в {due.strftime('%H:%M')}"
+
+
+def strip_reminder_trigger(cmd_lower: str) -> str | None:
+    """Убрать триггер «напомни/запомни» из начала. None — если триггера нет."""
+    for trigger in REMINDER_TRIGGERS:
+        prefix = trigger + " "
+        if cmd_lower.startswith(prefix):
+            return cmd_lower[len(prefix):].strip()
+    return None
 
 
 def _load() -> list:

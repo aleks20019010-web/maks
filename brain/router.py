@@ -10,7 +10,12 @@
 #   Router обрабатывает только smalltalk. Всё остальное — LLM.
 #
 # FIX: CommandSource enum вместо magic strings "voice"/"voice_dialog".
-# source: CommandSource.VOICE_DIALOG вместо source == "voice_dialog".
+#
+# FIX (день 28, 5.15): _fmt_due/_strip_reminder_trigger/_REMINDER_TRIGGERS
+# переехали в brain/reminders.py. Причина: они про напоминания, не про
+# маршрутизацию. Здесь остались только _REMINDER_LIST_PHRASES и
+# _REMINDER_DONE_PHRASES — это маршрутизация («пользователь спрашивает
+# список» vs «пользователь говорит „готово"»).
 
 import re
 import threading
@@ -37,8 +42,6 @@ MOOD_TO_GENRE = {
     "upbeat": ("бодрое", "genre:pop"),
     "rock": ("рок", "genre:rusrock"),
 }
-
-_REMINDER_TRIGGERS = ("напомни", "напомнить", "запомни", "запомнить")
 
 _REMINDER_LIST_PHRASES = (
     "ничего не забыл", "что я забыл", "что забыл",
@@ -185,7 +188,8 @@ def _try_llm_fallback(command: str) -> bool:
 
 # ── Явное напоминание? ───────────────────────────────────────
 def _is_explicit_reminder(cmd_lower: str) -> bool:
-    if any(cmd_lower.startswith(t + " ") or cmd_lower == t for t in _REMINDER_TRIGGERS):
+    from brain import reminders
+    if any(cmd_lower.startswith(t + " ") or cmd_lower == t for t in reminders.REMINDER_TRIGGERS):
         return True
     if any(phrase in cmd_lower for phrase in _REMINDER_LIST_PHRASES):
         return True
@@ -195,22 +199,6 @@ def _is_explicit_reminder(cmd_lower: str) -> bool:
 
 
 # ── F1: напоминания ──────────────────────────────────────────
-def _fmt_due(due: datetime) -> str:
-    month_ru = {1: "января", 2: "февраля", 3: "марта", 4: "апреля",
-                5: "мая", 6: "июня", 7: "июля", 8: "августа",
-                9: "сентября", 10: "октября", 11: "ноября",
-                12: "декабря"}.get(due.month, "")
-    return f"{due.day} {month_ru} в {due.strftime('%H:%M')}"
-
-
-def _strip_reminder_trigger(cmd_lower: str):
-    for trigger in _REMINDER_TRIGGERS:
-        prefix = trigger + " "
-        if cmd_lower.startswith(prefix):
-            return cmd_lower[len(prefix):].strip()
-    return None
-
-
 def _handle_reminders(cmd_lower: str) -> bool:
     from brain import reminders
 
@@ -232,7 +220,7 @@ def _handle_reminders(cmd_lower: str) -> bool:
         lines = []
         for dt, text in items:
             if dt:
-                lines.append(f"{text} — {_fmt_due(dt)}")
+                lines.append(f"{text} — {reminders.fmt_due(dt)}")
             else:
                 lines.append(text)
 
@@ -250,7 +238,7 @@ def _handle_reminders(cmd_lower: str) -> bool:
             p = upcoming[0]
             try:
                 dt = datetime.fromisoformat(p["due_at"])
-                _respond_and_say("REMINDER_WHEN", text=p["text"], when=_fmt_due(dt))
+                _respond_and_say("REMINDER_WHEN", text=p["text"], when=reminders.fmt_due(dt))
             except Exception:
                 _respond_and_say("NOT_UNDERSTOOD_SHORT")
         else:
@@ -265,14 +253,14 @@ def _handle_reminders(cmd_lower: str) -> bool:
             p = upcoming[0]
             try:
                 dt = datetime.fromisoformat(p["due_at"])
-                _respond_and_say("REMINDER_WHEN", text=p["text"], when=_fmt_due(dt))
+                _respond_and_say("REMINDER_WHEN", text=p["text"], when=reminders.fmt_due(dt))
             except Exception:
                 _respond_and_say("NOT_UNDERSTOOD_SHORT")
         else:
             _respond_and_say("REMINDER_NOT_FOUND", text=text)
         return True
 
-    rest = _strip_reminder_trigger(cmd_lower)
+    rest = reminders.strip_reminder_trigger(cmd_lower)
     if rest is not None:
         if not rest:
             _respond_and_say("NOT_UNDERSTOOD_SHORT")
@@ -291,7 +279,7 @@ def _handle_reminders(cmd_lower: str) -> bool:
             due, text = parsed
             r = reminders.add_at(text, due)
             if r:
-                _respond_and_say("REMINDER_ADDED_AT", text=text, when=_fmt_due(due))
+                _respond_and_say("REMINDER_ADDED_AT", text=text, when=reminders.fmt_due(due))
                 return True
 
         r = reminders.add(rest, 5)
