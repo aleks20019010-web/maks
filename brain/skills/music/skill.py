@@ -17,9 +17,12 @@
 #
 # FIX: play_artist / play_track теперь говорят «Ищу» (SEARCHING) до music,
 # а «Машина времени. Включаю» (STARTED) — на music_started, когда music уже
-# нашёл каноничное имя. Раньше brain говорил «машину времени сегодня» —
-# сырой запрос в именительном падеже, звучало как «С лампу проблем не будет».
-# Pending "music_started" хранит, что ждём (artist/track) и какой phrase_set.
+# нашёл каноничное имя.
+#
+# FIX (день 28): _try_ask больше не пишет свои hour < 9 / hour >= 23.
+# Раньше: hour < 9 → MUSIC_ASK_MORNING, и в 00:11 Макс говорил «доброе утро».
+# Теперь: time_bucket() из shared/time_bucket.py — один источник правды.
+# 00:11 → night → MUSIC_ASK_NIGHT («Поздно. Может, что-то тихое?»).
 
 import time
 
@@ -32,6 +35,7 @@ from brain import pending
 from shared import ipc
 from shared import protocol
 from shared.log import log
+from shared.time_bucket import time_bucket
 
 
 PENDING_KEY = "music_ask"
@@ -128,13 +132,14 @@ class MusicSkill(Skill):
                       phrase_kwargs={"artist": recent["name"]})
             return True
 
-        # 3. Время суток
-        hour = time.localtime().tm_hour
-        if hour < 9 and not relationship.was_asked_today("morning"):
+        # 3. Время суток — через shared/time_bucket, не свои hour.
+        # FIX: раньше hour < 9 ловило полночь → «доброе утро» в 00:11.
+        bucket = time_bucket()
+        if bucket == "morning" and not relationship.was_asked_today("morning"):
             self._ask("MUSIC_ASK_MORNING", kind="time",
                       data={"time_of_day": "morning"})
             return True
-        if hour >= 23 and not relationship.was_asked_today("night"):
+        if bucket == "night" and not relationship.was_asked_today("night"):
             self._ask("MUSIC_ASK_NIGHT", kind="time",
                       data={"time_of_day": "night"})
             return True

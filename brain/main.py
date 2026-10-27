@@ -6,7 +6,7 @@ brain/main.py — ядро Макса.
 
 Что делает:
   - Загружает PersonalityEngine.
-  - Подключает навыки (smalltalk, controls, music, weather, system, jellyfin, cleanup).
+  - Подключает навыки (smalltalk, controls, music, weather, system, cleanup).
   - Запускает appraisal-воркер (reaction).
   - Запускает reminders-воркер (фоновые напоминания).
   - Тикает self_state и mind_stream раз в 30 сек.
@@ -25,6 +25,10 @@ FIX: source прокидывается в router.process_command(source=CommandS
 FIX: CommandSource enum вместо magic strings.
 FIX: music_started → on_music_started (каноничное имя артиста в фразе
      «Машина времени. Включаю», а не сырой запрос «машину времени»).
+
+FIX (день 28): _time_bucket и _ritual_for_bucket переехали в shared/time_bucket.py.
+     Причина: music/skill.py дублировал логику с hour < 9, и в 00:11 Макс
+     говорил «доброе утро». Один источник правды — теперь здесь только импорт.
 """
 
 import sys
@@ -37,6 +41,7 @@ from shared import metrics
 from shared.log import log
 from shared import config as cfg
 from shared.sources import CommandSource
+from shared.time_bucket import time_bucket, ritual_for_bucket
 
 
 TICK_INTERVAL_SEC = 30
@@ -45,39 +50,17 @@ TICK_LOG_EVERY = 20  # логировать раз в 20 тиков (10 мину
 _tick_counter = 0
 
 
-def _time_bucket() -> str:
-    """morning (5-12) / day (12-18) / evening (18-23) / night (23-5)."""
-    h = datetime.now().hour
-    if 5 <= h < 12:
-        return "morning"
-    if 12 <= h < 18:
-        return "day"
-    if 18 <= h < 23:
-        return "evening"
-    return "night"
-
-
-def _ritual_for_bucket(bucket: str) -> str | None:
-    if bucket == "morning":
-        return "RITUAL_MORNING"
-    if bucket == "evening":
-        return "RITUAL_EVENING"
-    if bucket == "night":
-        return "RITUAL_NIGHT"
-    return None
-
-
 def _maybe_ritual():
     """F1: первый wake за день → ритуал (утро/вечер/ночь). Один раз."""
     try:
         from brain import relationship
-        bucket = _time_bucket()
+        bucket = time_bucket()
         key = f"ritual_{bucket}"
 
         if relationship.was_asked_today(key):
             return
 
-        phrase_set = _ritual_for_bucket(bucket)
+        phrase_set = ritual_for_bucket(bucket)
         if not phrase_set:
             return
 
@@ -230,7 +213,7 @@ def _handle_event(msg: protocol.Message):
             if artist:
                 try:
                     from brain import relationship
-                    bucket = _time_bucket()
+                    bucket = time_bucket()
                     relationship.record_play_habit(bucket, artist)
                     log(f"brain: habit {bucket} → {artist}", tag="BRAIN")
                 except Exception as e:
