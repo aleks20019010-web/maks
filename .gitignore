@@ -52,3 +52,4 @@ merge_code.py
 # ===== OS =====
 Thumbs.db
 .DS_Store
+config/aliases.json
