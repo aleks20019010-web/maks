@@ -7,6 +7,11 @@ Wake — в workers/asr/.
 Анти-повтор — в brain/router.py.
 
 Яндекс-клиент — здесь (client, TOKEN). Инициализируется в workers/music/main.py.
+
+FIX (день 28, 5.16): удалены мёртвые:
+  - source_cycle_pos — объявлялся, но нигде не читался.
+  - _audio_cache, _audio_cache_lock — аудио-кэш живёт в shared/audio_cache.py.
+  Не закомментированы, а удалены: мёртвый код не должен притворяться живым.
 """
 
 import threading
@@ -73,7 +78,6 @@ artist_tracks_cache = {}
 artist_tracks_exhausted = {}
 
 # ── Каскад источников (mixed) ─────────────────────────────────
-source_cycle_pos = 0
 local_played_count = 0
 LOCAL_MAX_STREAK = 4
 LOCAL_STREAK_JITTER = 1
@@ -95,10 +99,6 @@ last_next_time = 0.0
 
 # ── Рефреш ────────────────────────────────────────────────────
 refill_lock = threading.Lock()
-
-# ── Кэш аудио-файлов ──────────────────────────────────────────
-_audio_cache = None
-_audio_cache_lock = threading.Lock()
 
 # ── Кэш алиасов ───────────────────────────────────────────────
 _aliases_cache = None
