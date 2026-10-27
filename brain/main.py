@@ -19,16 +19,12 @@ brain/main.py — ядро Макса.
   - F1: при первом wake за день — ритуал (утро/вечер/ночь).
   - F1: напоминания — фоновый воркер (не зависит от wake/команды).
 
-Яндекс.Музыка — НЕ здесь. Она в workers/music/main.py.
-
-FIX: source прокидывается в router.process_command(source=CommandSource).
-FIX: CommandSource enum вместо magic strings.
-FIX: music_started → on_music_started (каноничное имя артиста в фразе
-     «Машина времени. Включаю», а не сырой запрос «машину времени»).
+FIX (день 28, аудит 1.1): при result == "exit" пишем data/brain_exit.flag
+  с timestamp. Supervisor видит фреш-флаг (<60 сек) → не перезапускает brain.
+  Раньше sys.exit(0) → supervisor видел «штатно» → auto_restart=True →
+  перезапускал brain. Команда «выход» не останавливала Макса.
 
 FIX (день 28): _time_bucket и _ritual_for_bucket переехали в shared/time_bucket.py.
-     Причина: music/skill.py дублировал логику с hour < 9, и в 00:11 Макс
-     говорил «доброе утро». Один источник правды — теперь здесь только импорт.
 """
 
 import sys
@@ -45,13 +41,25 @@ from shared.time_bucket import time_bucket, ritual_for_bucket
 
 
 TICK_INTERVAL_SEC = 30
-TICK_LOG_EVERY = 20  # логировать раз в 20 тиков (10 минут)
+TICK_LOG_EVERY = 20
+
+EXIT_FLAG = cfg.DATA_DIR / "brain_exit.flag"
+EXIT_FLAG_TTL_SEC = 60.0
 
 _tick_counter = 0
 
 
+def _write_exit_flag():
+    """Аудит 1.1: пометить, что brain вышел штатно. Supervisor не перезапустит."""
+    try:
+        EXIT_FLAG.parent.mkdir(parents=True, exist_ok=True)
+        EXIT_FLAG.write_text(str(time.time()), encoding="utf-8")
+        log(f"brain: exit-флаг записан ({EXIT_FLAG})", tag="BRAIN")
+    except Exception as e:
+        log(f"brain: exit-флаг: {e}", tag="BRAIN", level="WARN")
+
+
 def _maybe_ritual():
-    """F1: первый wake за день → ритуал (утро/вечер/ночь). Один раз."""
     try:
         from brain import relationship
         bucket = time_bucket()
@@ -73,10 +81,6 @@ def _maybe_ritual():
 
 
 def _tick():
-    """Тик self_state и mind_stream. Раз в 30 сек.
-
-    В лог пишем раз в TICK_LOG_EVERY тиков (10 минут).
-    """
     global _tick_counter
     try:
         from personality_core import self_state as _self_state
@@ -121,14 +125,12 @@ def _init_appraisal():
 
 
 def _init_reminders():
-    """F1: фоновый воркер напоминаний."""
     from brain import reminders
     reminders.start_worker()
     log("brain: reminders-воркер запущен", tag="BRAIN")
 
 
 def _init_self_state():
-    """Загрузить self_state из data/self_state.json."""
     try:
         from personality_core import self_state as _self_state
         st = _self_state.get()
@@ -138,7 +140,6 @@ def _init_self_state():
 
 
 def _parse_source(raw) -> CommandSource:
-    """Привести source к CommandSource. Строка → enum, неизвестное → UNKNOWN."""
     if isinstance(raw, CommandSource):
         return raw
     try:
@@ -160,6 +161,7 @@ def _handle_command(msg: protocol.Message):
         result = process_command(text, source=source)
         if result == "exit":
             log("brain: команда exit — остановка", tag="BRAIN")
+            _write_exit_flag()
             sys.exit(0)
     except SystemExit:
         raise
@@ -219,8 +221,6 @@ def _handle_event(msg: protocol.Message):
                 except Exception as e:
                     log(f"brain: record_play_habit: {e}", tag="BRAIN", level="WARN")
 
-            # Говорим «Машина времени. Включаю» — если ждали play_artist/play_track.
-            # Если pending нет (music_started после next) — молчим.
             try:
                 from brain.skills.music.skill import on_music_started
                 on_music_started(artist, title)

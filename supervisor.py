@@ -10,6 +10,11 @@ supervisor.py — наблюдатель за воркерами Макса.
   6. RAM-лимиты (страховка).
   7. Мягкая остановка по Ctrl+C.
 
+FIX (день 28, аудит 1.1): для brain проверяется exit-флаг
+  (data/brain_exit.flag). Если фреш-флаг (<60 сек) — brain вышел
+  штатно по команде «выход», supervisor НЕ перезапускает.
+  Раньше sys.exit(0) → supervisor видел «штатно» → перезапускал.
+
 Запуск:
     python supervisor.py
 """
@@ -26,12 +31,13 @@ import psutil
 
 BASE_DIR = Path(__file__).parent.resolve()
 CONFIG_FILE = BASE_DIR / "config" / "workers.json"
+EXIT_FLAG = BASE_DIR / "data" / "brain_exit.flag"
+EXIT_FLAG_TTL_SEC = 60.0
 
 _workers = []
 _stopping = False
 
 
-# ── Логирование ────────────────────────────────────────────────
 def log(msg: str, level: str = "INFO"):
     from shared.log import log as _log
     _log(msg, tag="SUPERVISOR", level=level)
@@ -44,7 +50,6 @@ class Worker:
 
         cmd = cfg["cmd"]
         if isinstance(cmd, str):
-            # Обратная совместимость: строка → split
             cmd = cmd.split()
         self.cmd: list[str] = cmd
 
@@ -61,7 +66,7 @@ class Worker:
         log(f"[{self.name}] старт: {' '.join(self.cmd)}")
         self.process = subprocess.Popen(
             self.cmd,
-            shell=False,           # ВАЖНО: poll() следит за python, не за cmd.exe
+            shell=False,
             cwd=self.cwd,
         )
         self.started_at = time.time()
@@ -73,7 +78,6 @@ class Worker:
         return self.process.poll() is None
 
     def _kill_tree(self, pid: int):
-        """Убить процесс и всех его детей (на Windows terminate не убивает внуков)."""
         try:
             parent = psutil.Process(pid)
             children = parent.children(recursive=True)
@@ -103,10 +107,8 @@ class Worker:
             log(f"[{self.name}] перезапуск ({reason})")
             self.stop()
         elif self.process is not None:
-            # Процесс мёртв, но мог оставить детей
             self._kill_tree(self.process.pid)
 
-        # Дождаться, что старый точно умер
         deadline = time.time() + 5.0
         while time.time() < deadline:
             if self.process is None or self.process.poll() is not None:
@@ -131,7 +133,6 @@ class Worker:
                 except Exception:
                     pass
         else:
-            # Уже мёртв — но дети могли остаться
             self._kill_tree(self.process.pid)
         self.process = None
 
@@ -140,7 +141,6 @@ class Worker:
             return 0.0
         try:
             p = psutil.Process(self.process.pid)
-            # Сумма по дереву
             total = p.memory_info().rss
             for child in p.children(recursive=True):
                 try:
@@ -151,6 +151,38 @@ class Worker:
         except Exception:
             return 0.0
 
+    def _check_exit_flag(self) -> bool:
+        """Аудит 1.1: brain вышел штатно? Проверить фреш-флаг, удалить."""
+        if self.name != "brain":
+            return False
+        if not EXIT_FLAG.exists():
+            return False
+        try:
+            ts = float(EXIT_FLAG.read_text(encoding="utf-8").strip())
+            age = time.time() - ts
+            if age > EXIT_FLAG_TTL_SEC:
+                log(f"[brain] exit-флаг устарел ({age:.0f}s) — игнор, удаляю",
+                    level="WARN")
+                try:
+                    EXIT_FLAG.unlink()
+                except Exception:
+                    pass
+                return False
+            log(f"[brain] exit-флаг свежий ({age:.0f}s) — не перезапускаю",
+                level="INFO")
+            try:
+                EXIT_FLAG.unlink()
+            except Exception:
+                pass
+            return True
+        except Exception as e:
+            log(f"[brain] exit-флаг битый: {e}", level="WARN")
+            try:
+                EXIT_FLAG.unlink()
+            except Exception:
+                pass
+            return False
+
     def check(self, crash_window: float, crash_max: int, restart_delay: float) -> bool:
         global _stopping
 
@@ -158,6 +190,10 @@ class Worker:
             return True
 
         if _stopping:
+            return False
+
+        # Аудит 1.1: brain вышел штатно по «выход» — не перезапускаем
+        if self._check_exit_flag():
             return False
 
         if not self.auto_restart:
@@ -194,7 +230,6 @@ def load_config() -> dict:
 def main():
     global _workers, _stopping
 
-    # Lock — один supervisor
     from shared import lock
     if not lock.acquire():
         holder = lock.get_holder()
