@@ -17,10 +17,14 @@
 #
 # Prefetch timeout: 10 сек. Если prefetch не успел — пропускаем трек,
 # играем следующий готовый. Не блокируем play_lock на минуты.
-# download_track в play_index — крайний случай, с таймаутом 30 сек (в download.py).
 #
-# FIX: после stop (playlist пуст, playlist_index = 0) play_next после refill_one
-# играет индекс 0, а не playlist_index + 1 (иначе «Очередь закончилась»).
+# FIX (день 28, баг из лога): после player.play() ждём State.Playing
+# (таймаут 2 сек, шаг 0.1) ПЕРЕД mark_ready() и _release_duck_safe().
+# Раньше: play() → сразу mark_ready() → _release_duck_safe(). VLC ещё
+# в State.Opening, duck() не ставил паузу, TTS говорил поверх музыки.
+# Лог: [DUCK] not playing (state=State.Opening), пауза НЕ поставлена.
+# Теперь: ждём Playing, потом mark_ready() + release. Если не дождались
+# за 2 сек — лог, но mark_ready() всё равно (иначе плеер «мёртвый»).
 
 import os
 import time
@@ -43,6 +47,8 @@ from workers.music.sources import get_next_source_track
 
 
 PREFETCH_WAIT_SEC = 10.0   # сколько ждём prefetch перед тем, как пропустить трек
+PLAYING_WAIT_SEC = 2.0     # сколько ждём State.Playing после player.play()
+PLAYING_WAIT_STEP = 0.1
 
 
 def _mind():
@@ -72,6 +78,28 @@ def _release_duck_safe():
         print("   [DUCK] TTS говорит — пауза сохраняется (release_duck пропущен)")
         return
     music.release_duck()
+
+
+def _wait_for_playing(player, timeout: float = PLAYING_WAIT_SEC) -> bool:
+    """Ждать, пока VLC перейдёт в State.Playing. True — дождались.
+
+    FIX (день 28): раньше mark_ready() и release_duck() вызывались сразу
+    после player.play(). VLC в State.Opening — duck() не ставил паузу,
+    TTS говорил поверх музыки. Теперь ждём Playing.
+    """
+    waited = 0.0
+    while waited < timeout:
+        try:
+            st = player.get_state()
+        except Exception:
+            return False
+        if st == vlc.State.Playing:
+            return True
+        if st in (vlc.State.Ended, vlc.State.Stopped, vlc.State.Error):
+            return False
+        time.sleep(PLAYING_WAIT_STEP)
+        waited += PLAYING_WAIT_STEP
+    return False
 
 
 def refill_one():
@@ -167,13 +195,10 @@ def play_index(idx, announce=False):
                             time.sleep(0.5)
                             waited += 0.5
                         if not file_path:
-                            # Prefetch не успел — не блокируемся, пропускаем трек.
-                            # Если prefetch докачает позже — трек сыграет в другой раз.
                             print(f"  ⚠ prefetch timeout {PREFETCH_WAIT_SEC:.0f}с — пропускаю «{title}»")
                             idx += 1
                             continue
                     if not file_path:
-                        # Prefetch не запускался — качаем синхронно (с таймаутом в download.py).
                         print(f"  Качаю сейчас: {title}")
                         try:
                             file_path = download_track(track)
@@ -191,7 +216,6 @@ def play_index(idx, announce=False):
                     source=state.playlist_mode or 'unknown',
                 )
 
-            # mind_stream: трек начал играть
             try:
                 ms = _mind()
                 if ms is not None:
@@ -222,6 +246,13 @@ def play_index(idx, announce=False):
                 print(f"  ✗ player.play() упал: {e}")
                 return False
 
+            # FIX (день 28): ждём State.Playing ПЕРЕД mark_ready + release_duck.
+            # Иначе duck() видит State.Opening и не ставит паузу — TTS поверх музыки.
+            if _wait_for_playing(player, timeout=PLAYING_WAIT_SEC):
+                pass
+            else:
+                print(f"   ⚠ play_index: State.Playing не дождались за {PLAYING_WAIT_SEC:.0f}с — mark_ready всё равно")
+
             music.mark_ready()
             _release_duck_safe()
 
@@ -231,7 +262,6 @@ def play_index(idx, announce=False):
             state.last_play_start_time = time.time()
             print(f"▶ [{idx+1}/{plen}] {title}")
 
-            # brain: трек реально начал играть → state.set_current
             try:
                 ipc.put(protocol.BRAIN_INBOX,
                         protocol.event_music_started(artist=_artist_for_mind,
@@ -306,8 +336,6 @@ def play_next(from_finish=False):
             print(f"   ⚠ play_next: play_index({next_idx}) вернул False")
         return ok
     if refill_one():
-        # FIX: после stop playlist_index = 0, refill добавил трек с индексом 0.
-        # Играем его, а не +1 (иначе «Очередь закончилась»).
         with state.playlist_lock:
             plen = len(state.playlist)
         if state.playlist_index < plen:
@@ -354,7 +382,6 @@ def monitor_player():
     while True:
         time.sleep(1)
 
-        # Если идёт переключение — не трогаем
         if state.switching:
             last_state = None
             continue
@@ -383,7 +410,6 @@ def monitor_player():
                         duration = int(time.time() - state.last_play_start_time)
                     memory.remember_finish(track_id=cur_id, duration=duration)
 
-                    # артист/трек для mind_stream и brain
                     _fin_artist = ""
                     _fin_title = ""
                     try:
@@ -403,7 +429,6 @@ def monitor_player():
                     except Exception as e:
                         print(f"   ⚠ playback: mind_stream.on_finish: {e}")
 
-                    # brain: трек закончился (не скип) → state.clear_current
                     try:
                         ipc.put(protocol.BRAIN_INBOX,
                                 protocol.event_track_finished(artist=_fin_artist,
