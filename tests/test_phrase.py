@@ -2,7 +2,7 @@
 tests/test_phrase.py — тесты PhrasePicker (temperature + weights + анти-повтор).
 
 Запуск:
-    python tests/run_all.py phrase
+    pytest tests/test_phrase.py -v
 """
 
 import os
