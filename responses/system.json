@@ -99,5 +99,15 @@
   "CLEANUP_ERROR": [
     {"text": "{text}", "style": "normal", "emotion": "good", "slot": "core"},
     {"text": "Не получилось: {text}", "style": "formal", "emotion": "neutral", "slot": "core"}
+  ],
+  "CLEANUP_RECYCLE_DRY_ACK": [
+    {"text": "Сию минуту, смотрю корзину.", "style": "normal", "emotion": "good", "slot": "core"},
+    {"text": "Секунду, проверяю корзину.", "style": "formal", "emotion": "neutral", "slot": "core"},
+    {"text": "Один момент, смотрю корзину.", "style": "normal", "emotion": "good", "slot": "core"}
+  ],
+  "CLEANUP_RECYCLE_RUNNING": [
+    {"text": "Принято. Очищаю корзину.", "style": "normal", "emotion": "good", "slot": "core"},
+    {"text": "Понял. Чищу корзину.", "style": "normal", "emotion": "good", "slot": "core"},
+    {"text": "Запускаю очистку корзины.", "style": "formal", "emotion": "neutral", "slot": "core"}
   ]
 }

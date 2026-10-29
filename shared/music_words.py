@@ -1,15 +1,9 @@
 # shared/music_words.py
-# Один источник правды для «музыкальных слов»: STOP_WORDS, PLAY_TRIGGERS,
-# ARTIST_HINTS, TRACK_HINTS, GENRE_ALIASES, GENRE_TAGS_MAP, _strip_stop_prefix,
-# _clean_filename.
+# Один источник правды для «музыкальных слов».
 #
-# FIX (день 28, аудит 6.1): раньше было ДВА _shared.py — brain/skills/music/
-# и workers/music/. Они уже разъехались: в brain-версии не было
-# GENRE_TAGS_MAP, в workers-версии был. Две копии = будущие баги.
-# Теперь: один shared/music_words.py, оба _shared.py — тонкие обёртки.
-#
-# Загрузка — при импорте (как раньше). Если файлы config/ нет — пустые
-# значения, не падаем.
+# A2 (день 29): REFUSAL_WORDS — «нет», «не надо», «отмена». Если фраза —
+# отказ, classify() не считает её музыкальной командой. Нужно, чтобы
+# «нет» в ответ на «Включить что-нибудь потише?» не включало музыку.
 
 import os
 import re
@@ -38,15 +32,13 @@ def _load_json(path, default=None):
 
 
 def _load_music_words():
-    """Вернуть: STOP_WORDS, STOP_PREFIXES, PLAY_TRIGGERS, NOISE_WORDS,
-    ARTIST_HINTS, TRACK_HINTS."""
     if not os.path.exists(MUSIC_WORDS_FILE):
-        return set(), [], (), (), (), ()
+        return set(), [], (), (), (), (), (), {}, set()
     try:
         with open(MUSIC_WORDS_FILE, 'r', encoding='utf-8') as f:
             data = json.load(f)
     except Exception:
-        return set(), [], (), (), (), ()
+        return set(), [], (), (), (), (), (), {}, set()
     return (
         set(data.get('stop_words', [])),
         list(data.get('stop_prefixes', [])),
@@ -54,6 +46,9 @@ def _load_music_words():
         tuple(data.get('noise_words', [])),
         tuple(data.get('artist_hints', [])),
         tuple(data.get('track_hints', [])),
+        tuple(data.get('volume_patterns', [])),
+        dict(data.get('number_words', {})),
+        set(data.get('refusal_words', [])),
     )
 
 
@@ -62,7 +57,10 @@ def _load_music_words():
  PLAY_TRIGGERS,
  NOISE_WORDS,
  ARTIST_HINTS,
- TRACK_HINTS) = _load_music_words()
+ TRACK_HINTS,
+ VOLUME_PATTERNS,
+ NUMBER_WORDS,
+ REFUSAL_WORDS) = _load_music_words()
 
 GENRE_ALIASES = _load_json(GENRE_ALIASES_FILE)
 GENRE_TAGS_MAP = _load_json(GENRE_TAGS_FILE)

@@ -1,29 +1,21 @@
 # brain/skills/music/skill.py
 # MusicSkill — тонкая обёртка. Понимает команду, шлёт в music_inbox.
 #
-# Логика вопросов (погода → музыка, вчерашнее, время):
-#   1. Погода плохая + нет привычки → спросить (pending "music_ask")
-#   2. Вчерашнее есть + не спрашивали → спросить
-#   3. Утро/ночь + не спрашивали сегодня → спросить
-#   4. Иначе — play_wave (как обычно)
+# A2 (день 29): TTS ДО play_index, с КАНОНИЧНЫМ именем из алиаса.
+#   Раньше: «Ищу» → ждём music_started → «Ария. Неплохо» → музыка.
+#   Задержка 3-5 сек (поиск, скачивание, старт). Долго.
+#   Теперь: «Король и Шут. Включаю» ДО ipc.put(play_artist) → музыка
+#   стартует сразу после поиска. Один TTS, без pending.
+#   Имя для TTS — из config/aliases.json (если алиас есть),
+#   иначе пользовательское («включи киша» → «Король и Шут»).
 #
-# Ответ на вопрос обрабатывает router.py (pending "music_ask").
-#
-# Dislike: brain шлёт dislike в music_inbox. Music blacklist текущего трека.
-#
-# SUGGEST / REPEAT:
-#   - Если артист/трек с высоким весом (>40) — "Я как раз собирался предложить".
-#   - Если артист/трек уже играл 2+ раза сегодня — "Снова. Ну хорошо" (сарказм).
-#
-# FIX: play_artist / play_track теперь говорят «Ищу» (SEARCHING) до music,
-# а «Машина времени. Включаю» (STARTED) — на music_started, когда music уже
-# нашёл каноничное имя.
+#   resolve_alias_name читает config/aliases.json напрямую (brain и music —
+#   разные процессы, brain не видит workers/music/aliases.py).
 #
 # FIX (день 28): _try_ask больше не пишет свои hour < 9 / hour >= 23.
-# Раньше: hour < 9 → MUSIC_ASK_MORNING, и в 00:11 Макс говорил «доброе утро».
-# Теперь: time_bucket() из shared/time_bucket.py — один источник правды.
-# 00:11 → night → MUSIC_ASK_NIGHT («Поздно. Может, что-то тихое?»).
+#   time_bucket() из shared/time_bucket.py — один источник правды.
 
+import json
 import time
 
 from brain.skills.base import Skill, register
@@ -34,15 +26,39 @@ from brain import relationship
 from brain import pending
 from shared import ipc
 from shared import protocol
+from shared import config as cfg
 from shared.log import log
 from shared.time_bucket import time_bucket
 
 
 PENDING_KEY = "music_ask"
-PENDING_STARTED = "music_started"
-SUGGEST_WEIGHT_THRESHOLD = 40.0
-REPEAT_TODAY_THRESHOLD = 2
-STARTED_TIMEOUT_SEC = 10.0
+
+
+# ── Алиасы (A2) ───────────────────────────────────────────────
+def _resolve_alias_name(query: str) -> str | None:
+    """Прочитать config/aliases.json, вернуть artist_name или None.
+
+    brain и music — разные процессы. brain не видит workers/music/aliases.py,
+    поэтому читаем файл напрямую. Кэш не нужен — файл маленький, читается
+    только при play_artist / play_track.
+    """
+    if not query:
+        return None
+    path = cfg.ALIASES_FILE
+    if not path.exists():
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception:
+        return None
+    q = query.lower().strip()
+    entry = data.get(q)
+    if isinstance(entry, dict):
+        name = entry.get("artist_name")
+        if name:
+            return name
+    return None
 
 
 def _get_artist_weight(artist: str) -> float:
@@ -88,21 +104,14 @@ class MusicSkill(Skill):
         action = result.get("action")
         log(f"music: {action} ← «{text}»", tag="BRAIN")
 
-        # Только для play_wave без языка — пробуем спросить
         if action == "play_wave" and result.get("language") is None:
             if self._try_ask():
                 return None
 
-        # Обычный путь
         self._dispatch(action, result)
         return None
 
-    # ────────────────────────────────────────────────────────
-    # ВОПРОСЫ
-    # ────────────────────────────────────────────────────────
     def _try_ask(self) -> bool:
-        """Попробовать задать вопрос. True — задали, play_wave не нужен."""
-        # 1. Погода
         try:
             from brain.skills.weather.sources import fetch_weather
             from brain.skills.weather.classify import classify as wclassify
@@ -124,7 +133,6 @@ class MusicSkill(Skill):
                           data={"condition": precip})
                 return True
 
-        # 2. Вчерашнее
         recent = relationship.get_recent_prompt()
         if recent:
             self._ask("MUSIC_ASK_RECENT", kind="recent",
@@ -132,8 +140,6 @@ class MusicSkill(Skill):
                       phrase_kwargs={"artist": recent["name"]})
             return True
 
-        # 3. Время суток — через shared/time_bucket, не свои hour.
-        # FIX: раньше hour < 9 ловило полночь → «доброе утро» в 00:11.
         bucket = time_bucket()
         if bucket == "morning" and not relationship.was_asked_today("morning"):
             self._ask("MUSIC_ASK_MORNING", kind="time",
@@ -148,7 +154,6 @@ class MusicSkill(Skill):
 
     def _ask(self, phrase_key: str, kind: str,
              data: dict, phrase_kwargs: dict | None = None):
-        """Задать вопрос + поставить pending после TTS."""
         kwargs = phrase_kwargs or {}
         _respond_and_say(phrase_key, **kwargs)
 
@@ -165,38 +170,22 @@ class MusicSkill(Skill):
         )
         log(f"music: спросил ({kind}), pending={PENDING_KEY} (wait_tts)", tag="BRAIN")
 
-    # ────────────────────────────────────────────────────────
-    # ОБЫЧНЫЙ ПУТЬ
-    # ────────────────────────────────────────────────────────
     def _dispatch(self, action: str, result: dict):
         if action == "play_artist":
             artist = result["artist"]
-            weight = _get_artist_weight(artist)
-            today = _plays_artist_today(artist)
-
-            # Говорим «Ищу» до music. Каноничное имя скажем на music_started.
-            _respond_and_say("PLAY_ARTIST_SEARCHING")
-
-            # Запоминаем, что ждём music_started (artist)
-            pending.set(
-                PENDING_STARTED,
-                timeout=STARTED_TIMEOUT_SEC,
-                on_timeout=lambda _d: _respond_and_say("NOT_FOUND"),
-                data={"kind": "artist", "phrase_set": "PLAY_ARTIST_STARTED"},
-            )
-
+            # A2: имя для TTS — из алиаса (каноничное), иначе пользовательское.
+            canonical = _resolve_alias_name(artist)
+            name_for_tts = canonical or artist
+            # TTS ДО play_index — без задержки на поиск.
+            _respond_and_say("PLAY_ARTIST_STARTED", artist=name_for_tts)
             ipc.put(protocol.MUSIC_INBOX, protocol.play_artist(artist))
 
         elif action == "play_track":
             track = result["track"]
-
-            _respond_and_say("PLAY_TRACK_SEARCHING")
-            pending.set(
-                PENDING_STARTED,
-                timeout=STARTED_TIMEOUT_SEC,
-                on_timeout=lambda _d: _respond_and_say("NOT_FOUND"),
-                data={"kind": "track", "phrase_set": "PLAY_TRACK_STARTED"},
-            )
+            # A2: имя для TTS — из алиаса (если трек — алиас артиста), иначе трек.
+            canonical = _resolve_alias_name(track)
+            name_for_tts = canonical or track
+            _respond_and_say("PLAY_TRACK_STARTED", title=name_for_tts)
             ipc.put(protocol.MUSIC_INBOX, protocol.play_track(track))
 
         elif action == "play_genre":
@@ -227,24 +216,10 @@ class MusicSkill(Skill):
 
 
 def on_music_started(artist: str, title: str) -> None:
-    """Вызывается из brain/main.py на событие music_started.
-
-    Если был pending "music_started" (ждали play_artist / play_track) —
-    говорим PLAY_ARTIST_STARTED / PLAY_TRACK_STARTED с каноничным именем.
-    Если pending нет (например, music_started после next) — молчим.
+    """A2: TTS был ДО play_index (PLAY_ARTIST_STARTED). Здесь — пусто.
+    Музыка уже играет, TTS не нужен.
     """
-    p = pending.pop(PENDING_STARTED)
-    if p is None:
-        return
-    phrase_set = p.data.get("phrase_set", "PLAY_ARTIST_STARTED")
-    kind = p.data.get("kind", "artist")
-    try:
-        if kind == "artist":
-            _respond_and_say(phrase_set, artist=artist)
-        else:
-            _respond_and_say(phrase_set, title=title)
-    except Exception as e:
-        log(f"music: on_music_started: {e}", tag="BRAIN", level="WARN")
+    pass
 
 
 register(MusicSkill())

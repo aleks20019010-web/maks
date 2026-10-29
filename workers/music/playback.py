@@ -4,6 +4,14 @@
 #
 # VLC реальный. Music worker играет.
 #
+# A2 (день 29): music_playing.flag — пишем, когда музыка реально играет.
+#   ASR читает флаг: если музыка играет — hot words («стоп», «дальше»)
+#   пропускаются в brain. Не играет — фон, игнор.
+#
+#   _set_music_playing() — после mark_ready в play_index.
+#   _clear_music_playing() — если play_index не смог, play_next вернул False,
+#   monitor_player Ended + play_next False. stop/pause — в main.py.
+#
 # Защита от гонки: state.play_lock на всё переключение.
 # Флаг state.switching: monitor_player не дёргает play_next,
 # пока идёт переключение из main.
@@ -23,9 +31,7 @@
 # играет индекс 0, а не playlist_index + 1 (иначе «Очередь закончилась»).
 #
 # FIX (2026-10-27): play_index — счётчик попыток. Если 3 трека подряд не удалось
-# получить — сдаёмся, return False. Раньше while True перебирал весь плейлист
-# (TARGET_AHEAD=6 × 30 сек = 3 минуты), music worker не читал music_inbox —
-# «стоп» не срабатывал. Теперь attempts <= 3, log «сдался после 3 попыток».
+# получить — сдаёмся, return False.
 
 import os
 import time
@@ -47,8 +53,27 @@ from workers.music.download import (
 from workers.music.sources import get_next_source_track
 
 
-PREFETCH_WAIT_SEC = 10.0   # сколько ждём prefetch перед тем, как пропустить трек
-MAX_PLAY_ATTEMPTS = 3      # сколько битых треков подряд терпим, потом сдаёмся
+PREFETCH_WAIT_SEC = 10.0
+MAX_PLAY_ATTEMPTS = 3
+
+_MUSIC_PLAYING_FLAG = cfg.DATA_DIR / "music_playing.flag"
+
+
+# ── A2: music_playing.flag ────────────────────────────────────
+def _set_music_playing():
+    try:
+        _MUSIC_PLAYING_FLAG.parent.mkdir(parents=True, exist_ok=True)
+        _MUSIC_PLAYING_FLAG.write_text(str(time.time()), encoding="utf-8")
+    except Exception as e:
+        print(f"   ⚠ playback: set music_playing.flag: {e}")
+
+
+def _clear_music_playing():
+    try:
+        if _MUSIC_PLAYING_FLAG.exists():
+            _MUSIC_PLAYING_FLAG.unlink()
+    except Exception as e:
+        print(f"   ⚠ playback: clear music_playing.flag: {e}")
 
 
 def _mind():
@@ -121,7 +146,6 @@ def play_index(idx, announce=False):
 
     attempts <= MAX_PLAY_ATTEMPTS: если 3 трека подряд не удалось получить
     (prefetch timeout, download_track None, file_path битый) — сдаёмся.
-    Раньше while True перебирал весь плейлист — play_lock держался минуты.
     """
     with state.play_lock:
         attempts = 0
@@ -130,6 +154,7 @@ def play_index(idx, announce=False):
                 plen = len(state.playlist)
             if idx >= plen:
                 print("Очередь закончилась.")
+                _clear_music_playing()
                 return False
             with state.playlist_lock:
                 track = state.playlist[idx]
@@ -178,14 +203,11 @@ def play_index(idx, announce=False):
                             time.sleep(0.5)
                             waited += 0.5
                         if not file_path:
-                            # Prefetch не успел — не блокируемся, пропускаем трек.
-                            # Если prefetch докачает позже — трек сыграет в другой раз.
                             print(f"  ⚠ prefetch timeout {PREFETCH_WAIT_SEC:.0f}с — пропускаю «{title}»")
                             idx += 1
                             attempts += 1
                             continue
                     if not file_path:
-                        # Prefetch не запускался — качаем синхронно (с таймаутом в download.py).
                         print(f"  Качаю сейчас: {title}")
                         try:
                             file_path = download_track(track)
@@ -203,7 +225,6 @@ def play_index(idx, announce=False):
                     source=state.playlist_mode or 'unknown',
                 )
 
-            # mind_stream: трек начал играть
             try:
                 ms = _mind()
                 if ms is not None:
@@ -233,10 +254,12 @@ def play_index(idx, announce=False):
                 player.play()
             except Exception as e:
                 print(f"  ✗ player.play() упал: {e}")
+                _clear_music_playing()
                 return False
 
             music.mark_ready()
             _release_duck_safe()
+            _set_music_playing()
 
             state.current_track_title = title
             state.current_track_id = track.id
@@ -244,7 +267,6 @@ def play_index(idx, announce=False):
             state.last_play_start_time = time.time()
             print(f"▶ [{idx+1}/{plen}] {title}")
 
-            # brain: трек реально начал играть → state.set_current
             try:
                 ipc.put(protocol.BRAIN_INBOX,
                         protocol.event_music_started(artist=_artist_for_mind,
@@ -257,6 +279,7 @@ def play_index(idx, announce=False):
             return True
 
         print(f"  ✗ play_index: сдался после {MAX_PLAY_ATTEMPTS} попыток")
+        _clear_music_playing()
         return False
 
 
@@ -264,9 +287,7 @@ def play_next(from_finish=False):
     """Перейти к следующему треку.
 
     from_finish=True — вызвано из monitor_player (трек закончился).
-                       Не считается скипом. remember_finish уже вызван.
     from_finish=False — вызвано из _cmd_next (пользователь сказал «дальше»).
-                        Считается скипом, если трек играл >3 сек.
 
     Возвращает True, если удалось переключиться, False — если нет.
     """
@@ -320,10 +341,9 @@ def play_next(from_finish=False):
         ok = play_index(next_idx)
         if not ok:
             print(f"   ⚠ play_next: play_index({next_idx}) вернул False")
+            _clear_music_playing()
         return ok
     if refill_one():
-        # FIX: после stop playlist_index = 0, refill добавил трек с индексом 0.
-        # Играем его, а не +1 (иначе «Очередь закончилась»).
         with state.playlist_lock:
             plen = len(state.playlist)
         if state.playlist_index < plen:
@@ -332,8 +352,10 @@ def play_next(from_finish=False):
             ok = play_index(state.playlist_index + 1)
         if not ok:
             print(f"   ⚠ play_next: play_index(refill) вернул False")
+            _clear_music_playing()
         return ok
     print("Очередь закончилась.")
+    _clear_music_playing()
     return False
 
 
@@ -370,7 +392,6 @@ def monitor_player():
     while True:
         time.sleep(1)
 
-        # Если идёт переключение — не трогаем
         if state.switching:
             last_state = None
             continue
@@ -399,7 +420,6 @@ def monitor_player():
                         duration = int(time.time() - state.last_play_start_time)
                     memory.remember_finish(track_id=cur_id, duration=duration)
 
-                    # артист/трек для mind_stream и brain
                     _fin_artist = ""
                     _fin_title = ""
                     try:
@@ -419,7 +439,6 @@ def monitor_player():
                     except Exception as e:
                         print(f"   ⚠ playback: mind_stream.on_finish: {e}")
 
-                    # brain: трек закончился (не скип) → state.clear_current
                     try:
                         ipc.put(protocol.BRAIN_INBOX,
                                 protocol.event_track_finished(artist=_fin_artist,
@@ -429,7 +448,10 @@ def monitor_player():
 
             state.switching = True
             try:
-                play_next(from_finish=True)
+                ok = play_next(from_finish=True)
+                if not ok:
+                    # Очередь кончилась — музыка больше не играет
+                    _clear_music_playing()
             finally:
                 state.switching = False
 

@@ -1,21 +1,9 @@
 # brain/router.py
-# Роутер команд: выбирает навык по тексту и вызывает его.
+# Роутер команд.
 #
-# ВНЕ ДИАЛОГА (CommandSource.VOICE, VOICE_HOT, SYSTEM):
-#   reminders → pending → skills → LLM → NOT_UNDERSTOOD
-#   Router решает первым.
-#
-# В ДИАЛОГЕ (CommandSource.VOICE_DIALOG):
-#   smalltalk → LLM → (LLM вернёт command → process_command → router)
-#   Router обрабатывает только smalltalk. Всё остальное — LLM.
-#
-# FIX: CommandSource enum вместо magic strings "voice"/"voice_dialog".
-#
-# FIX (день 28, 5.15): _fmt_due/_strip_reminder_trigger/_REMINDER_TRIGGERS
-# переехали в brain/reminders.py. Причина: они про напоминания, не про
-# маршрутизацию. Здесь остались только _REMINDER_LIST_PHRASES и
-# _REMINDER_DONE_PHRASES — это маршрутизация («пользователь спрашивает
-# список» vs «пользователь говорит „готово"»).
+# A2 (день 29): router-страховка. YES/NO без pending → игнор (молчание).
+# «Да»/«нет» в разговоре (не с Максом) не должны включать музыку.
+# Если pending есть — обрабатывает pending (как раньше).
 
 import re
 import threading
@@ -56,7 +44,6 @@ _REMINDER_DONE_PHRASES = (
 )
 
 
-# ── Анти-повтор ───────────────────────────────────────────────
 _repeat_count = 0
 _repeat_lock = threading.Lock()
 _last_command = None
@@ -84,21 +71,16 @@ def process_command(command: str, source: CommandSource = CommandSource.VOICE):
 
     cmd_lower = command.lower()
     metrics.inc("router_commands")
-    log(f"router: cmd='{command}' | source={source.value} | NO_REPEAT={cmd_lower in NO_REPEAT_COMMANDS}", tag="BRAIN")
+    log(f"router: cmd='{command}' | source={source.value}", tag="BRAIN")
 
     if cmd_lower in ("выход", "exit", "quit"):
         return "exit"
 
-    # ── «Стоп»/«хватит» в диалоге — отменить LLM и TTS ──
-    if source == CommandSource.VOICE_DIALOG and cmd_lower in ("стоп", "хватит", "достаточно", "замолчи"):
-        try:
-            from brain.skills.llm.skill import cancel_all
-            cancel_all()
-        except Exception as e:
-            log(f"router: cancel_all: {e}", tag="BRAIN", level="WARN")
-        log(f"router: cancel_all ({cmd_lower})", tag="BRAIN")
-        _respond_and_say("STOP")
-        return None
+    # ── A2: router-страховка. YES/NO без pending → игнор ──
+    if cmd_lower in YES_WORDS or cmd_lower in NO_WORDS:
+        if pending.get(PENDING_ASK) is None and pending.get(PENDING_OFFER) is None:
+            log(f"router: YES/NO без pending → игнор «{command}»", tag="BRAIN")
+            return None
 
     # ── ДИАЛОГ: smalltalk → LLM ──
     if source == CommandSource.VOICE_DIALOG:
@@ -106,7 +88,6 @@ def process_command(command: str, source: CommandSource = CommandSource.VOICE):
             if _handle_reminders(cmd_lower):
                 return None
         else:
-            # Smalltalk — router сам, до LLM
             handler = skills_base.find_handler(command)
             if handler and handler.name == "smalltalk":
                 log(f"router: → smalltalk (dialog)", tag="BRAIN")
@@ -116,17 +97,14 @@ def process_command(command: str, source: CommandSource = CommandSource.VOICE):
                     from brain.errors import handle_error
                     handle_error(e, context="skill:smalltalk", speak=True)
                 return None
-            # Всё остальное — LLM (LLM вернёт command, если поймёт)
             if _try_llm_fallback(command):
                 return None
-            # LLM не помогла — reminders на всякий случай
             if _handle_reminders(cmd_lower):
                 return None
-        # Если дошли сюда — ничего не сработало
         _respond_and_say("NOT_UNDERSTOOD")
         return None
 
-    # ── ВНЕ ДИАЛОГА: router решает первым ──
+    # ── ВНЕ ДИАЛОГА ──
     if _handle_reminders(cmd_lower):
         return None
 

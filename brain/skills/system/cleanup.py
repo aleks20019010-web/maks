@@ -1,10 +1,23 @@
 # brain/skills/system/cleanup.py
 # Очистка диска C. Голосовой скил (system).
 #
-# Логика:
-#   «почисти диск C» → cleanup_dry() → «Могу освободить: безопасно — X ГБ; корзина — Y ГБ. Очистить безопасное?»
-#   «да» → cleanup_real() → «Очистка завершена. Освобождено X ГБ.» (или «не удалось — файлы используются»)
-#   «нет» → отмена.
+# Два скила:
+#   1. CleanupSkill / CleanupConfirmSkill — «почисти диск C» → safe only.
+#      pending: "cleanup". cleanup_real() без include_recycle.
+#   2. CleanupRecycleSkill / CleanupRecycleConfirmSkill (A6, день 29) —
+#      «очисти корзину» → only recycle bin.
+#      pending: "cleanup_recycle". cleanup_real(include_recycle=True).
+#
+# Логика safe:
+#   «почисти диск C» → cleanup_dry() → «Могу освободить: безопасно — X ГБ;
+#   корзина — Y ГБ. Очистить безопасное?» → «да» → cleanup_real()
+#   → «Очистка завершена. Освобождено X ГБ.» (или «не удалось — файлы
+#   используются»)
+#
+# Логика recycle (A6):
+#   «очисти корзину» → cleanup_dry(include_recycle=True) → «В корзине X ГБ.
+#   Очистить?» → «да» → cleanup_real(include_recycle=True)
+#   → «Корзина очищена. Освобождено X ГБ.»
 #
 # cleanup_c.ps1 чистит ТОЛЬКО безопасное по умолчанию:
 #   - %TEMP%, %LOCALAPPDATA%\Temp, C:\Windows\Temp
@@ -40,6 +53,10 @@ PS_EXE = r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
 CLEANUP_PENDING_KEY = "cleanup"
 CLEANUP_PENDING_TIMEOUT = 120.0
 CLEANUP_RATE = "+10%"
+
+# A6: свой pending для корзины. Не пересекается с "cleanup".
+CLEANUP_RECYCLE_PENDING_KEY = "cleanup_recycle"
+CLEANUP_RECYCLE_TIMEOUT = 120.0
 
 
 # ==================== ПРЯМОЙ TTS ====================
@@ -189,10 +206,14 @@ def cleanup_dry(include_recycle: bool = False,
     return data, msg, safe_predicted
 
 
-def cleanup_real() -> tuple[dict | None, str]:
-    """Реальная очистка (только безопасное). Вернуть (data, msg)."""
+def cleanup_real(include_recycle: bool = False) -> tuple[dict | None, str]:
+    """Реальная очистка. Вернуть (data, msg).
+
+    include_recycle=False (по умолчанию) — только безопасное (CleanupSkill).
+    include_recycle=True — корзина тоже (CleanupRecycleSkill, A6).
+    """
     ok, err = _run_ps(dry_run=False,
-                      include_recycle=False,
+                      include_recycle=include_recycle,
                       include_winold=False)
     if not ok:
         return None, f"Ошибка очистки: {err}"
@@ -218,7 +239,7 @@ def cleanup_real() -> tuple[dict | None, str]:
     )
 
 
-# ==================== СКИЛЫ ====================
+# ==================== СКИЛЫ: SAFE (C) ====================
 
 class CleanupSkill(Skill):
     name = "cleanup"
@@ -293,5 +314,107 @@ class CleanupConfirmSkill(Skill):
         return True
 
 
+# ==================== СКИЛЫ: RECYCLE (A6) ====================
+
+class CleanupRecycleSkill(Skill):
+    name = "cleanup_recycle"
+    priority = 6
+
+    def can_handle(self, text: str) -> bool:
+        tl = text.lower().strip()
+        # «очисти корзину», «почисти корзину», «убери корзину»
+        if "корзин" in tl and any(w in tl for w in ("очисти", "почисти", "убери")):
+            return True
+        return False
+
+    def handle(self, text: str) -> bool:
+        _say_phrase("CLEANUP_RECYCLE_DRY_ACK", rate=CLEANUP_RATE)
+        data, msg, predicted = cleanup_dry(include_recycle=True)
+
+        if data is None:
+            _say_text(f"Ошибка: {msg}", rate=CLEANUP_RATE)
+            return True
+
+        # predicted — safe_predicted (не корзина). Для recycle смотрим
+        # recycle_predicted из Details. Но cleanup_dry возвращает safe.
+        # Проще: если data есть — спрашиваем. Размер корзины — в msg.
+        try:
+            from brain import pending
+            pending.set(
+                CLEANUP_RECYCLE_PENDING_KEY,
+                timeout=CLEANUP_RECYCLE_TIMEOUT,
+                on_timeout=None,
+                data={"data": data, "msg": msg},
+            )
+            log(f"cleanup_recycle: pending set ({CLEANUP_RECYCLE_TIMEOUT}с)", tag="BRAIN")
+        except Exception as e:
+            log(f"cleanup_recycle: pending.set: {e}", tag="BRAIN", level="WARN")
+
+        # Говорим msg, но для recycle нужен свой текст: «В корзине X ГБ. Очистить?»
+        # msg содержит «Могу освободить: корзина — X ГБ. Очистить безопасное?»
+        # Для recycle переделываем.
+        recycle_msg = self._recycle_msg(data)
+        _say_text(recycle_msg, rate=CLEANUP_RATE)
+        return True
+
+    @staticmethod
+    def _recycle_msg(data: dict) -> str:
+        """Собрать сообщение про корзину из data."""
+        details = data.get("Details", [])
+        recycle_gb = 0.0
+        for item in details:
+            desc = item.get("Desc", "")
+            if desc.startswith("Корзина"):
+                recycle_gb += float(item.get("Freed", 0) or 0)
+        recycle_gb = round(recycle_gb, 2)
+        free_gb = data.get("FreeBefore", 0)
+        total_gb = data.get("TotalGB", 0)
+        if recycle_gb <= 0:
+            return (
+                f"В корзине пусто. Свободно на C: {free_gb} из {total_gb} ГБ."
+            )
+        return (
+            f"В корзине {recycle_gb} ГБ. "
+            f"Свободно на C: {free_gb} из {total_gb} ГБ. "
+            f"Очистить корзину? Да или нет."
+        )
+
+
+class CleanupRecycleConfirmSkill(Skill):
+    name = "cleanup_recycle_confirm"
+    priority = 1
+
+    def can_handle(self, text: str) -> bool:
+        try:
+            from brain import pending
+            if pending.get(CLEANUP_RECYCLE_PENDING_KEY) is None:
+                return False
+        except Exception:
+            return False
+        tl = text.lower().strip()
+        return tl in ("да", "yes", "ок", "окей", "подтверждаю", "+",
+                      "нет", "no", "отмена", "-")
+
+    def handle(self, text: str) -> bool:
+        from brain import pending
+        tl = text.lower().strip()
+
+        p = pending.pop(CLEANUP_RECYCLE_PENDING_KEY)
+        if p is None:
+            _say_text("Отменил.", rate=CLEANUP_RATE)
+            return True
+
+        if tl in ("да", "yes", "ок", "окей", "подтверждаю", "+"):
+            _say_phrase("CLEANUP_RECYCLE_RUNNING", rate=CLEANUP_RATE)
+            data, msg = cleanup_real(include_recycle=True)
+            _say_text(msg, rate=CLEANUP_RATE)
+        else:
+            _say_text("Отменил.", rate=CLEANUP_RATE)
+        return True
+
+
+# ── Регистрация ───────────────────────────────────────────────
 register(CleanupSkill())
 register(CleanupConfirmSkill())
+register(CleanupRecycleSkill())
+register(CleanupRecycleConfirmSkill())

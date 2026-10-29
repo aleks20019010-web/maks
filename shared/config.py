@@ -12,8 +12,11 @@
 # FIX: VOSK_MODEL_PATH — str, а не Path. Vosk вызывает .encode() на аргументе,
 # Path этого не умеет. Остальные пути — Path (работают с open/os.path).
 #
-# FIX: WAKE_WORDS — убран "мак". «Макароны» → Vosk слышал «мак» → wake.
-# Теперь только «макс/макса/максу», и _find_wake_word ищет по границам слов.
+# C10 (день 29): ViolaWake — wake-детектор.
+# A2 (день 29): WAKE_WINDOW_SEC — окно после wake, Vosk слушает команду.
+#   music_playing.flag (music worker) — hot words при музыке.
+#   expecting_input.flag (brain pending) — hot words при ожидании ответа.
+#   session_open.flag (TTS worker) — окно после ответа LLM.
 
 import os
 import json
@@ -120,9 +123,6 @@ MIC_DEVICE_INDEX = 1
 MIC_CAPTURE_RATE = 48000
 VOSK_RATE = 16000
 
-# Wake word — «Макс». Vosk слышит его 12/12.
-# FIX: убран "мак" — «макароны» → wake. Только «макс/макса/максу»,
-# и _find_wake_word ищет по границам слов (не find()).
 WAKE_WORDS = [
     "макс",
     "макса",
@@ -132,6 +132,21 @@ WAKE_WORDS = [
 WAKE_FUZZY_THRESHOLD = 0.35
 COMMAND_TIMEOUT_SEC = 10.0
 WAKE_COOLDOWN_SEC = 3.0
+
+# ============================================================
+# WAKE WORD (ViolaWake) — C10, день 29
+# ============================================================
+WAKE_MODEL_PATH = str(MODELS_DIR / "wake_models" / "max_viola_v2.onnx")
+WAKE_MODEL_THRESHOLD = 0.80
+WAKE_CONFIRM_COUNT = 3
+WAKE_COOLDOWN_S = 2.0
+
+# ============================================================
+# A2 (день 29): окна контекста для ASR
+# ============================================================
+# WAKE_WINDOW_SEC — сколько Vosk слушает команду после wake.
+# 5 сек — как у Алисы. Vosk просыпается на 5 сек, ловит команду.
+WAKE_WINDOW_SEC = 5.0
 
 # ============================================================
 # ПРЕДОХРАНИТЕЛИ

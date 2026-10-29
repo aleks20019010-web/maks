@@ -21,25 +21,17 @@
     {"text": "Гот+ово", "style": "formal", "weight": 1.5, "emotion": "neutral", "slot": "core"}
   ],
 
-  "PLAY_ARTIST_SEARCHING": [
-    {"text": "Сию мин+уту", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
-    {"text": "Ищ+у", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
-    {"text": "Сек+унду", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
-    {"text": "Од+ин мом+ент", "style": "formal", "weight": 1.5, "emotion": "neutral", "slot": "core"},
-    {"text": "Смотр+ю", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"}
-  ],
-
   "PLAY_ARTIST_STARTED": [
-    {"text": "{artist}. sil<[150]> Включ+аю", "style": "normal", "weight": 2.5, "emotion": "good", "slot": "core"},
-    {"text": "Нашёл: {artist}", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
-    {"text": "{artist}. sil<[150]> Гот+ово", "style": "formal", "weight": 2.0, "emotion": "neutral", "slot": "core"},
-    {"text": "{artist}. sil<[150]> Как пожел+аете", "style": "normal", "humor": 0.1, "weight": 1.5, "emotion": "good", "slot": "core"},
-    {"text": "{artist}. sil<[150]> Неплохо", "style": "friendly", "humor": 0.2, "weight": 1.5, "emotion": "good", "slot": "core"},
-    {"text": "{artist}. sil<[150]> Пробл+ем не б+удет", "style": "friendly", "humor": 0.2, "weight": 1.5, "emotion": "good", "slot": "core"},
-    {"text": "{artist}. sil<[150]> Держ+ите", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
-    {"text": "Оп+ять {artist}? sil<[150]> Ну хорош+о", "style": "ironic", "humor": 0.4, "rate": "-5%", "weight": 0.5, "emotion": "good", "slot": "core"},
-    {"text": "{artist}. sil<[200]> Серьёзно?", "style": "ironic", "humor": 0.5, "rate": "+5%", "pitch": "-12Hz", "weight": 0.5, "emotion": "good", "slot": "core"},
-    {"text": "Включ+аю {artist}. sil<[150]> Т+ихо", "style": "night", "night": true, "rate": "-12%", "pitch": "-12Hz", "weight": 1.0, "emotion": "neutral", "slot": "core"}
+    {"text": "{artist}. sil<[150]> Включ+аю", "weight": 2.5, "emotion": "good", "slot": "core"},
+    {"text": "Нашёл: {artist}", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "{artist}. sil<[150]> Гот+ово", "weight": 2.0, "emotion": "neutral", "slot": "core"},
+    {"text": "{artist}. sil<[150]> Как пожел+аете", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{artist}. sil<[150]> Неплохо", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{artist}. sil<[150]> Пробл+ем не б+удет", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{artist}. sil<[150]> Держ+ите", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Оп+ять {artist}? sil<[150]> Ну хорош+о", "weight": 0.5, "emotion": "good", "slot": "core"},
+    {"text": "{artist}. sil<[200]> Серьёзно?", "weight": 0.5, "emotion": "good", "slot": "core"},
+    {"text": "Включ+аю {artist}. sil<[150]> Т+ихо", "weight": 1.0, "emotion": "neutral", "slot": "core"}
   ],
 
   "PLAY_ARTIST_NIGHT": [
@@ -60,19 +52,17 @@
     {"text": "Нашёл. sil<[150]> Включ+аю", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"}
   ],
 
-  "PLAY_TRACK_SEARCHING": [
-    {"text": "Сию мин+уту", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
-    {"text": "Ищ+у", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
-    {"text": "Сек+унду", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
-    {"text": "Од+ин мом+ент", "style": "formal", "weight": 1.5, "emotion": "neutral", "slot": "core"}
-  ],
-
   "PLAY_TRACK_STARTED": [
-    {"text": "{title}. sil<[150]> Включ+аю", "style": "normal", "weight": 2.5, "emotion": "good", "slot": "core"},
-    {"text": "Нашёл: {title}", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
-    {"text": "{title}. sil<[150]> Гот+ово", "style": "formal", "weight": 2.0, "emotion": "neutral", "slot": "core"},
-    {"text": "{title}. sil<[150]> Отл+ичный в+ыбор", "style": "friendly", "humor": 0.2, "rate": "+5%", "weight": 1.5, "emotion": "good", "slot": "core"},
-    {"text": "{title}. sil<[150]> Держ+ите", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"}
+    {"text": "{title}. sil<[150]> Включ+аю", "weight": 2.5, "emotion": "good", "slot": "core"},
+    {"text": "Нашёл: {title}", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "{title}. sil<[150]> Гот+ово", "weight": 2.0, "emotion": "neutral", "slot": "core"},
+    {"text": "{title}. sil<[150]> Отл+ичный в+ыбор", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{title}. sil<[150]> Держ+ите", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{title}. sil<[150]> Как пожел+аете", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Игр+аю {title}", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{title}. sil<[150]> Неплохо", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Ст+авлю {title}", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Оп+ять {title}? sil<[150]> Ну хорош+о", "weight": 0.5, "emotion": "good", "slot": "core"}
   ],
 
   "PLAY_PLAYLIST": [
@@ -189,6 +179,14 @@
     {"text": "Гр+омче н+екуда sil<[150]> Р+азве что ещё гр+омче", "style": "sarcastic", "humor": 0.6, "rate": "-8%", "pitch": "-12Hz", "weight": 0.5, "emotion": "good", "slot": "core"},
     {"text": "Максимум. sil<[150]> Хорош+о, что Я не сл+ышу", "style": "sarcastic", "humor": 0.5, "weight": 0.5, "emotion": "good", "slot": "core"},
     {"text": "На всю. sil<[200]> См+ело", "style": "ironic", "humor": 0.4, "weight": 1.5, "emotion": "good", "slot": "core"}
+  ],
+
+  "VOLUME_SET": [
+    {"text": "Громкость {value}", "style": "normal", "weight": 2.5, "emotion": "good", "slot": "core"},
+    {"text": "Ставлю {value}", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "{value} процентов", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Принято. {value}", "style": "formal", "weight": 1.5, "emotion": "neutral", "slot": "core"},
+    {"text": "Громкость на {value}", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"}
   ],
 
   "NO_TRACK_PLAYING": [

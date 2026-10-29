@@ -1,41 +1,22 @@
 """
-workers/asr/main.py — ASR worker: Vosk + микрофон + wake word + hot words + AEC.
+workers/asr/main.py — ASR worker: Vosk + микрофон + hot words + бип на wake.
 
-Поток (AEC_ENABLED = True):
-  echoff (сам захватывает mic + loopback, выравнивает, вычитает эхо)
-    → clean_q (16 кГц) → Vosk → текст
-
-Поток (AEC_ENABLED = False):
-  микрофон → near_q → Vosk → текст
-
-  Vosk → echo-фильтр → дедуп → wake/hot word/команда → brain_inbox
+A2 (день 29): Vosk-wake вернулся (ViolaWake убран).
+  - Vosk кормится ВСЕГДА (как до C10). CPU жрётся на фон, но распознаёт
+    лучше, чем flush буфера.
+  - _find_wake_word ищет «макс» в тексте (по границам слов).
+  - Нашёл «макс»:
+    * after есть («макс включи киша» → after = «включи киша») —
+      команда сразу, БИП НЕ ИГРАЕТ (TTS ответит).
+    * after пусто («макс») — бип, wake в brain, _waiting_for_command,
+      ждём команду.
+  - ViolaWake убран (нет _wake_worker, pre_wake_buffer, wake_q).
+  - Hot words с контекстом: «да»/«нет» при музыке — не музыкальная команда,
+    а ответ на pending. Проверяем expecting_input.flag.
+  - Router-страховка: YES/NO без pending → игнор.
 
 FIX: echo-фильтр не считает echo, если распознанное — hot word.
 FIX: порог echo поднят с 0.6 до 0.85.
-
-FIX: _find_wake_word ищет по ГРАНИЦАМ СЛОВ, не find().
-  Раньше «макароны» → find("мак") → wake. Теперь «мак» убран из WAKE_WORDS,
-  и даже «макс» в «макса» ищется по (?<![а-яёa-z])...(?![а-яёa-z]).
-
-ОТКАТ: динамическая грамматика (IDLE/FULL) убрана.
-Один KaldiRecognizer(model, rate) без грамматики — полный диапазон.
-
-ФИЛЬТР ДИАЛОГА:
-  В диалоговом режиме (20 сек после ответа LLM) в brain пропускаются
-  только осмысленные фразы:
-    - короткие осмысленные (_SHORT_OK): спасибо, привет, да, нет и т.д.,
-    - слова/фразы из responses/commands.json (включи, погода, пауза...),
-    - есть вопросительное слово (что, кто, где, когда, почему, как...),
-    - или триггер подробности (расскажи, объясни, подробнее...),
-    - или длина >= 3 слов.
-  Короткие бессвязные фразы («собой», «музыку») → [v] dialog-skip,
-  не доходят до brain, не тратят LLM.
-
-  commands.json — ТОЛЬКО для ASR. Это словарь «похоже на команду»,
-  ASR не знает, что с ними делает router. Просто пропускает.
-
-FIX: cfg.VOSK_MODEL_PATH теперь str (из shared/config.py), не Path.
-FIX: CommandSource enum вместо magic strings "voice"/"voice_hot"/"voice_dialog".
 """
 
 import json
@@ -54,6 +35,7 @@ from shared import protocol
 from shared import config as cfg
 from shared.log import log
 from shared.sources import CommandSource
+from shared.beep import play_beep
 
 
 POST_TTS_MUTE_SEC = 1.0
@@ -73,6 +55,22 @@ _last_wake_time = 0.0
 _last_hot_word_at = 0.0
 
 
+# ── Флаги ──────────────────────────────────────────────────────
+def _flag_exists(name: str) -> bool:
+    try:
+        return (cfg.DATA_DIR / name).exists()
+    except Exception:
+        return False
+
+
+def _is_music_playing() -> bool:
+    return _flag_exists("music_playing.flag")
+
+
+def _is_expecting_input() -> bool:
+    return _flag_exists("expecting_input.flag")
+
+
 # ── Hot words ──────────────────────────────────────────────────
 def _get_hot_words() -> set:
     try:
@@ -82,19 +80,8 @@ def _get_hot_words() -> set:
         return set()
 
 
-def _get_wake_words() -> set:
-    try:
-        return set(w.lower() for w in cfg.WAKE_WORDS)
-    except Exception:
-        return set()
-
-
 # ── Commands (для фильтра диалога) ─────────────────────────────
 def _get_command_words() -> set:
-    """Слова/фразы из responses/commands.json — «похоже на команду».
-
-    ASR не знает, что с ними делает router. Просто пропускает в диалоге.
-    """
     path = cfg.RESPONSES_DIR / _COMMANDS_FILE
     if not path.exists():
         return set()
@@ -111,21 +98,13 @@ def _get_command_words() -> set:
 
 def _is_command_word(text: str) -> bool:
     hot = _get_hot_words()
-    wake = _get_wake_words()
-    if not hot and not wake:
+    if not hot:
         return False
     tl = text.lower().strip()
     if not tl:
         return False
     if tl in hot:
         return True
-    for w in wake:
-        if tl.startswith(w):
-            rest = tl[len(w):].strip(" ,.!?-")
-            if rest in hot:
-                return True
-            if rest and len(rest.split()) >= 1:
-                return True
     return False
 
 
@@ -182,7 +161,6 @@ _DETAIL_WORDS = (
     "продолжай",
 )
 
-# Короткие осмысленные фразы — пропускаем в диалоге, даже если 1 слово
 _SHORT_OK = (
     "спасибо", "благодарю", "привет", "здравствуй", "пока",
     "да", "нет", "конечно", "хорошо", "ладно", "ясно",
@@ -211,26 +189,6 @@ def _is_meaningful_dialog(text_lower: str, command_words: set) -> bool:
     return False
 
 
-# ── Wake word ──────────────────────────────────────────────────
-def _find_wake_word(text: str):
-    """Найти wake word по ГРАНИЦАМ СЛОВ. «макароны» ≠ «макс».
-
-    Раньше: t_lower.find("мак") → «макароны» → wake, after="ароны".
-    Теперь: (?<![а-яёa-z])макс(?![а-яёa-z]) — только целое слово.
-    """
-    t_lower = text.lower()
-    for w in cfg.WAKE_WORDS:
-        # Границы: перед — не буква, после — не буква.
-        # (?<!...) — negative lookbehind, (?!...) — negative lookahead.
-        pattern = r'(?<![а-яёa-z])' + re.escape(w) + r'(?![а-яёa-z])'
-        m = re.search(pattern, t_lower)
-        if m:
-            after = text[m.end():].strip()
-            after = after.strip(' ,.!?-')
-            return w, after
-    return None, None
-
-
 def _check_wake_cooldown() -> bool:
     global _last_wake_time
     now = time.time()
@@ -249,7 +207,6 @@ def _wait_for_command_timeout():
         ipc.put(protocol.BRAIN_INBOX, protocol.event("wake_wait", source="asr"))
 
 
-# ── TTS state polling ──────────────────────────────────────────
 def _tts_speaking() -> bool:
     try:
         from workers.tts.state_file import get_state
@@ -258,7 +215,6 @@ def _tts_speaking() -> bool:
         return False
 
 
-# ── Ресемплинг ─────────────────────────────────────────────────
 def _resample(audio: np.ndarray, from_rate: int, to_rate: int) -> np.ndarray:
     if from_rate == to_rate:
         return audio
@@ -277,6 +233,52 @@ def _resample(audio: np.ndarray, from_rate: int, to_rate: int) -> np.ndarray:
     old_idx = np.arange(len(audio))
     new_idx = np.linspace(0, len(audio) - 1, new_len)
     return np.interp(new_idx, old_idx, audio).astype(audio.dtype)
+
+
+# ── Wake word (Vosk, A2) ──────────────────────────────────────
+def _find_wake_word(text: str):
+    """Найти wake word по ГРАНИЦАМ СЛОВ. «макароны» ≠ «макс».
+
+    Возвращает (wake_word, after). after — команда после «макс»
+    (может быть пустой). Если не найдено — (None, None).
+    """
+    t_lower = text.lower()
+    for w in cfg.WAKE_WORDS:
+        pattern = r'(?<![а-яёa-z])' + re.escape(w) + r'(?![а-яёa-z])'
+        m = re.search(pattern, t_lower)
+        if m:
+            after = text[m.end():].strip()
+            after = after.strip(' ,.!?-')
+            return w, after
+    return None, None
+
+
+# ── Hot words с контекстом (A2) ───────────────────────────────
+def _hot_word_appropriate(text_lower: str) -> bool:
+    yes_no = {
+        "да", "нет", "ок", "окей", "подтверждаю",
+        "не надо", "неважно", "не важно", "не хочу", "отмена",
+    }
+    if text_lower in yes_no:
+        return _is_expecting_input()
+
+    control_words = {
+        "дальше", "next", "следующий", "пропусти", "пропустить",
+        "назад", "предыдущий", "предыдущая", "вернись", "верни",
+        "пауза", "продолжить", "продолжи", "играть", "играй", "плей",
+        "стоп", "останови", "остановись", "стоп музыка",
+        "громче", "тише", "погромче", "потише",
+    }
+    if text_lower in control_words:
+        return True
+
+    if text_lower.startswith("громкость "):
+        return True
+
+    if text_lower in ("что играет", "что за песня", "что за трек", "что сейчас"):
+        return False
+
+    return True
 
 
 # ── Главный ────────────────────────────────────────────────────
@@ -302,11 +304,9 @@ def main():
     command_words = _get_command_words()
     log(f"asr: COMMAND WORDS: {len(command_words)}", tag="ASR")
 
-    # ── Очереди ──
     near_q = queue.Queue(maxsize=50)
     clean_q = queue.Queue(maxsize=50)
 
-    # ── AEC через echoff ──
     echoff_worker = None
     use_echoff = False
     if cfg.AEC_ENABLED:
@@ -384,7 +384,6 @@ def main():
                 _last_cmd_reload = now
 
             speaking = _tts_speaking()
-
             if speaking:
                 if not _was_speaking:
                     _was_speaking = True
@@ -420,72 +419,71 @@ def main():
             text_lower = text.lower().strip()
 
             if _is_echo(text):
-                log(f"asr: [v] {text} (echo)", tag="ASR")
                 continue
 
             if text_lower == _last_sent_text and (now - _last_sent_time) < DEDUP_WINDOW_SEC:
-                log(f"asr: дубль «{text}» — игнор", tag="ASR")
                 continue
             _last_sent_text = text_lower
             _last_sent_time = now
 
-            if _waiting_for_command:
-                _waiting_for_command = False
-                log(f"asr: команда «{text}»", tag="ASR")
-                ipc.put(protocol.BRAIN_INBOX, protocol.command(text, source=CommandSource.VOICE))
-                continue
-
-            # Диалоговый режим (флаг brain свежий) — пропускаем без wake
-            if _session_open():
-                if text_lower in hot_words:
-                    if (now - _last_hot_word_at) < HOT_WORD_COOLDOWN_SEC:
-                        log(f"asr: [HOT] {text} — cooldown", tag="ASR")
-                        continue
-                    _last_hot_word_at = now
-                    log(f"asr: [HOT] {text} (диалог)", tag="ASR")
-                    ipc.put(protocol.BRAIN_INBOX, protocol.command(text, source=CommandSource.VOICE_HOT))
-                    continue
-                if text_lower in ("хватит", "достаточно", "стоп", "замолчи"):
-                    log(f"asr: [ДИАЛОГ] {text} → idle", tag="ASR")
-                    ipc.put(protocol.BRAIN_INBOX, protocol.command(text, source=CommandSource.VOICE_DIALOG))
-                    continue
-                if not _is_meaningful_dialog(text_lower, command_words):
-                    log(f"asr: [v] {text} (dialog-skip)", tag="ASR")
-                    continue
-                log(f"asr: [ДИАЛОГ] {text}", tag="ASR")
-                ipc.put(protocol.BRAIN_INBOX, protocol.command(text, source=CommandSource.VOICE_DIALOG))
-                continue
-
-            if text_lower in hot_words:
-                if (now - _last_hot_word_at) < HOT_WORD_COOLDOWN_SEC:
-                    log(f"asr: [HOT] {text} — cooldown", tag="ASR")
-                    continue
-                _last_hot_word_at = now
-                log(f"asr: [HOT] {text} (без wake)", tag="ASR")
-                ipc.put(protocol.BRAIN_INBOX, protocol.command(text, source=CommandSource.VOICE_HOT))
-                continue
-
+            # Vosk-wake: ищем «макс» в тексте
             wake, after = _find_wake_word(text)
             if wake:
                 if not _check_wake_cooldown():
-                    log("asr: wake слишком часто", tag="ASR")
-                    ipc.put(protocol.BRAIN_INBOX, protocol.event("wake_repeat", source="asr"))
+                    log("asr: wake cooldown — пропуск", tag="ASR")
                     if after:
-                        ipc.put(protocol.BRAIN_INBOX, protocol.command(after, source=CommandSource.VOICE))
+                        ipc.put(protocol.BRAIN_INBOX,
+                                protocol.command(after, source=CommandSource.VOICE))
                     continue
-
-                log(f"asr: [{wake.upper()}]", tag="ASR")
-
                 if after:
-                    log(f"asr: команда «{after}»", tag="ASR")
-                    ipc.put(protocol.BRAIN_INBOX, protocol.command(after, source=CommandSource.VOICE))
+                    # Слитно «макс включи киша» — команда уже есть, бип НЕ играет.
+                    log(f"asr: [{wake.upper()}] + команда «{after}» (без бипа)", tag="ASR")
+                    ipc.put(protocol.BRAIN_INBOX,
+                            protocol.command(after, source=CommandSource.VOICE))
                 else:
+                    # Только «макс» — бип, wake, ждём команду.
+                    play_beep()
+                    log(f"asr: [{wake.upper()}] (бип, ждём команду)", tag="ASR")
                     _waiting_for_command = True
-                    ipc.put(protocol.BRAIN_INBOX, protocol.event("wake", source="asr"))
+                    ipc.put(protocol.BRAIN_INBOX,
+                            protocol.event("wake", source="asr"))
                     threading.Thread(target=_wait_for_command_timeout, daemon=True).start()
                 continue
 
-            log(f"asr: [v] {text}", tag="ASR")
+            if _waiting_for_command:
+                _waiting_for_command = False
+                log(f"asr: команда «{text}»", tag="ASR")
+                ipc.put(protocol.BRAIN_INBOX,
+                        protocol.command(text, source=CommandSource.VOICE))
+                continue
+
+            if _session_open():
+                if text_lower in hot_words and _hot_word_appropriate(text_lower):
+                    if (now - _last_hot_word_at) < HOT_WORD_COOLDOWN_SEC:
+                        continue
+                    _last_hot_word_at = now
+                    ipc.put(protocol.BRAIN_INBOX,
+                            protocol.command(text, source=CommandSource.VOICE_HOT))
+                    continue
+                if text_lower in ("хватит", "достаточно", "стоп", "замолчи"):
+                    ipc.put(protocol.BRAIN_INBOX,
+                            protocol.command(text, source=CommandSource.VOICE_DIALOG))
+                    continue
+                if not _is_meaningful_dialog(text_lower, command_words):
+                    continue
+                ipc.put(protocol.BRAIN_INBOX,
+                        protocol.command(text, source=CommandSource.VOICE_DIALOG))
+                continue
+
+            if _is_music_playing():
+                if text_lower in hot_words and _hot_word_appropriate(text_lower):
+                    if (now - _last_hot_word_at) < HOT_WORD_COOLDOWN_SEC:
+                        continue
+                    _last_hot_word_at = now
+                    ipc.put(protocol.BRAIN_INBOX,
+                            protocol.command(text, source=CommandSource.VOICE_HOT))
+                    continue
+                continue
 
     except Exception as e:
         log(f"asr: ошибка микрофона: {e}", tag="ASR", level="ERROR")

@@ -2,17 +2,15 @@
 workers/music/main.py — Music worker.
 
 Принимает команды из music_inbox, выполняет.
-VLC реальный. Очередь, источники, скачивание — здесь.
 
-TTS-duck: TTS worker сам шлёт duck_on / duck_off в music_inbox.
-  duck_on  → music.duck() (pause)
-  duck_off → music.restore() (resume)
-
-Dislike: brain шлёт dislike → music.blacklist текущего трека + skip.
-  Трек убирается сразу, в автовыборе больше не появится.
-
-Защита от гонки: state.switching=True вокруг _handle_play / next / prev / dislike,
-чтобы monitor_player не дёргал play_next, пока идёт переключение.
+A2 (день 29):
+  - music_playing.flag — пишем при start (play_index), удаляем при
+    stop / pause / music_stopped. При старте удаляем залипший флаг
+    (музыка не играет после рестарта).
+  - _handle_play: перед play_index — music.stop() (старый трек СТОП,
+    не пауза). TTS уже был до (brain _dispatch). Музыка стартует после
+    TTS. Старый трек не возобновляется. TTS не поверх музыки.
+  - Убран music.hold_duck() из _handle_play (stop достаточно).
 """
 
 import sys
@@ -20,83 +18,107 @@ import threading
 
 from shared import ipc
 from shared import protocol
+from shared import config as cfg
 from shared.log import log
 
 from workers.music import state
 from workers.music.player import music
 
 
-# ── Обработчики команд ────────────────────────────────────────
+_MUSIC_PLAYING_FLAG = cfg.DATA_DIR / "music_playing.flag"
+
+
+def _set_music_playing():
+    try:
+        _MUSIC_PLAYING_FLAG.parent.mkdir(parents=True, exist_ok=True)
+        _MUSIC_PLAYING_FLAG.write_text(str(__import__("time").time()), encoding="utf-8")
+    except Exception as e:
+        log(f"music: set music_playing.flag: {e}", tag="MUSIC", level="WARN")
+
+
+def _clear_music_playing():
+    try:
+        if _MUSIC_PLAYING_FLAG.exists():
+            _MUSIC_PLAYING_FLAG.unlink()
+    except Exception as e:
+        log(f"music: clear music_playing.flag: {e}", tag="MUSIC", level="WARN")
+
+
+def _stop_old_track():
+    """A2: остановить старый трек перед новой командой play.
+
+    stop (не pause) — старый трек не возобновляется. _clear_music_playing —
+    флаг снят. TTS уже был до (brain _dispatch), музыка стартует после TTS.
+    """
+    try:
+        music.stop()
+        music.mark_user_paused()
+    except Exception as e:
+        log(f"music: _stop_old_track: {e}", tag="MUSIC", level="WARN")
+    with state.playlist_lock:
+        state.playlist.clear()
+        state.prefetched.clear()
+    with state.queued_lock:
+        state.queued_track_ids.clear()
+    state.playlist_index = 0
+    state.playlist_mode = None
+    _clear_music_playing()
+
+
 def _handle_play(name: str, data: dict):
     from workers.music import modes, radio, search, playback
 
-    music.hold_duck()
+    # A2: старый трек — СТОП (не пауза). TTS уже был до.
+    _stop_old_track()
 
     if name == "artist":
         artist_name = data.get("artist", "")
         if not artist_name:
-            music.release_duck()
             return
         artist = search.search_artist(artist_name)
         if not artist:
             log(f"music: артист «{artist_name}» не найден", tag="MUSIC", level="WARN")
-            music.release_duck()
             return
         from workers.music.aliases import remember_alias
         remember_alias(artist_name, artist.id, artist.name)
         if modes.start_artist_only(artist):
             playback.play_index(0)
-        else:
-            music.release_duck()
 
     elif name == "track":
         track_name = data.get("track", "")
         if not track_name:
-            music.release_duck()
             return
         track = search.search_track(track_name)
         if not track:
             log(f"music: трек «{track_name}» не найден", tag="MUSIC", level="WARN")
-            music.release_duck()
             return
         if modes.start_single_track(track):
             playback.play_index(0)
-        else:
-            music.release_duck()
 
     elif name == "genre":
         genre = data.get("genre", "")
         station = data.get("station", "")
         if not genre:
-            music.release_duck()
             return
         if not station:
             from workers.music._shared import GENRE_ALIASES
             station = GENRE_ALIASES.get(genre, f"genre:{genre}")
         if modes.start_genre(station, genre):
             playback.play_index(0)
-        else:
-            music.release_duck()
 
     elif name == "wave":
         language = data.get("language")
         if modes.queue_wave(language=language):
             playback.play_index(0)
-        else:
-            music.release_duck()
 
     elif name == "liked":
         if modes.queue_liked_tracks():
             playback.play_index(0)
-        else:
-            music.release_duck()
 
     elif name == "radio":
         station_key = data.get("station", "")
         if station_key and radio.start_radio(station_key):
             pass
-        else:
-            music.release_duck()
 
 
 def _handle_control(name: str, data: dict):
@@ -109,9 +131,11 @@ def _handle_control(name: str, data: dict):
     elif name == "pause":
         music.pause()
         music.mark_user_paused()
+        _clear_music_playing()
     elif name == "resume":
         music.resume()
         music.mark_user_paused()
+        _set_music_playing()
     elif name == "stop":
         music.stop()
         music.mark_user_paused()
@@ -122,6 +146,7 @@ def _handle_control(name: str, data: dict):
             state.queued_track_ids.clear()
         state.playlist_index = 0
         state.playlist_mode = None
+        _clear_music_playing()
         ipc.put(protocol.BRAIN_INBOX, protocol.event_music_stopped())
     elif name == "volume_up":
         music.adjust_volume(+10)
@@ -145,7 +170,6 @@ def _handle_control(name: str, data: dict):
             from memory import memory
             memory.blacklist_track(track_id, reason='user_dislike')
             log(f"music: blacklist {track_id} — «{title}»", tag="MUSIC")
-            # Пропустить трек сразу
             log(f"music: dislike → play_next", tag="MUSIC")
             playback.play_next(from_finish=False)
             log(f"music: dislike → play_next done", tag="MUSIC")
@@ -163,12 +187,18 @@ def _handle_control(name: str, data: dict):
         ipc.put(protocol.BRAIN_INBOX, protocol.event_now_playing(t_artist, t_title))
 
 
-# ── Главный цикл ──────────────────────────────────────────────
 def main():
     log("music: старт", tag="MUSIC")
     ipc.init()
 
-    # Яндекс
+    # A2: при старте флаг music_playing невалиден (музыка не играет).
+    try:
+        if _MUSIC_PLAYING_FLAG.exists():
+            _MUSIC_PLAYING_FLAG.unlink()
+            log("music: удалил залипший music_playing.flag", tag="MUSIC", level="WARN")
+    except Exception as e:
+        log(f"music: clear music_playing.flag: {e}", tag="MUSIC", level="WARN")
+
     from shared import yandex
     if yandex.init():
         state.client = yandex.get_client()
@@ -177,7 +207,6 @@ def main():
     else:
         log("music: Яндекс.Музыка НЕ подключена", tag="MUSIC", level="WARN")
 
-    # Monitor player (Ended → play_next)
     from workers.music.playback import monitor_player
     threading.Thread(target=monitor_player, daemon=True).start()
     log("music: monitor_player запущен", tag="MUSIC")
@@ -197,7 +226,6 @@ def main():
                 finally:
                     state.switching = False
             elif msg.type == "control":
-                # next / prev / dislike — под switching (создают плеер / skip)
                 if msg.name in ("next", "prev", "dislike"):
                     state.switching = True
                     try:

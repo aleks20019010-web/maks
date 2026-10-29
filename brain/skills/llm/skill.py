@@ -18,15 +18,9 @@
 #   _is_cancelled(gen) → положат NO_TTS → пропустятся. next_id идёт
 #   последовательно, НИКОГДА не рвётся.
 #
-#   Раньше: cancel_all() очищал _llm_queue и _tts_queue, и next_id в
-#   _tts_worker «зависал» на пропущенном номере. Следующий ответ ждал
-#   next_id, которого нет → очередь стояла.
-#
 # FIX 3: cancel_all() очищает историю диалога напрямую.
-#   Раньше: _session.get().close() → _history.get().clear().
-#   Теперь: _session.py удалён (мёртвый код — Session.open/is_active/
-#   should_close_by_text не вызывались). cancel_all() → _history.get().clear()
-#   напрямую. _in_dialog() — читает session_open.flag (как и раньше).
+#   _session.py удалён (мёртвый код). cancel_all() → _history.get().clear()
+#   напрямую. _in_dialog() — читает session_open.flag.
 #
 # ПРОВАЙДЕР:
 #   provider: {"sort": "latency"} — AITUNNEL выбирает провайдера с минимальной
@@ -42,7 +36,11 @@
 #   Раньше: если _respond_and_say("LLM_THINKING") или process_command
 #   бросали, _tts_queue.put((req_id, ...)) не выполнялся → tts_worker
 #   ждал next_id, которого нет → очередь стояла навсегда.
-#   Теперь: try/except вокруг тела, в except — _tts_queue.put((req_id, "NO_TTS")).
+#
+# A3 (день 29): в внешнем except — put СНАЧАЛА (в try/except), log ПОТОМ
+#   (в try/except). Раньше: log, потом put. Если log падал (диск полон,
+#   файл занят) — put не выполнялся, tts_worker зависал. Теперь: put
+#   первым, даже если log упадёт — tts_worker не зависнет.
 
 import queue
 import threading
@@ -288,7 +286,11 @@ def _llm_worker():
         # FIX (2026-10-27): внешний try/except вокруг тела.
         # Если _respond_and_say("LLM_THINKING") или process_command бросят —
         # _tts_queue.put((req_id, ...)) не выполнится, tts_worker ждёт next_id
-        # навсегда. Теперь: except → _tts_queue.put((req_id, "NO_TTS")).
+        # навсегда.
+        #
+        # A3 (день 29): put СНАЧАЛА (в try/except), log ПОТОМ (в try/except).
+        # Раньше: log, потом put. Если log падал (диск полон, файл занят) —
+        # put не выполнялся, tts_worker зависал.
         try:
             # Отмена до старта
             if _is_cancelled(gen):
@@ -381,8 +383,16 @@ def _llm_worker():
             _tts_queue.put((req_id, "NOT_UNDERSTOOD"))
 
         except Exception as e:
-            log(f"llm: worker crash req={req_id}: {e}", tag="BRAIN", level="ERROR")
-            _tts_queue.put((req_id, "NO_TTS"))
+            # A3: put СНАЧАЛА (в try/except), log ПОТОМ (в try/except).
+            # Если log упадёт (диск полон, файл занят) — tts_worker не зависнет.
+            try:
+                _tts_queue.put((req_id, "NO_TTS"))
+            except Exception:
+                pass
+            try:
+                log(f"llm: worker crash req={req_id}: {e}", tag="BRAIN", level="ERROR")
+            except Exception:
+                pass
 
 
 def _tts_worker():

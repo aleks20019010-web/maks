@@ -5,13 +5,20 @@ brain/pending.py — менеджер ожиданий.
 Если ответа нет — таймаут → callback.
 
 wait_tts=True — таймер стартует ТОЛЬКО когда TTS замолчал.
-                Это нужно для вопросов: TTS говорит 2-3 сек, микрофон
-                выключен ещё 2 сек. Таймер должен идти ПОСЛЕ этого.
+
+A2 (день 29): expecting_input.flag — пишем при set(), удаляем при pop()/cancel_all().
+ASR читает флаг: если pending есть — hot words («да», «нет») пропускаются
+как ответ на вопрос, а не как музыкальная команда.
 """
 
 import threading
 import time
 from typing import Callable, Optional
+
+from shared import config as cfg
+
+
+EXPECTING_FLAG = cfg.DATA_DIR / "expecting_input.flag"
 
 
 def _tts_speaking() -> bool:
@@ -20,6 +27,22 @@ def _tts_speaking() -> bool:
         return bool(get_state().get("speaking", False))
     except Exception:
         return False
+
+
+def _write_expecting_flag():
+    try:
+        EXPECTING_FLAG.parent.mkdir(parents=True, exist_ok=True)
+        EXPECTING_FLAG.write_text(str(time.time()), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def _clear_expecting_flag():
+    try:
+        if EXPECTING_FLAG.exists():
+            EXPECTING_FLAG.unlink()
+    except Exception:
+        pass
 
 
 class Pending:
@@ -44,8 +67,6 @@ class Pending:
             self._start_timer()
 
     def _wait_tts_then_start(self) -> None:
-        """Ждать, пока TTS замолчит, потом стартовать таймер."""
-        # Ждём, пока TTS начнёт говорить (максимум 2 сек)
         deadline = time.time() + 2.0
         while time.time() < deadline:
             if self._cancelled:
@@ -54,7 +75,6 @@ class Pending:
                 break
             time.sleep(0.1)
 
-        # Ждём, пока TTS закончит (максимум 30 сек)
         deadline = time.time() + 30.0
         while time.time() < deadline:
             if self._cancelled:
@@ -63,7 +83,6 @@ class Pending:
                 break
             time.sleep(0.1)
 
-        # TTS замолчал — стартуем таймер
         if self._cancelled:
             return
         self._start_timer()
@@ -105,6 +124,7 @@ class PendingManager:
             p = Pending(key, timeout, on_timeout, data, wait_tts)
             p.start()
             self._pending[key] = p
+            _write_expecting_flag()
 
     def get(self, key: str) -> Optional[Pending]:
         with self._lock:
@@ -115,6 +135,8 @@ class PendingManager:
             p = self._pending.pop(key, None)
             if p:
                 p.cancel()
+            if not self._pending:
+                _clear_expecting_flag()
             return p
 
     def cancel(self, key: str) -> bool:
@@ -126,6 +148,7 @@ class PendingManager:
             for p in self._pending.values():
                 p.cancel()
             self._pending.clear()
+            _clear_expecting_flag()
 
 
 _manager = PendingManager()

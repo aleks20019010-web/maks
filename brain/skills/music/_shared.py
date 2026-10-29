@@ -1,10 +1,5 @@
 # brain/skills/music/_shared.py
-# FIX (день 28, аудит 6.1): тонкая обёртка над shared/music_words.py.
-# Раньше был дубль workers/music/_shared.py, они разъехались.
-# Теперь один источник правды — shared/music_words.py.
-#
-# Реэкспорт: чтобы `from brain.skills.music._shared import STOP_WORDS`
-# продолжало работать без правок в classify.py, skill.py.
+# A2: + REFUSAL_WORDS.
 
 from shared.music_words import (
     STOP_WORDS,
@@ -15,6 +10,9 @@ from shared.music_words import (
     TRACK_HINTS,
     GENRE_ALIASES,
     GENRE_TAGS_MAP,
+    VOLUME_PATTERNS,
+    NUMBER_WORDS,
+    REFUSAL_WORDS,
     _strip_stop_prefix,
     _clean_filename,
 )
@@ -28,6 +26,9 @@ __all__ = [
     'TRACK_HINTS',
     'GENRE_ALIASES',
     'GENRE_TAGS_MAP',
+    'VOLUME_PATTERNS',
+    'NUMBER_WORDS',
+    'REFUSAL_WORDS',
     '_strip_stop_prefix',
     '_clean_filename',
 ]

@@ -973,5 +973,125 @@
       "emotion": "good",
       "slot": "core"
     }
+  ],
+  "WEATHER_TOMORROW_WARM_CLEAR": [
+    {"text": "Завтра днём {temp} градусов, ясно. {wind}", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp}, солнце. {wind}", "style": "friendly", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра днём ясно, {temp} градусов. Хороший день", "style": "friendly", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp}, ясно. {advice}", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"}
+  ],
+  "WEATHER_TOMORROW_WARM_CLOUDY": [
+    {"text": "Завтра днём {temp} градусов, облачно. {wind}", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp}, пасмурно. Но тепло", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра облачно, {temp} градусов. Дождя нет", "style": "friendly", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp}, облачно. {wind}", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"}
+  ],
+  "WEATHER_TOMORROW_COLD_CLEAR": [
+    {"text": "Завтра днём {temp} градусов, ясно. Морозно", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp}, солнце. Но холодно", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра ясно, {temp} градусов. Одевайтесь теплее", "style": "friendly", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp}, ясно. {wind}", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"}
+  ],
+  "WEATHER_TOMORROW_COLD_CLOUDY": [
+    {"text": "Завтра днём {temp} градусов, облачно. Пасмурно", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp}, облачно. Серо, но сухо", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра пасмурно, {temp} градусов. Дождя нет", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp}, облачно. {wind}", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"}
+  ],
+  "WEATHER_TOMORROW_SNOW": [
+    {"text": "Завтра днём {temp} градусов, снег. {advice}", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp}, снег. Зимняя сказка", "style": "friendly", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра снегопад, {temp} градусов. Осторожно на дорогах", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp}, снег. {advice}", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"}
+  ],
+  "WEATHER_TOMORROW_WARM_SNOW": [
+    {"text": "Завтра днём {temp} градусов, снег. Неожиданно", "style": "ironic", "humor": 0.3, "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp}, снег. Природа шутит", "style": "ironic", "humor": 0.3, "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Завтра снег, {temp} градусов. {advice}", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp}, снег. Так бывает", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"}
+  ],
+  "WEATHER_TOMORROW_RAIN": [
+    {"text": "Завтра днём {temp} градусов, дождь. {advice}", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp}, дождь. Зонт не забудьте", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра дождь, {temp} градусов. {advice}", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp}, дождь. {wind}", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"}
+  ],
+  "WEATHER_TOMORROW_COLD_RAIN": [
+    {"text": "Завтра днём {temp} градусов, дождь. {advice}", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp}, дождь. Промокнете", "style": "friendly", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра льёт, {temp} градусов. {advice}", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp}, дождь. Зонт обязателен", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"}
+  ],
+  "WEATHER_TOMORROW_DRIZZLE": [
+    {"text": "Завтра днём {temp} градусов, мелкий дождь. {advice}", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp}, моросящий. {advice}", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра крапает, {temp} градусов. {advice}", "style": "friendly", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp}, мелкий дождь. {wind}", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"}
+  ],
+  "WEATHER_TOMORROW_HEAVY_RAIN": [
+    {"text": "Завтра днём {temp} градусов, ливень. Лучше переждать", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp}, ливень. Зонт не спасёт", "style": "ironic", "humor": 0.3, "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра льёт как из ведра. {temp} градусов", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp}, ливень. {advice}", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"}
+  ],
+  "WEATHER_TOMORROW_STORM": [
+    {"text": "Завтра днём {temp} градусов, гроза. Лучше дома", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp}, гроза. Зонт не спасёт", "style": "ironic", "humor": 0.3, "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра гроза, {temp} градусов. Не выходите", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp}, гроза. Переждите", "style": "friendly", "weight": 1.5, "emotion": "good", "slot": "core"}
+  ],
+  "WEATHER_TOMORROW_FOG": [
+    {"text": "Завтра днём {temp} градусов, туман. Осторожно на дороге", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp}, туман. Видимость плохая", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра туман, {temp} градусов. Будьте осторожны", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp}, туман. {wind}", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"}
+  ],
+  "WEATHER_TOMORROW_ICE": [
+    {"text": "Завтра днём {temp} градусов, гололёд. {advice}", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp}, гололёд. Осторожно на дороге", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра скользко, {temp} градусов. Не выходите без надобности", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp}, гололёд. {wind}", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"}
+  ],
+  "WEATHER_TOMORROW_HAIL": [
+    {"text": "Завтра днём {temp} градусов, град. Не выходите", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp}, град. Осторожно", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра град, {temp} градусов. Лучше переждать", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp}, град. Плохая идея выходить", "style": "friendly", "weight": 1.5, "emotion": "good", "slot": "core"}
+  ],
+  "WEATHER_TOMORROW_SLEET": [
+    {"text": "Завтра днём {temp} градусов, дождь со снегом. {advice}", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp}, дождь со снегом. Осторожно, скользко", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра мокрый снег, {temp} градусов. {advice}", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp}, дождь со снегом. {wind}", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"}
+  ],
+  "WEATHER_TOMORROW_WINDY": [
+    {"text": "Завтра днём {temp} градусов, сильный ветер. {advice}", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp}, ветер. Продует насквозь", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра ветрено, {temp} градусов. Одежда плотнее", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp}, сильный ветер. Шапка", "style": "friendly", "weight": 1.5, "emotion": "good", "slot": "core"}
+  ],
+  "WEATHER_TOMORROW_HOT": [
+    {"text": "Завтра днём {temp} градусов. Жарко. {advice}", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp}, пекло. {advice}", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра жара, {temp} градусов. Тень", "style": "friendly", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp}, солнце. Осторожно, перегрев", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"}
+  ],
+  "WEATHER_TOMORROW_RAIN_WIND": [
+    {"text": "Завтра днём {temp} градусов, дождь и ветер. {advice}", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp}, дождь с ветром. Зонт может не помочь", "style": "ironic", "humor": 0.3, "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра дождь и сильный ветер. {temp} градусов. Осторожно", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp}, дождь, ветер. {advice}", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"}
+  ],
+  "WEATHER_TOMORROW_SNOW_WIND": [
+    {"text": "Завтра днём {temp} градусов, снег и ветер. {advice}", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp}, метель. Осторожно на дорогах", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра снег и сильный ветер. {temp} градусов. Одежда плотнее", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp}, метель. Не выходите", "style": "friendly", "weight": 1.5, "emotion": "good", "slot": "core"}
+  ],
+  "WEATHER_TOMORROW_DEFAULT": [
+    {"text": "Завтра днём {temp} градусов, {sky}. {wind}", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp}, {sky}. {wind}", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp} градусов. {sky}", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp}, {sky}. {advice}", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"}
   ]
 }
