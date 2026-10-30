@@ -1,17 +1,22 @@
 # brain/skills/music/classify.py
 # Классификация музыкальной команды.
-# Только понимание: артист / трек / жанр / волна / лайки / радио / dislike.
+# Только понимание: артист / трек / жанр / волна / лайки / радио / dislike / mood.
 # Без поиска, без скачивания, без VLC.
 #
 # A2 (день 29): REFUSAL_WORDS — если фраза отказ («нет», «не надо»),
 # classify() возвращает None. Иначе «нет» в ответ на «Включить потише?»
 # классифицировался бы как play_wave (short query → artist).
+#
+# MOOD (новое): resolve_mood(q) из shared.music_words — ДО play_artist.
+#   «включи бодрая» → play_mood("Энергичное"), а не play_artist("бодрая").
+#   resolve_mood общий с entity/music.py — mood-знание одно, не дублируется.
 
 from brain.skills.music._shared import (
     STOP_WORDS, PLAY_TRIGGERS, NOISE_WORDS, GENRE_ALIASES,
     ARTIST_HINTS, TRACK_HINTS, REFUSAL_WORDS,
     _strip_stop_prefix,
 )
+from shared.music_words import resolve_mood
 
 SHORT_QUERY_WORDS = 2
 
@@ -93,6 +98,12 @@ def classify(command: str) -> dict | None:
             "station": GENRE_ALIASES[q],
         }
 
+    # MOOD: «бодрая» → «Энергичное», «бодрое» → «Энергичное».
+    # ДО play_artist, чтобы «включи бодрая» не ушло в артиста.
+    mood = resolve_mood(q)
+    if mood:
+        return {"action": "play_mood", "mood": mood}
+
     if any(w in t for w in PLAY_TRIGGERS) or _is_short_query(t):
         q2 = command
         for word in PLAY_TRIGGERS:
@@ -103,6 +114,11 @@ def classify(command: str) -> dict | None:
         q2 = " ".join(q2.split()).strip()
         if not q2:
             return None
+
+        # MOOD ещё раз — после _detect_intent (на случай «бодрая» в q2)
+        mood2 = resolve_mood(q2)
+        if mood2:
+            return {"action": "play_mood", "mood": mood2}
 
         if force_artist:
             return {"action": "play_artist", "artist": q2}

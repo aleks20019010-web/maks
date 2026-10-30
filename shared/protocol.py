@@ -73,6 +73,15 @@ def play_genre(genre: str, station: str = "", **kw) -> Message:
     return Message(type="play", name="genre", data={"genre": genre, "station": station, **kw})
 
 
+def play_mood(mood_tag: str, **kw) -> Message:
+    """Включить настроение. mood_tag — tag метатега («Энергичное»).
+
+    Music worker: client.metatag(mood_tag) → station_id (mood:energetic) →
+    запуск станции Яндекса (см. workers/music/main.py::_handle_play, name="mood").
+    """
+    return Message(type="play", name="mood", data={"mood": mood_tag, **kw})
+
+
 def play_wave(language: str | None = None, **kw) -> Message:
     """Включить «Мою волну». language='russian' — русская волна."""
     return Message(type="play", name="wave", data={"language": language, **kw})

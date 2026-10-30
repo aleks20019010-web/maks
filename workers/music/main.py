@@ -11,6 +11,16 @@ A2 (день 29):
     не пауза). TTS уже был до (brain _dispatch). Музыка стартует после
     TTS. Старый трек не возобновляется. TTS не поверх музыки.
   - Убран music.hold_duck() из _handle_play (stop достаточно).
+
+MOOD (новое):
+  - _handle_play(name="mood") → client.metatag(mood_tag) → station_id
+    (mood:energetic) → modes.start_genre(station_id, mood_tag).
+  - modes.start_genre уже умеет играть любую станцию по station_id
+    (внутри — refill_one → rotor_station_tracks). Название «genre» —
+    историческое, но работает и для mood.
+  - НЕ используем client.station() — такого метода нет в yandex-music.
+  - НЕ используем radio.start_radio() — он для живых потоков из
+    radio_stations.json, а mood-станция — не поток.
 """
 
 import sys
@@ -65,6 +75,55 @@ def _stop_old_track():
     _clear_music_playing()
 
 
+def _play_mood(mood_tag: str):
+    """Запустить станцию по настроению.
+
+    mood_tag — tag метатега («Энергичное»).
+    1. client.metatag(mood_tag) → station_id (mood:energetic).
+    2. modes.start_genre(station_id, mood_tag) — он уже умеет играть
+       любую станцию по station_id (через refill_one → rotor_station_tracks).
+    3. playback.play_index(0) — запустить первый трек.
+    """
+    from shared import yandex
+    from workers.music import modes, playback
+
+    client = yandex.get_client()
+    if client is None:
+        log(f"music: play_mood({mood_tag}) — нет клиента Яндекса", tag="MUSIC", level="WARN")
+        return
+
+    try:
+        mt = client.metatag(mood_tag)
+    except Exception as e:
+        log(f"music: play_mood({mood_tag}) metatag error: {e}", tag="MUSIC", level="WARN")
+        return
+
+    station_id = getattr(mt, "station_id", None)
+    if not station_id:
+        # Fallback: первый плейлист из метатега (пока только лог — modes
+        # не умеет играть плейлисты по id, если не добавим отдельно).
+        playlists = getattr(mt, "playlists", []) or []
+        if playlists:
+            log(
+                f"music: play_mood({mood_tag}) — нет station_id, "
+                f"есть плейлист «{playlists[0].title}», но modes не умеет play_playlist",
+                tag="MUSIC", level="WARN",
+            )
+        else:
+            log(f"music: play_mood({mood_tag}) — нет station_id и плейлистов", tag="MUSIC", level="WARN")
+        return
+
+    # modes.start_genre(station_id, name) — играет любую станцию по station_id.
+    if modes.start_genre(station_id, mood_tag):
+        playback.play_index(0)
+        log(f"music: play_mood({mood_tag}) → start_genre({station_id})", tag="MUSIC")
+    else:
+        log(
+            f"music: play_mood({mood_tag}) — start_genre({station_id}) не сработал",
+            tag="MUSIC", level="WARN",
+        )
+
+
 def _handle_play(name: str, data: dict):
     from workers.music import modes, radio, search, playback
 
@@ -105,6 +164,12 @@ def _handle_play(name: str, data: dict):
             station = GENRE_ALIASES.get(genre, f"genre:{genre}")
         if modes.start_genre(station, genre):
             playback.play_index(0)
+
+    elif name == "mood":
+        mood_tag = data.get("mood", "")
+        if not mood_tag:
+            return
+        _play_mood(mood_tag)
 
     elif name == "wave":
         language = data.get("language")

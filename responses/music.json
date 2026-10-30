@@ -1,4 +1,18 @@
 {
+  "PLAY_MOOD": [
+    {"text": "Включ+аю {mood}", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Ок, sil<[150]> {mood}", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Настр+оение — {mood}. Прин+ято", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Уж+е включ+аю {mood}", "style": "normal", "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "{mood}? sil<[150]> Ну хорош+о", "style": "ironic", "humor": 0.3, "weight": 0.8, "emotion": "good", "slot": "core"},
+    {"text": "Как пожел+аете. {mood}", "style": "normal", "humor": 0.1, "weight": 1.2, "emotion": "good", "slot": "core"},
+    {"text": "Серьёзно? sil<[150]> Ладно, {mood}", "style": "ironic", "humor": 0.4, "rate": "+5%", "pitch": "-12Hz", "weight": 0.6, "emotion": "good", "slot": "core"},
+    {"text": "А я д+умал, вы уж+е в+ыросли из +этого. sil<[150]> Включ+аю {mood}", "style": "sarcastic", "humor": 0.5, "rate": "-8%", "pitch": "-12Hz", "weight": 0.4, "emotion": "good", "slot": "core"},
+    {"text": "Включ+аю {mood}. sil<[150]> Т+ихо", "style": "night", "night": true, "rate": "-12%", "pitch": "-12Hz", "weight": 1.0, "emotion": "neutral", "slot": "core"},
+    {"text": "Прин+ято. {mood}", "style": "formal", "weight": 1.2, "emotion": "neutral", "slot": "core"},
+    {"text": "Организ+ую {mood}", "style": "formal", "weight": 1.0, "emotion": "neutral", "slot": "core"},
+    {"text": "Сейч+ас начн+ём. {mood}", "style": "normal", "weight": 1.0, "emotion": "good", "slot": "core"}
+],
   "PLAY_ARTIST": [
     {"text": "Включ+аю {artist}", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
     {"text": "Уж+е играет", "style": "normal", "weight": 1.0, "emotion": "good", "slot": "core"},

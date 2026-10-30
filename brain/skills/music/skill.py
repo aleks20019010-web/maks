@@ -9,9 +9,19 @@
 #   (может, именно завтра захочешь спокойное).
 #
 # A2: TTS ДО play_index, с каноничным именем из алиаса. Один TTS.
+#
+# MOOD (новое): action="play_mood" → protocol.play_mood(mood_tag).
+#   mood_tag — tag метатега («Энергичное»). Воркер музыки делает
+#   client.metatag(tag) → station_id (mood:energetic) → start_genre.
+#
+# ЭТАП 9 (C, часть 1): handle принимает Command | str.
+#   - Command (NLU-путь): диспатч по command.action, classify НЕ зовём.
+#     Entity уже извлечён и сматчен — повторный парсинг не нужен.
+#   - str (fast-path): classify(text) → _dispatch, как раньше.
+#   router._execute_decision передаёт Command для music, str для остальных.
+#   Переходный период: controls/weather/cleanup/smalltalk — пока на str.
 
 import json
-import time
 
 from brain.skills.base import Skill, register
 from brain.skills._helpers import respond_and_say as _respond_and_say
@@ -50,30 +60,6 @@ def _resolve_alias_name(query: str) -> str | None:
     return None
 
 
-def _get_artist_weight(artist: str) -> float:
-    try:
-        from memory import memory
-        return float(memory.get_artist_weight(artist) or 0.0)
-    except Exception:
-        return 0.0
-
-
-def _get_track_weight_by_title(title: str) -> float:
-    try:
-        from memory import memory
-        return float(memory.get_track_weight(title) or 0.0)
-    except Exception:
-        return 0.0
-
-
-def _plays_artist_today(artist: str) -> int:
-    try:
-        from memory import memory
-        return int(memory.plays_artist_today(artist) or 0)
-    except Exception:
-        return 0
-
-
 class MusicSkill(Skill):
     name = "music"
     priority = 40
@@ -85,7 +71,33 @@ class MusicSkill(Skill):
             return False
         return classify(text) is not None
 
-    def handle(self, text: str) -> str | None:
+    def handle(self, text_or_command) -> str | None:
+        """Handle Command (NLU-путь) или str (fast-path).
+
+        Command → диспатч по command.action, classify НЕ зовём.
+        str     → classify(text) → _dispatch, как раньше.
+        """
+        # ── NLU-путь: Command ──────────────────────────────
+        from brain.nlu.types import Command
+        if isinstance(text_or_command, Command):
+            command = text_or_command
+            action = command.action
+            if not action:
+                log("music: Command без action — пропуск", tag="BRAIN", level="WARN")
+                return None
+            result = self._command_to_result(command, action)
+            if result is None:
+                log(f"music: Command action={action} — не удалось собрать result",
+                    tag="BRAIN", level="WARN")
+                return None
+            log(f"music: {action} ← Command «{command.original_text}»", tag="BRAIN")
+            self._dispatch(action, result)
+            return None
+
+        # ── fast-path: str ─────────────────────────────────
+        text = text_or_command
+        if not text:
+            return None
         result = classify(text)
         if result is None:
             return None
@@ -100,6 +112,53 @@ class MusicSkill(Skill):
         self._dispatch(action, result)
         return None
 
+    def _command_to_result(self, command, action: str) -> dict | None:
+        """Command → dict для _dispatch. По action и entity.
+
+        play_artist  → {"artist": entity.value}
+        play_track   → {"track": entity.value}
+        play_genre   → {"genre": entity.value, "station": ""}  (station — из GENRE_ALIASES)
+        play_mood    → {"mood": entity.value}
+        play_wave    → {"action": "play_wave", "language": None}
+        play_liked   → {"action": "play_liked"}
+        play_radio   → {"station": entity.value}  (если radio-entity)
+        """
+        result: dict = {"action": action}
+        ent = getattr(command, "entity", None)
+
+        if action == "play_wave":
+            result["language"] = None
+            return result
+        if action == "play_liked":
+            return result
+
+        if ent is None or not ent.value:
+            return None
+
+        if action == "play_artist":
+            result["artist"] = ent.value
+            return result
+        if action == "play_track":
+            result["track"] = ent.value
+            return result
+        if action == "play_mood":
+            result["mood"] = ent.value
+            return result
+        if action == "play_genre":
+            result["genre"] = ent.value
+            # station — из GENRE_ALIASES (как в classify)
+            try:
+                from workers.music._shared import GENRE_ALIASES
+                result["station"] = GENRE_ALIASES.get(ent.value, f"genre:{ent.value}")
+            except Exception:
+                result["station"] = f"genre:{ent.value}"
+            return result
+        if action == "play_radio":
+            result["station"] = ent.value
+            return result
+
+        return None
+
     def _try_ask(self) -> bool:
         """Спросить про погоду (утром, один раз в день) или вчерашнее.
 
@@ -107,7 +166,6 @@ class MusicSkill(Skill):
         Если спросили (да/нет/timeout) — mark_asked_today, больше сегодня
         не спрашиваем. Завтра — новый день, снова спросит.
         """
-        # 1. Погода — только утром, один раз в день
         bucket = time_bucket()
         if bucket == "morning":
             try:
@@ -133,7 +191,6 @@ class MusicSkill(Skill):
                     relationship.mark_asked_today(asked_key)
                     return True
 
-        # 2. Вчерашнее — при каждом play_wave (если есть кому предложить)
         recent = relationship.get_recent_prompt()
         if recent:
             self._ask("MUSIC_ASK_RECENT", kind="recent",
@@ -181,6 +238,14 @@ class MusicSkill(Skill):
             station = result.get("station", "")
             _respond_and_say("PLAY_GENRE", genre=genre)
             ipc.put(protocol.MUSIC_INBOX, protocol.play_genre(genre, station=station))
+
+        elif action == "play_mood":
+            # MOOD: «Энергичное» → protocol.play_mood(mood_tag).
+            # Воркер: client.metatag(tag) → station_id (mood:energetic) →
+            # modes.start_genre(station_id, mood_tag).
+            mood_tag = result["mood"]
+            _respond_and_say("PLAY_MOOD", mood=mood_tag)
+            ipc.put(protocol.MUSIC_INBOX, protocol.play_mood(mood_tag))
 
         elif action == "play_wave":
             language = result.get("language")

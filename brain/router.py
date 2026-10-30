@@ -2,18 +2,25 @@
 # Роутер команд: выбирает навык по тексту и вызывает его.
 #
 # ВНЕ ДИАЛОГА (CommandSource.VOICE, VOICE_HOT, SYSTEM):
-#   reminders → pending → skills → semantic → LLM → NOT_UNDERSTOOD
+#   reminders → pending → fast/skills → NLU pipeline → LLM → NOT_UNDERSTOOD
 #   Router решает первым.
 #
 # В ДИАЛОГЕ (CommandSource.VOICE_DIALOG):
 #   smalltalk → LLM → (LLM вернёт command → process_command → router)
 #   Router обрабатывает только smalltalk. Всё остальное — LLM.
 #
-# B4 (день 30): semantic-router — быстрый слой перед LLM.
-#   Если skills_base.find_handler вернул None, спрашиваем semantic.route.
-#   Если semantic уверен (confidence > threshold) — вызываем скил по имени.
-#   Иначе — LLM (как сейчас). Semantic-router решает только «это про музыку /
-#   погоду / ...». Что именно (артист, жанр, радио) — classify.py в MusicSkill.
+# FIX (NLU v2): NLU-блок заменён на brain/nlu/pipeline.process().
+#   Раньше router звал nlu_intent.resolve() и _INTENT_TO_SKILL.get() →
+#   skills_base.find_by_name(). Это была «половинчатая» интеграция:
+#   intent был, entity/decision — нет. Теперь:
+#     decision = pipeline.process(command, context=nlu_context)
+#   router исполняет decision.action:
+#     EXECUTE  → skills_base.find_by_name(command.skill_name).handle(original_text)
+#     CLARIFY  → respond_and_say(decision.clarify.phrase_set, **kwargs)
+#     FALLBACK → LLM (как раньше) → NOT_UNDERSTOOD
+#
+#   _INTENT_TO_SKILL переехал в brain/nlu/skill_resolver.py (этап 4).
+#   router больше не знает соответствие intent → skill_name.
 #
 # FIX: CommandSource enum вместо magic strings "voice"/"voice_dialog".
 # FIX (день 28, 5.15): _fmt_due/_strip_reminder_trigger/_REMINDER_TRIGGERS
@@ -29,6 +36,9 @@ from brain.skills._helpers import respond_and_say as _respond_and_say
 from brain import pending
 from brain import relationship
 from brain import datetime_parser
+from brain.nlu import context as nlu_context_mod
+from brain.nlu import pipeline as nlu_pipeline
+from brain.nlu.types import DecisionAction
 from shared import ipc
 from shared import protocol
 from shared import metrics
@@ -141,9 +151,10 @@ def process_command(command: str, source: CommandSource = CommandSource.VOICE):
             _repeat_count = 0
         return None
 
+    # ── FAST: find_handler (skills) ──
     handler = skills_base.find_handler(command)
     if handler:
-        log(f"router: → {handler.name}", tag="BRAIN")
+        log(f"router: → {handler.name} (fast)", tag="BRAIN")
         try:
             handler.handle(command)
         except Exception as e:
@@ -151,20 +162,24 @@ def process_command(command: str, source: CommandSource = CommandSource.VOICE):
             handle_error(e, context=f"skill:{handler.name}", speak=True)
         return None
 
-    # ── B4: semantic-router — быстрый слой перед LLM ──
-    # skills_base.find_handler вернул None. Спрашиваем semantic.
-    # Если уверен — вызываем скил по имени. Иначе — LLM (как сейчас).
+    # ── NLU PIPELINE ──
+    # find_handler вернул None. Зовём pipeline.process.
+    # pipeline: normalizer → context? → intent → skill_resolver →
+    #           entity → decision → Decision
+    # router исполняет decision.action.
+    #
+    # FIX (NLU v2): раньше здесь был «половинчатый» NLU: intent.resolve +
+    # _INTENT_TO_SKILL + find_by_name. Теперь — pipeline.process, который
+    # делает всё: intent, entity, decision. router не знает про _INTENT_TO_SKILL.
     try:
-        from brain import semantic
-        semantic_name = semantic.route(command)
-        if semantic_name:
-            handler = semantic.get_handler(semantic_name)
-            if handler:
-                log(f"router: semantic → {semantic_name}", tag="BRAIN")
-                handler.handle(command)
+        nlu_ctx = nlu_context_mod.get()
+        decision = nlu_pipeline.process(command, context=nlu_ctx)
+        if decision is not None:
+            handled = _execute_decision(decision, command, source)
+            if handled:
                 return None
     except Exception as e:
-        log(f"router: semantic error: {e}", tag="BRAIN", level="WARN")
+        log(f"router: NLU pipeline error: {e}", tag="BRAIN", level="WARN")
 
     log(f"router: не понял «{command}»", tag="BRAIN")
     metrics.inc("not_understood")
@@ -180,6 +195,57 @@ def process_command(command: str, source: CommandSource = CommandSource.VOICE):
     else:
         _respond_and_say('NOT_UNDERSTOOD')
     return None
+
+
+# ── NLU: исполнение Decision ─────────────────────────────────
+def _execute_decision(decision, command: str, source: CommandSource) -> bool:
+    """Исполнить Decision из pipeline. True — обработали, False — нет.
+
+    EXECUTE  → skill.handle(command) (пока original_text; этап 9 — Command)
+    CLARIFY  → respond_and_say(clarify.phrase_set, **clarify.kwargs)
+    FALLBACK → False (router пойдёт в LLM / NOT_UNDERSTOOD)
+    """
+    action = decision.action
+
+    if action == DecisionAction.EXECUTE:
+        skill_name = decision.command.skill_name
+        if not skill_name:
+            log("router: EXECUTE без skill_name", tag="BRAIN", level="WARN")
+            return False
+        skill = skills_base.find_by_name(skill_name)
+        if skill is None:
+            log(f"router: EXECUTE — скил {skill_name} не найден",
+                tag="BRAIN", level="WARN")
+            return False
+        log(f"router: NLU → {decision.command.intent.value} → "
+            f"{skill_name}.{decision.command.action or 'handle'} "
+            f"(conf={decision.confidence:.2f})", tag="BRAIN")
+        try:
+            # TODO(этап 9): скил должен принимать Command, не текст.
+            # Пока — original_text. MusicSkill.classify() внутри даст тот же
+            # результат, что decision/music.py. Дублирование временное.
+            skill.handle(command)
+        except Exception as e:
+            from brain.errors import handle_error
+            handle_error(e, context=f"skill:{skill_name}", speak=True)
+        return True
+
+    if action == DecisionAction.CLARIFY:
+        clarify = decision.clarify
+        if clarify is None:
+            log("router: CLARIFY без clarify", tag="BRAIN", level="WARN")
+            return False
+        log(f"router: NLU → CLARIFY {clarify.phrase_set} "
+            f"(reason={clarify.reason})", tag="BRAIN")
+        try:
+            _respond_and_say(clarify.phrase_set, **clarify.kwargs)
+        except Exception as e:
+            log(f"router: CLARIFY respond_and_say: {e}", tag="BRAIN", level="WARN")
+            _respond_and_say("NOT_UNDERSTOOD")
+        return True
+
+    # FALLBACK — router сам решит (LLM / NOT_UNDERSTOOD).
+    return False
 
 
 # ── LLM fallback ─────────────────────────────────────────────
@@ -412,31 +478,31 @@ def _decline_pending(data: dict):
 
 # ── "давай" ───────────────────────────────────────────────────
 def _extract_davai(text: str):
+    """Отделить «давай» от остального. (да, «давай рок» → True, «рок»)."""
     t = text.strip()
-    for prefix in ("давай-ка ", "давай же ", "давай "):
+    for prefix in ("давай ", "давай, ", "давай-ка ", "ну давай "):
         if t.startswith(prefix):
             return True, t[len(prefix):].strip()
-    if t == "давай" or t == "давай-ка":
+    if t in ("давай", "давай,", "ну давай"):
         return True, ""
-    return False, t
+    return False, text
 
 
-# ── Анти-повтор ───────────────────────────────────────────────
+# ── повтор ───────────────────────────────────────────────────
 def _check_repeat(command: str) -> bool:
+    """Пользователь повторяет ту же команду 3+ раз подряд?"""
     global _repeat_count, _last_command, _last_command_time
-    cmd_lower = command.lower().strip()
-    if cmd_lower in NO_REPEAT_COMMANDS:
-        with _repeat_lock:
-            _repeat_count = 0
-            _last_command = cmd_lower
-            _last_command_time = time.time()
+
+    cmd = command.lower().strip()
+    if cmd in NO_REPEAT_COMMANDS:
         return False
+
+    now = time.time()
     with _repeat_lock:
-        now = time.time()
-        if command == _last_command and now - _last_command_time < 10:
+        if cmd == _last_command and (now - _last_command_time) < 30.0:
             _repeat_count += 1
         else:
-            _repeat_count = 0
-        _last_command = command
+            _repeat_count = 1
+            _last_command = cmd
         _last_command_time = now
-        return _repeat_count >= 2
+        return _repeat_count >= 3
