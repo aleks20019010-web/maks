@@ -53,3 +53,5 @@ merge_code.py
 Thumbs.db
 .DS_Store
 config/aliases.json
+full_project_code_*.txt
+data/intent_router.json
