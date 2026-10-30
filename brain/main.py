@@ -25,10 +25,20 @@ FIX (день 28, аудит 1.1): при result == "exit" пишем data/brain
   перезапускал brain. Команда «выход» не останавливала Макса.
 
 FIX (день 28): _time_bucket и _ritual_for_bucket переехали в shared/time_bucket.py.
+
+WARMUP (новое): NLU warmup в фоне при старте.
+  Раньше первая команда ждала 10-15 сек (intent: router загружен из
+  intent_router.json + FastEmbedEncoder/ONNX). Теперь _start_nlu_warmup()
+  запускает brain.nlu.intent.warmup() в daemon-thread при старте.
+  Router греется параллельно, brain слушает brain_inbox сразу.
+  Первая команда → 0.05 сек (если warmup успел) или подождёт (если
+  команда пришла раньше — resolve сам загрузит router, _init_router
+  идемпотентен под lock).
 """
 
 import sys
 import time
+import threading
 from datetime import datetime
 
 from shared import ipc
@@ -137,6 +147,23 @@ def _init_self_state():
         log(f"brain: self_state загружен: {st.summary()}", tag="BRAIN")
     except Exception as e:
         log(f"brain: self_state load: {e}", tag="BRAIN", level="WARN")
+
+
+def _warmup_nlu():
+    """NLU warmup: загрузить intent_router.json + encoder в фоне."""
+    try:
+        from brain.nlu import intent as nlu_intent
+        nlu_intent.warmup()
+    except Exception as e:
+        log(f"brain: NLU warmup error: {e}", tag="BRAIN", level="WARN")
+
+
+def _start_nlu_warmup():
+    """Запустить NLU warmup в daemon-thread (не блокирует старт brain)."""
+    threading.Thread(
+        target=_warmup_nlu, daemon=True, name="nlu-warmup"
+    ).start()
+    log("brain: NLU warmup запущен (в фоне)", tag="BRAIN")
 
 
 def _parse_source(raw) -> CommandSource:
@@ -252,6 +279,9 @@ def main():
     _init_appraisal()
     _init_reminders()
     _init_self_state()
+
+    # NLU warmup в фоне — до первой команды. Не блокирует старт.
+    _start_nlu_warmup()
 
     log("brain: слушаю brain_inbox", tag="BRAIN")
 

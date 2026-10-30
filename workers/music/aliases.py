@@ -1,9 +1,16 @@
 # workers/music/aliases.py
 # Алиасы артистов: load / save / remember / resolve + char-3-grams (fuzzy).
 # Хранится в config/aliases.json.
+#
+# БЭКАП (новое): save_aliases перед перезаписью делает .bak копию.
+#   Причина: aliases.json в .gitignore (данные, не код), и его легко
+#   потерять (git clean, случайная перезапись, сбой). .bak — страховка:
+#   если файл обнулится, копия останется, и её легко восстановить:
+#   copy config/aliases.json.bak config/aliases.json
 
 import os
 import json
+import shutil
 
 from shared import config as cfg
 from shared.audio_cache import normalize
@@ -81,7 +88,14 @@ def load_aliases(force_refresh=False):
 
 
 def save_aliases(aliases):
+    """Сохранить алиасы. Перед перезаписью — .bak копия (страховка)."""
     try:
+        # Бэкап перед перезаписью (на случай потери)
+        if os.path.exists(cfg.ALIASES_FILE):
+            try:
+                shutil.copy2(str(cfg.ALIASES_FILE), str(cfg.ALIASES_FILE) + ".bak")
+            except Exception as e:
+                print(f"⚠ Ошибка бэкапа алиасов: {e}")
         with open(cfg.ALIASES_FILE, 'w', encoding='utf-8') as f:
             json.dump(aliases, f, ensure_ascii=False, indent=2)
         with state._aliases_lock:

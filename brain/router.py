@@ -15,12 +15,25 @@
 #   intent был, entity/decision — нет. Теперь:
 #     decision = pipeline.process(command, context=nlu_context)
 #   router исполняет decision.action:
-#     EXECUTE  → skills_base.find_by_name(command.skill_name).handle(original_text)
+#     EXECUTE  → skills_base.find_by_name(command.skill_name).handle(...)
 #     CLARIFY  → respond_and_say(decision.clarify.phrase_set, **kwargs)
 #     FALLBACK → LLM (как раньше) → NOT_UNDERSTOOD
 #
 #   _INTENT_TO_SKILL переехал в brain/nlu/skill_resolver.py (этап 4).
 #   router больше не знает соответствие intent → skill_name.
+#
+# FIX (этап 9, часть 1): music получает Command, остальные — текст.
+#   Раньше: skill.handle(command) — ВСЕГДА текст. MusicSkill.handle ждёт
+#   Command (isinstance(Command) → диспатч по action). Получал текст →
+#   isinstance False → classify(text) → None (для «вруби что-нибудь
+#   послушать» classify вычитает «вруби»/«послушать» → пусто → None) →
+#   музыка НЕ играла. Теперь:
+#     if skill.name == "music":
+#         skill.handle(decision.command)   # Command
+#     else:
+#         skill.handle(command)            # текст (controls/weather/...)
+#   Переходный период: controls/weather/cleanup/smalltalk — пока на str.
+#   Когда все скилы будут на Command — убрать if и оставить skill.handle(Command).
 #
 # FIX: CommandSource enum вместо magic strings "voice"/"voice_dialog".
 # FIX (день 28, 5.15): _fmt_due/_strip_reminder_trigger/_REMINDER_TRIGGERS
@@ -201,7 +214,8 @@ def process_command(command: str, source: CommandSource = CommandSource.VOICE):
 def _execute_decision(decision, command: str, source: CommandSource) -> bool:
     """Исполнить Decision из pipeline. True — обработали, False — нет.
 
-    EXECUTE  → skill.handle(command) (пока original_text; этап 9 — Command)
+    EXECUTE  → music: skill.handle(decision.command)  (Command)
+               остальные: skill.handle(command)       (текст, переходный период)
     CLARIFY  → respond_and_say(clarify.phrase_set, **clarify.kwargs)
     FALLBACK → False (router пойдёт в LLM / NOT_UNDERSTOOD)
     """
@@ -221,10 +235,13 @@ def _execute_decision(decision, command: str, source: CommandSource) -> bool:
             f"{skill_name}.{decision.command.action or 'handle'} "
             f"(conf={decision.confidence:.2f})", tag="BRAIN")
         try:
-            # TODO(этап 9): скил должен принимать Command, не текст.
-            # Пока — original_text. MusicSkill.classify() внутри даст тот же
-            # результат, что decision/music.py. Дублирование временное.
-            skill.handle(command)
+            # ЭТАП 9, часть 1: music получает Command, остальные — текст.
+            # MusicSkill.handle ждёт Command (isinstance → диспатч по action).
+            # controls/weather/cleanup/smalltalk — пока на str (переходный период).
+            if skill.name == "music":
+                skill.handle(decision.command)
+            else:
+                skill.handle(command)
         except Exception as e:
             from brain.errors import handle_error
             handle_error(e, context=f"skill:{skill_name}", speak=True)
