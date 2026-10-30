@@ -1,9 +1,23 @@
 # brain/router.py
-# Роутер команд.
+# Роутер команд: выбирает навык по тексту и вызывает его.
 #
-# A2 (день 29): router-страховка. YES/NO без pending → игнор (молчание).
-# «Да»/«нет» в разговоре (не с Максом) не должны включать музыку.
-# Если pending есть — обрабатывает pending (как раньше).
+# ВНЕ ДИАЛОГА (CommandSource.VOICE, VOICE_HOT, SYSTEM):
+#   reminders → pending → skills → semantic → LLM → NOT_UNDERSTOOD
+#   Router решает первым.
+#
+# В ДИАЛОГЕ (CommandSource.VOICE_DIALOG):
+#   smalltalk → LLM → (LLM вернёт command → process_command → router)
+#   Router обрабатывает только smalltalk. Всё остальное — LLM.
+#
+# B4 (день 30): semantic-router — быстрый слой перед LLM.
+#   Если skills_base.find_handler вернул None, спрашиваем semantic.route.
+#   Если semantic уверен (confidence > threshold) — вызываем скил по имени.
+#   Иначе — LLM (как сейчас). Semantic-router решает только «это про музыку /
+#   погоду / ...». Что именно (артист, жанр, радио) — classify.py в MusicSkill.
+#
+# FIX: CommandSource enum вместо magic strings "voice"/"voice_dialog".
+# FIX (день 28, 5.15): _fmt_due/_strip_reminder_trigger/_REMINDER_TRIGGERS
+# переехали в brain/reminders.py.
 
 import re
 import threading
@@ -104,7 +118,7 @@ def process_command(command: str, source: CommandSource = CommandSource.VOICE):
         _respond_and_say("NOT_UNDERSTOOD")
         return None
 
-    # ── ВНЕ ДИАЛОГА ──
+    # ── ВНЕ ДИАЛОГА: router решает первым ──
     if _handle_reminders(cmd_lower):
         return None
 
@@ -136,6 +150,21 @@ def process_command(command: str, source: CommandSource = CommandSource.VOICE):
             from brain.errors import handle_error
             handle_error(e, context=f"skill:{handler.name}", speak=True)
         return None
+
+    # ── B4: semantic-router — быстрый слой перед LLM ──
+    # skills_base.find_handler вернул None. Спрашиваем semantic.
+    # Если уверен — вызываем скил по имени. Иначе — LLM (как сейчас).
+    try:
+        from brain import semantic
+        semantic_name = semantic.route(command)
+        if semantic_name:
+            handler = semantic.get_handler(semantic_name)
+            if handler:
+                log(f"router: semantic → {semantic_name}", tag="BRAIN")
+                handler.handle(command)
+                return None
+    except Exception as e:
+        log(f"router: semantic error: {e}", tag="BRAIN", level="WARN")
 
     log(f"router: не понял «{command}»", tag="BRAIN")
     metrics.inc("not_understood")
