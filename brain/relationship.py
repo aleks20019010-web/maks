@@ -14,7 +14,10 @@ brain/relationship.py — модель привычек пользователя
   "volume_changed_at": ...
 }
 
-I (relationship): привычки и паттерны через memory.get_habit / get_pattern.
+A2-фикс (день 30): get_weather_music больше не сбрасывает mood через 7 дней.
+  Раньше: asked_at старше 7 дней → None → снова спрашивал. Теперь:
+  mood помнится, пока не перезапишется. Спрашивать раз в день — через
+  was_asked_today("weather_<precip>") в music/skill.py.
 """
 
 import json
@@ -75,14 +78,7 @@ def get_weather_music(condition: str) -> str | None:
     entry = wm.get(condition)
     if not entry:
         return None
-    asked_at = entry.get("asked_at")
-    if asked_at:
-        try:
-            dt = datetime.fromisoformat(asked_at)
-            if (datetime.now() - dt).days > 7:
-                return None
-        except Exception:
-            pass
+    # A2-фикс: TTL убран. mood помнится, пока не перезапишется.
     return entry.get("mood")
 
 
@@ -245,7 +241,6 @@ def set_volume(volume: int):
 # I: ПРИВЫЧКИ И ПАТТЕРНЫ (через memory)
 # ────────────────────────────────────────────────────────────
 def get_habit(time_bucket: str) -> dict | None:
-    """Привычка: time_bucket → {artist, count}. None если < 3 повторов."""
     try:
         from memory import memory
         habits = memory.get_habit(time_bucket)
@@ -260,7 +255,6 @@ def get_habit(time_bucket: str) -> dict | None:
 
 
 def get_pattern(condition: str) -> dict | None:
-    """Паттерн: condition → {artist, count}. None если < 3 повторов."""
     try:
         from memory import memory
         patterns = memory.get_pattern(condition)
@@ -275,7 +269,6 @@ def get_pattern(condition: str) -> dict | None:
 
 
 def suggest_for_context(weather: str = "", time_bucket: str = "") -> dict | None:
-    """Что предложить: привычка → паттерн → None."""
     if time_bucket:
         habit = get_habit(time_bucket)
         if habit:
@@ -288,7 +281,6 @@ def suggest_for_context(weather: str = "", time_bucket: str = "") -> dict | None
 
 
 def record_play_habit(time_bucket: str, artist: str):
-    """Записать: в time_bucket играл artist."""
     try:
         from memory import memory
         memory.set_habit(time_bucket, artist, count=1)
@@ -297,7 +289,6 @@ def record_play_habit(time_bucket: str, artist: str):
 
 
 def record_play_pattern(condition: str, artist: str):
-    """Записать: при condition играл artist."""
     try:
         from memory import memory
         memory.set_pattern(condition, artist, count=1)
