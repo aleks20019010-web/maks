@@ -4,7 +4,7 @@
 # Ответственность:
 #   types.py     — типы данных и диагностических событий (этот файл)
 #   pipeline.py, intent.py, entity/* — формирование DiagnosticEvent
-#   brain/nlu/logging.py — запись и форматирование логов (этап 8, позже)
+#   brain/nlu/logging.py — запись и форматирование логов
 #
 # ВАЖНО:
 #   EntityState  — результат извлечения параметра (FOUND/ABSENT/UNRESOLVED/AMBIGUOUS)
@@ -14,6 +14,15 @@
 #   Entity.match_confidence  — насколько уверенно определена сущность
 #   Decision.confidence      — насколько уверенно принято итоговое решение
 #   Это разные оценки, не смешивать.
+#
+# FIX (NLU v2): Decision.clarify — ClarifyRequest, а не str.
+#   Раньше планировалось clarify_question: str | None, но это костыль:
+#   строка не выражает параметры ({candidate}, {candidates}) и врёт по типу
+#   (ключ фразы, замаскированный под текст). ClarifyRequest — честный
+#   контракт между NLU и TTS-слоем. NLU не знает про responses/*.json,
+#   он возвращает phrase_set + kwargs, router подставляет.
+#   clarify_question оставлен как deprecated — на случай, если где-то есть
+#   потребитель, которого я не видел. Никто не должен его читать в новом коде.
 
 from dataclasses import dataclass, field
 from enum import Enum
@@ -169,6 +178,34 @@ class Command:
 
 
 # ============================================================
+# CLARIFY
+# ============================================================
+@dataclass(frozen=True)
+class ClarifyRequest:
+    """Запрос на уточнение. Не текст — контракт между NLU и TTS-слоем.
+
+    phrase_set — ключ в responses/*.json (например, "MUSIC_CLARIFY_ARTIST").
+    kwargs     — подстановки для {candidate}, {candidates}, {artist} и т.п.
+    reason     — для логов: "unresolved_artist", "ambiguous_artist".
+
+    Пример:
+        ClarifyRequest(
+            phrase_set="MUSIC_CLARIFY_AMBIGUOUS",
+            kwargs={"candidates": "Ария, Кипелов"},
+            reason="ambiguous_artist",
+        )
+
+    Router читает decision.clarify и зовёт:
+        respond_and_say(clarify.phrase_set, **clarify.kwargs)
+
+    NLU не знает про responses/*.json. Он возвращает контракт, а не текст.
+    """
+    phrase_set: str
+    kwargs: dict = field(default_factory=dict)
+    reason: str = ""
+
+
+# ============================================================
 # DECISION
 # ============================================================
 @dataclass
@@ -177,12 +214,17 @@ class Decision:
 
     action — DecisionAction (EXECUTE/CLARIFY/FALLBACK), не EntityState.
     confidence — уверенность итогового решения (не match_confidence).
+    clarify — ClarifyRequest, если action=CLARIFY (иначе None).
     """
     command: Command
     action: DecisionAction
     reason: str = ""
     confidence: float = 0.0
-    clarify_question: Optional[str] = None  # если action=CLARIFY
+    clarify: Optional[ClarifyRequest] = None
+
+    # DEPRECATED: не читать в новом коде. Оставлено на случай, если где-то
+    # есть потребитель, которого я не видел. Используй clarify.
+    clarify_question: Optional[str] = None
 
 
 # ============================================================
@@ -192,7 +234,7 @@ class Decision:
 class DiagnosticEvent:
     """Структура диагностического события.
 
-    Запись и форматирование — в brain/nlu/logging.py (этап 8, позже).
+    Запись и форматирование — в brain/nlu/logging.py.
     Здесь только структура.
     """
     stage: str                       # "normalizer", "intent", "entity", "decision", "pipeline"
