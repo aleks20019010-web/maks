@@ -20,12 +20,16 @@ yandex-music>=2.0.0
 yandex-music-downloader>=3.0.0
 
 # ============================================================
-# Wake word (ViolaWake) — C10
+# Wake word (ViolaWake) — C10 (убран, не используется)
 # ============================================================
-# Только [oww] — OpenWakeWord backbone, нужен для WakeDetector.
-# Без [audio] (свой sounddevice), без [stt] (свой Vosk),
-# без [tts] (свой Yandex). Не тащим 145+326 МБ зря.
-violawake[oww]>=0.2.10
+# violawake[oww]>=0.2.10
+
+# ============================================================
+# Semantic Router (B4) — быстрый слой перед LLM
+# ============================================================
+# FastEmbedEncoder: локальный ONNX, ~70 МБ, CPU.
+# 1.x — breaking (IndexedRouter, fit() калибрует).
+semantic-router[fastembed]>=1.0.0
 
 # ============================================================
 # Тесты
