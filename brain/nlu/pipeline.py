@@ -69,9 +69,20 @@ def _load_extractors() -> dict[Intent, object]:
 def _load_decisions() -> dict[Intent, object]:
     """Intent → DecisionEngine. Ленивая загрузка."""
     from brain.nlu.decision.music import get as get_music_decision
+    from brain.nlu.decision.controls import get as get_controls_decision
+    from brain.nlu.decision.weather import get as get_weather_decision
     return {
         Intent.MUSIC_PLAY: get_music_decision(),
         Intent.MUSIC_WAVE: get_music_decision(),
+        Intent.VOLUME_UP: get_controls_decision(),
+        Intent.VOLUME_DOWN: get_controls_decision(),
+        Intent.VOLUME_SET: get_controls_decision(),
+        Intent.MUSIC_PAUSE: get_controls_decision(),
+        Intent.MUSIC_STOP: get_controls_decision(),
+        Intent.MUSIC_RESUME: get_controls_decision(),
+        Intent.MUSIC_NEXT: get_controls_decision(),
+        Intent.MUSIC_PREV: get_controls_decision(),
+        Intent.WEATHER_QUERY: get_weather_decision(),
     }
 
 

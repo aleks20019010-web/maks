@@ -13,15 +13,17 @@
 #
 # A8 (день 29): next / prev / pause / resume проверяют state.get_current().
 #   Если трека нет — NO_TRACK_PLAYING, в music_inbox НЕ шлём.
-#   Раньше: «пауза» при стопе → music_pause → music сам разбирался,
-#   но фраза «Пауза» врала. Теперь: нет трека — нет паузы.
 #   stop / volume_* / now_playing — НЕ проверяют (всегда можно).
 #
-# Extra hot words: «давай», «да», «ок» — только для ASR, без действия в controls.
-#   Нужно для ответов на pending_music_ask («давай рок») и cleanup («да»).
-#
-# appraisal: на next публикуем SKIP в reaction (до переключения),
-# чтобы реакция знала, что играло сейчас.
+# ЭТАП 9 (часть 2, новое): handle принимает Command | str.
+#   - Command (NLU-путь): диспатч по command.action (volume_up/pause/...).
+#     Для volume_set — parse_volume(command.original_text).
+#   - str (fast-path): SIMPLE / parse_volume (как раньше).
+#   router._execute_decision: if skill.name in ("music", "controls") →
+#   skill.handle(decision.command). Остальные — текст (переходный период).
+#   Причина: «сделай потише» → NLU → VOLUME_DOWN → controls.handle(Command) →
+#   volume_down → ipc.put. Раньше: controls.handle("сделай потише") (текст) →
+#   SIMPLE.get("сделай потише") → None → молчание.
 
 import random
 import re
@@ -119,22 +121,10 @@ class ControlsSkill(Skill):
         "что за трек": "now_playing", "что сейчас": "now_playing",
     }
 
-    # Extra hot words — только для ASR, без действия в controls.
-    # Нужны для ответов на pending_music_ask («давай рок») и cleanup («да»).
     EXTRA_HOT_WORDS = {
-        "давай",
-        "да",
-        "yes",
-        "ок",
-        "окей",
-        "подтверждаю",
-        "нет",
-        "no",
-        "не надо",
-        "неважно",
-        "не важно",
-        "не хочу",
-        "отмена",
+        "давай", "да", "yes", "ок", "окей", "подтверждаю",
+        "нет", "no", "не надо", "неважно", "не важно",
+        "не хочу", "отмена",
     }
 
     HOT_WORDS = set(SIMPLE.keys()) | EXTRA_HOT_WORDS
@@ -161,7 +151,44 @@ class ControlsSkill(Skill):
             return True
         return False
 
-    def handle(self, text: str) -> str | None:
+    def handle(self, text_or_command) -> str | None:
+        """Handle Command (NLU-путь) или str (fast-path).
+
+        Command → диспатч по command.action (volume_up/pause/...).
+                  Для volume_set — parse_volume(command.original_text).
+        str     → SIMPLE / parse_volume (как раньше, fast-path).
+        """
+        from brain.nlu.types import Command
+
+        if isinstance(text_or_command, Command):
+            return self._handle_command(text_or_command)
+
+        # ── fast-path: str ─────────────────────────────────
+        return self._handle_text(text_or_command)
+
+    # ── NLU-путь: Command ──────────────────────────────────
+    def _handle_command(self, command) -> str | None:
+        action = command.action
+        if not action:
+            log("controls: Command без action — пропуск", tag="BRAIN", level="WARN")
+            return None
+        log(f"controls: {action} ← Command «{command.original_text}»", tag="BRAIN")
+
+        # volume_set: value — из original_text через parse_volume
+        if action == "volume_set":
+            value = parse_volume(command.original_text)
+            if value is None:
+                log(f"controls: volume_set — parse_volume не распознал "
+                    f"«{command.original_text}»", tag="BRAIN", level="WARN")
+                return None
+            ipc.put(protocol.MUSIC_INBOX, protocol.music_volume_set(value))
+            _respond_and_say("VOLUME_SET", value=value)
+            return None
+
+        return self._dispatch_action(action)
+
+    # ── fast-path: str ─────────────────────────────────────
+    def _handle_text(self, text: str) -> str | None:
         t = text.lower().strip()
 
         # A1: «громкость X» — точное значение (цифры или слова)
@@ -177,7 +204,10 @@ class ControlsSkill(Skill):
             return None
 
         log(f"controls: {t} → {action}", tag="BRAIN")
+        return self._dispatch_action(action)
 
+    # ── Общий диспатч (Command и str) ─────────────────────
+    def _dispatch_action(self, action: str) -> str | None:
         # A8: next / prev / pause / resume — нужен текущий трек
         if action in _REQUIRE_CURRENT:
             if not _require_current_track():

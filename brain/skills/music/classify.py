@@ -4,12 +4,24 @@
 # Без поиска, без скачивания, без VLC.
 #
 # A2 (день 29): REFUSAL_WORDS — если фраза отказ («нет», «не надо»),
-# classify() возвращает None. Иначе «нет» в ответ на «Включить потише?»
-# классифицировался бы как play_wave (short query → artist).
+# classify() возвращает None.
 #
-# MOOD (новое): resolve_mood(q) из shared.music_words — ДО play_artist.
-#   «включи бодрая» → play_mood("Энергичное"), а не play_artist("бодрая").
-#   resolve_mood общий с entity/music.py — mood-знание одно, не дублируется.
+# MOOD: resolve_mood(q) из shared.music_words — ДО play_artist.
+#
+# NOT_UNDERSTOOD: грубые обращения («эй ты», «ау», «алло») → not_understood.
+#
+# FIX (музыку): q == "музыку" (после вычитания триггеров) → play_wave.
+#   Раньше: «давай музыку», «вруби музыку», «давай послушаем музыку» →
+#   play_artist("музыку") → Яндекс: TFH music (три раза в логе).
+#   Теперь: q == "музыку" → play_wave (волна). Спец-случай «включи музыку»
+#   оставлен, но q == "музыку" покрывает ВСЕ варианты (давай/вруби/поставь/
+#   послушаем + музыку).
+#
+# FIX (сделай потише): q in STOP_WORDS (после вычитания NOISE_WORDS) → None.
+#   Раньше: «сделай потише» (2 слова) → _is_short_query → play_artist
+#   («сделай потише») → Яндекс: артист «сделай потише» → «100 из 10».
+#   Теперь: «сделай» — в NOISE_WORDS (вычитается), остаётся «потише» →
+#   STOP_WORDS → None → NLU → VOLUME_DOWN → controls → тише.
 
 from brain.skills.music._shared import (
     STOP_WORDS, PLAY_TRIGGERS, NOISE_WORDS, GENRE_ALIASES,
@@ -25,6 +37,12 @@ DISLIKE_TRIGGERS = (
     "убери трек",
     "убери песню",
     "больше не надо",
+)
+
+# Грубые обращения / пустые фразы — не музыка. NOT_UNDERSTOOD.
+NOT_UNDERSTOOD_PHRASES = (
+    "эй ты", "эй", "ты", "эй макс", "макс эй ты",
+    "ау", "алло", "слышишь", "слышь",
 )
 
 
@@ -62,6 +80,10 @@ def classify(command: str) -> dict | None:
     if t in STOP_WORDS:
         return None
 
+    # NOT_UNDERSTOOD: грубые обращения / пустые фразы — не музыка.
+    if t in NOT_UNDERSTOOD_PHRASES:
+        return {"action": "not_understood"}
+
     if any(w in t for w in DISLIKE_TRIGGERS):
         return {"action": "dislike"}
 
@@ -91,6 +113,16 @@ def classify(command: str) -> dict | None:
         q = q.replace(word, "")
     q = " ".join(q.split()).strip().lower()
 
+    # FIX (музыку): «давай музыку», «вруби музыку», «давай послушаем музыку»
+    # → q = "музыку" → play_wave (волна), а не play_artist("музыку").
+    if q == "музыку":
+        return {"action": "play_wave", "language": None}
+
+    # FIX (сделай потише): «сделай» вычтен (NOISE_WORDS), осталось «потише»
+    # (STOP_WORDS) → None → NLU → VOLUME_DOWN → controls → тише.
+    if q in STOP_WORDS:
+        return None
+
     if q in GENRE_ALIASES:
         return {
             "action": "play_genre",
@@ -98,8 +130,7 @@ def classify(command: str) -> dict | None:
             "station": GENRE_ALIASES[q],
         }
 
-    # MOOD: «бодрая» → «Энергичное», «бодрое» → «Энергичное».
-    # ДО play_artist, чтобы «включи бодрая» не ушло в артиста.
+    # MOOD: «бодрая» → «Энергичное».
     mood = resolve_mood(q)
     if mood:
         return {"action": "play_mood", "mood": mood}
@@ -115,7 +146,15 @@ def classify(command: str) -> dict | None:
         if not q2:
             return None
 
-        # MOOD ещё раз — после _detect_intent (на случай «бодрая» в q2)
+        if q2 in NOT_UNDERSTOOD_PHRASES:
+            return {"action": "not_understood"}
+
+        if q2 == "музыку":
+            return {"action": "play_wave", "language": None}
+
+        if q2 in STOP_WORDS:
+            return None
+
         mood2 = resolve_mood(q2)
         if mood2:
             return {"action": "play_mood", "mood": mood2}

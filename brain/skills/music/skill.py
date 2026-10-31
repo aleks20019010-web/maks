@@ -10,16 +10,17 @@
 #
 # A2: TTS ДО play_index, с каноничным именем из алиаса. Один TTS.
 #
-# MOOD (новое): action="play_mood" → protocol.play_mood(mood_tag).
+# MOOD: action="play_mood" → protocol.play_mood(mood_tag).
 #   mood_tag — tag метатега («Энергичное»). Воркер музыки делает
 #   client.metatag(tag) → station_id (mood:energetic) → start_genre.
 #
 # ЭТАП 9 (C, часть 1): handle принимает Command | str.
 #   - Command (NLU-путь): диспатч по command.action, classify НЕ зовём.
-#     Entity уже извлечён и сматчен — повторный парсинг не нужен.
 #   - str (fast-path): classify(text) → _dispatch, как раньше.
-#   router._execute_decision передаёт Command для music, str для остальных.
-#   Переходный период: controls/weather/cleanup/smalltalk — пока на str.
+#
+# NOT_UNDERSTOOD (новое): classify ловит грубые обращения («эй ты») →
+#   action="not_understood" → _dispatch → «Не понял, повторите».
+#   Быстро (0.01 сек), без LLM. Раньше: play_artist("эй ты") → «Включаю эй ты».
 
 import json
 
@@ -113,16 +114,7 @@ class MusicSkill(Skill):
         return None
 
     def _command_to_result(self, command, action: str) -> dict | None:
-        """Command → dict для _dispatch. По action и entity.
-
-        play_artist  → {"artist": entity.value}
-        play_track   → {"track": entity.value}
-        play_genre   → {"genre": entity.value, "station": ""}  (station — из GENRE_ALIASES)
-        play_mood    → {"mood": entity.value}
-        play_wave    → {"action": "play_wave", "language": None}
-        play_liked   → {"action": "play_liked"}
-        play_radio   → {"station": entity.value}  (если radio-entity)
-        """
+        """Command → dict для _dispatch. По action и entity."""
         result: dict = {"action": action}
         ent = getattr(command, "entity", None)
 
@@ -130,6 +122,8 @@ class MusicSkill(Skill):
             result["language"] = None
             return result
         if action == "play_liked":
+            return result
+        if action == "not_understood":
             return result
 
         if ent is None or not ent.value:
@@ -146,7 +140,6 @@ class MusicSkill(Skill):
             return result
         if action == "play_genre":
             result["genre"] = ent.value
-            # station — из GENRE_ALIASES (как в classify)
             try:
                 from workers.music._shared import GENRE_ALIASES
                 result["station"] = GENRE_ALIASES.get(ent.value, f"genre:{ent.value}")
@@ -160,12 +153,7 @@ class MusicSkill(Skill):
         return None
 
     def _try_ask(self) -> bool:
-        """Спросить про погоду (утром, один раз в день) или вчерашнее.
-
-        A2-фикс: погода — только утром, только если сегодня не спрашивал.
-        Если спросили (да/нет/timeout) — mark_asked_today, больше сегодня
-        не спрашиваем. Завтра — новый день, снова спросит.
-        """
+        """Спросить про погоду (утром, один раз в день) или вчерашнее."""
         bucket = time_bucket()
         if bucket == "morning":
             try:
@@ -219,6 +207,12 @@ class MusicSkill(Skill):
         log(f"music: спросил ({kind}), pending={PENDING_KEY} (wait_tts)", tag="BRAIN")
 
     def _dispatch(self, action: str, result: dict):
+        if action == "not_understood":
+            # Грубые обращения / пустые фразы — «Не понял, повторите».
+            # Быстро, без LLM.
+            _respond_and_say("NOT_UNDERSTOOD")
+            return
+
         if action == "play_artist":
             artist = result["artist"]
             canonical = _resolve_alias_name(artist)
@@ -240,12 +234,13 @@ class MusicSkill(Skill):
             ipc.put(protocol.MUSIC_INBOX, protocol.play_genre(genre, station=station))
 
         elif action == "play_mood":
-            # MOOD: «Энергичное» → protocol.play_mood(mood_tag).
-            # Воркер: client.metatag(tag) → station_id (mood:energetic) →
-            # modes.start_genre(station_id, mood_tag).
             mood_tag = result["mood"]
-            _respond_and_say("PLAY_MOOD", mood=mood_tag)
+            log(f"music: → protocol.play_mood({mood_tag!r})", tag="BRAIN")
             ipc.put(protocol.MUSIC_INBOX, protocol.play_mood(mood_tag))
+            try:
+                _respond_and_say("PLAY_MOOD", mood=mood_tag)
+            except Exception as e:
+                log(f"music: PLAY_MOOD TTS ошибка: {e}", tag="BRAIN", level="WARN")
 
         elif action == "play_wave":
             language = result.get("language")

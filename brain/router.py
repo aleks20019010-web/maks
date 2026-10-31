@@ -28,7 +28,7 @@
 #   isinstance False → classify(text) → None (для «вруби что-нибудь
 #   послушать» classify вычитает «вруби»/«послушать» → пусто → None) →
 #   музыка НЕ играла. Теперь:
-#     if skill.name == "music":
+#     if skill.name in ("music", "controls", "weather"):
 #         skill.handle(decision.command)   # Command
 #     else:
 #         skill.handle(command)            # текст (controls/weather/...)
@@ -238,7 +238,7 @@ def _execute_decision(decision, command: str, source: CommandSource) -> bool:
             # ЭТАП 9, часть 1: music получает Command, остальные — текст.
             # MusicSkill.handle ждёт Command (isinstance → диспатч по action).
             # controls/weather/cleanup/smalltalk — пока на str (переходный период).
-            if skill.name == "music":
+            if skill.name in ("music", "controls", "weather"):
                 skill.handle(decision.command)
             else:
                 skill.handle(command)
