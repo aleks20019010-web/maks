@@ -14,20 +14,26 @@
 #   mood_tag — tag метатега («Энергичное»). Воркер музыки делает
 #   client.metatag(tag) → station_id (mood:energetic) → start_genre.
 #
-# ЭТАП 9 (C, часть 1): handle принимает Command | str.
-#   - Command (NLU-путь): диспатч по command.action, classify НЕ зовём.
-#   - str (fast-path): classify(text) → _dispatch, как раньше.
+# ЭТАП 9 (часть 2, НОВОЕ): fast-path для музыки УБРАН.
+#   can_handle → False. Музыка — ЦЕЛИКОМ через NLU (Command).
+#   Причина: fast-path (classify) хватал «включи чего-нибудь» →
+#   play_artist("чего-нибудь") → артист не найден → молчание. NLU даже
+#   не участвовал. Теперь: всё через NLU → Command → handle(Command).
+#   controls/weather — тоже на Command (см. router._execute_decision).
+#   classify остаётся для тестов (test_music_classify) и потенциального
+#   fast-path, но в проде НЕ используется.
 #
-# NOT_UNDERSTOOD (новое): classify ловит грубые обращения («эй ты») →
-#   action="not_understood" → _dispatch → «Не понял, повторите».
-#   Быстро (0.01 сек), без LLM. Раньше: play_artist("эй ты") → «Включаю эй ты».
+# NOT_UNDERSTOOD: classify ловит грубые обращения («эй ты») → not_understood.
+#   Но fast-path убран, значит, «эй ты» → NLU → UNKNOWN → LLM?
+#   Нет: «эй ты» → intent.resolve → UNKNOWN (confidence < 0.5) → FALLBACK →
+#   LLM скажет «Простите, можно ещё раз?». Это дольше (4.5 сек), но
+#   правильно. Если хочешь быстро — вернём fast-path для not_understood
+#   отдельно (потом).
 
 import json
 
 from brain.skills.base import Skill, register
 from brain.skills._helpers import respond_and_say as _respond_and_say
-from brain.skills.music._shared import _strip_stop_prefix
-from brain.skills.music.classify import classify
 from brain import relationship
 from brain import pending
 from shared import ipc
@@ -66,46 +72,43 @@ class MusicSkill(Skill):
     priority = 40
 
     def can_handle(self, text: str) -> bool:
-        t = text.lower().strip()
-        stripped = _strip_stop_prefix(t)
-        if not stripped:
-            return False
-        return classify(text) is not None
+        """Fast-path для музыки УБРАН. Всё через NLU (Command).
+
+        Причина: fast-path (classify) хватал «включи чего-нибудь» →
+        play_artist("чего-нибудь") → артист не найден → молчание.
+        NLU не участвовал. Теперь музыка — целиком NLU.
+        """
+        return False
 
     def handle(self, text_or_command) -> str | None:
-        """Handle Command (NLU-путь) или str (fast-path).
+        """Handle Command (NLU-путь). str — больше не поддерживается.
 
         Command → диспатч по command.action, classify НЕ зовём.
-        str     → classify(text) → _dispatch, как раньше.
         """
-        # ── NLU-путь: Command ──────────────────────────────
         from brain.nlu.types import Command
-        if isinstance(text_or_command, Command):
-            command = text_or_command
-            action = command.action
-            if not action:
-                log("music: Command без action — пропуск", tag="BRAIN", level="WARN")
-                return None
-            result = self._command_to_result(command, action)
-            if result is None:
-                log(f"music: Command action={action} — не удалось собрать result",
-                    tag="BRAIN", level="WARN")
-                return None
-            log(f"music: {action} ← Command «{command.original_text}»", tag="BRAIN")
-            self._dispatch(action, result)
+        if not isinstance(text_or_command, Command):
+            log(
+                f"music: handle получил {type(text_or_command).__name__}, "
+                f"а не Command — fast-path убран, ожидался Command",
+                tag="BRAIN", level="WARN",
+            )
             return None
 
-        # ── fast-path: str ─────────────────────────────────
-        text = text_or_command
-        if not text:
+        command = text_or_command
+        action = command.action
+        if not action:
+            log("music: Command без action — пропуск", tag="BRAIN", level="WARN")
             return None
-        result = classify(text)
+
+        result = self._command_to_result(command, action)
         if result is None:
+            log(f"music: Command action={action} — не удалось собрать result",
+                tag="BRAIN", level="WARN")
             return None
 
-        action = result.get("action")
-        log(f"music: {action} ← «{text}»", tag="BRAIN")
+        log(f"music: {action} ← Command «{command.original_text}»", tag="BRAIN")
 
+        # play_wave: спросить про погоду/вчерашнее (как раньше)
         if action == "play_wave" and result.get("language") is None:
             if self._try_ask():
                 return None
@@ -122,8 +125,6 @@ class MusicSkill(Skill):
             result["language"] = None
             return result
         if action == "play_liked":
-            return result
-        if action == "not_understood":
             return result
 
         if ent is None or not ent.value:
@@ -207,12 +208,6 @@ class MusicSkill(Skill):
         log(f"music: спросил ({kind}), pending={PENDING_KEY} (wait_tts)", tag="BRAIN")
 
     def _dispatch(self, action: str, result: dict):
-        if action == "not_understood":
-            # Грубые обращения / пустые фразы — «Не понял, повторите».
-            # Быстро, без LLM.
-            _respond_and_say("NOT_UNDERSTOOD")
-            return
-
         if action == "play_artist":
             artist = result["artist"]
             canonical = _resolve_alias_name(artist)

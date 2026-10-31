@@ -48,6 +48,12 @@ FIX (день 29, вечер):
   - _wait_until_ready_to_apply(): таймаут 0.2 сек.
   - check_duck_watchdog(max_sec): принудительный restore() при
     залипшем ducking (TTS/ASR упал между duck_on и duck_off).
+
+FIX (2026-10-31):
+  - check_duck_watchdog() теперь чистит и залипший duck_hold,
+    даже если ducked=False (hold без duck — как в modes.py).
+    Раньше такой hold висел вечно, если mark_ready() не вызывался.
+  - _hold_started_at — время первого hold_duck() (для watchdog).
 """
 
 import threading
@@ -80,6 +86,7 @@ class MusicManager:
         self._ducked_by_tts = False
         self._pre_duck_volume = None
         self._duck_started_at = None
+        self._hold_started_at = None
         self._duck_level = self._clamp_percent(
             getattr(cfg, "DUCK_LEVEL", 20)
         )
@@ -127,6 +134,7 @@ class MusicManager:
                     pass
             if self.duck_hold and not self._ducked_by_tts:
                 self.duck_hold = False
+                self._hold_started_at = None
                 print("   [DUCK] hold OFF (auto on mark_ready)")
             print(f"   [MUSIC] mark_ready id={pid}")
 
@@ -249,6 +257,7 @@ class MusicManager:
         with self.lock:
             if not self.duck_hold:
                 self.duck_hold = True
+                self._hold_started_at = time.monotonic()
                 print("   [DUCK] hold ON")
 
     def release_duck(self):
@@ -256,6 +265,7 @@ class MusicManager:
             if not self.duck_hold:
                 return
             self.duck_hold = False
+            self._hold_started_at = None
             print("   [DUCK] hold OFF")
             if self.ducked and not self._ducked_by_tts:
                 self.restore()
@@ -264,6 +274,7 @@ class MusicManager:
         with self.lock:
             self._cancel_fade()
             self.duck_hold = False
+            self._hold_started_at = None
             self.ducked = False
             self._ducked_by_tts = False
             self._pre_duck_volume = None
@@ -341,16 +352,36 @@ class MusicManager:
             print(f"   [DUCK] volume → {target} (pre-duck={pre})")
 
     def check_duck_watchdog(self, max_sec: float = 60.0) -> None:
-        """Снять залипший ducking, если он висит дольше max_sec."""
+        """Снять залипший ducking или duck_hold, если он висит дольше max_sec.
+
+        Две независимые ветки:
+          1) ducked=True дольше max_sec — mic/TTS упал между on и off.
+          2) duck_hold=True дольше max_sec — loading упал, release_duck
+             не был вызван (например, из-за отсутствия try/finally).
+             Срабатывает, даже если ducked=False.
+        """
         with self.lock:
-            if not self.ducked or self._duck_started_at is None:
-                return
-            elapsed = time.monotonic() - self._duck_started_at
-            if elapsed <= max_sec:
-                return
-            print(f"   [DUCK] watchdog: duck {elapsed:.0f}s > {max_sec:.0f}s, "
-                  f"принудительный restore")
-            self.restore()
+            now = time.monotonic()
+
+            # 1) залипший ducking
+            if self.ducked and self._duck_started_at is not None:
+                elapsed = now - self._duck_started_at
+                if elapsed > max_sec:
+                    print(f"   [DUCK] watchdog: duck {elapsed:.0f}s > {max_sec:.0f}s, "
+                          f"принудительный restore")
+                    self.restore()
+                    return
+
+            # 2) залипший hold (даже без duck)
+            if self.duck_hold and self._hold_started_at is not None:
+                elapsed = now - self._hold_started_at
+                if elapsed > max_sec:
+                    print(f"   [DUCK] watchdog: hold {elapsed:.0f}s > {max_sec:.0f}s, "
+                          f"принудительно снимаю")
+                    self.duck_hold = False
+                    self._hold_started_at = None
+                    if self.ducked and not self._ducked_by_tts:
+                        self.restore()
 
     # ========================================================
     # PAUSE / RESUME / STOP / STATE

@@ -11,6 +11,10 @@
 #   release_duck() при _ducked_by_tts=True не вызывает restore()).
 #   Прямых music.duck()/music.restore() тут нет и не должно быть —
 #   ducking включает/снимает только ASR через mic_off/mic_on.
+#
+# FIX (2026-10-31): hold_duck/release_duck парны на ВСЕХ путях выхода
+#   (try/finally). Раньше успешный return True оставлял duck_hold висеть
+#   до mark_ready/watchdog. Теперь release_duck() вызывается в finally.
 
 import threading
 import time
@@ -119,75 +123,77 @@ def start_single_track(track):
 
 def queue_liked_tracks():
     music.hold_duck()
-    print("Загружаю 'Мне нравится'...")
-    memory.remember_search(query="мою музыку", found_artist="Мне нравится", success=True)
-    if state.client is None:
-        music.release_duck()
-        return False
     try:
-        liked = state.client.users_likes_tracks()
-        if not liked or not liked.tracks:
-            music.release_duck()
+        print("Загружаю 'Мне нравится'...")
+        memory.remember_search(query="мою музыку", found_artist="Мне нравится", success=True)
+        if state.client is None:
             return False
-        state.liked_short_tracks = liked.tracks
-        state.liked_offset = 0
-        _reset_source_state()
-        with state.playlist_lock:
-            state.playlist = []
-            state.prefetched = {}
-        state.playlist_index = 0
-        state.playlist_mode = "liked"
-        if not refill_one():
-            music.release_duck()
+        try:
+            liked = state.client.users_likes_tracks()
+            if not liked or not liked.tracks:
+                return False
+            state.liked_short_tracks = liked.tracks
+            state.liked_offset = 0
+            _reset_source_state()
+            with state.playlist_lock:
+                state.playlist = []
+                state.prefetched = {}
+            state.playlist_index = 0
+            state.playlist_mode = "liked"
+            if not refill_one():
+                return False
+            return True
+        except Exception as e:
+            print(f"Ошибка: {e}")
             return False
-        return True
-    except Exception as e:
-        print(f"Ошибка: {e}")
+    finally:
         music.release_duck()
-        return False
 
 
 def queue_wave(language=None):
     """Запустить «Мою волну». language=None — обычная, "russian" — русская."""
     music.hold_duck()
+    try:
+        if language == "russian":
+            print("Загружаю 'Русскую волну'...")
+            memory.remember_search(query="включи русское", found_artist="Русская волна", success=True)
+        else:
+            print("Загружаю 'Мою волну'...")
+            memory.remember_search(query="включи музыку", found_artist="Моя волна", success=True)
 
-    if language == "russian":
-        print("Загружаю 'Русскую волну'...")
-        memory.remember_search(query="включи русское", found_artist="Русская волна", success=True)
-    else:
-        print("Загружаю 'Мою волну'...")
-        memory.remember_search(query="включи музыку", found_artist="Моя волна", success=True)
-
-    _reset_source_state()
-    with state.playlist_lock:
-        state.playlist = []
-        state.prefetched = {}
-    state.playlist_index = 0
-    state.playlist_mode = "wave"
-    state.wave_language = language
-    if not refill_one():
+        _reset_source_state()
+        with state.playlist_lock:
+            state.playlist = []
+            state.prefetched = {}
+        state.playlist_index = 0
+        state.playlist_mode = "wave"
+        state.wave_language = language
+        if not refill_one():
+            return False
+        return True
+    finally:
         music.release_duck()
-        return False
-    return True
 
 
 def start_genre(station_id, genre_name):
     print(f"🎸 Режим: жанр «{genre_name}» ({station_id})")
     music.hold_duck()
-    memory.remember_search(
-        query=genre_name,
-        found_artist=f"жанр {genre_name}",
-        success=True,
-    )
-    _reset_source_state()
-    with state.playlist_lock:
-        state.playlist = []
-        state.prefetched = {}
-    state.playlist_index = 0
-    state.playlist_mode = "genre"
-    state.genre_station_id = station_id
-    state.genre_name = genre_name
-    if not refill_one():
+    try:
+        memory.remember_search(
+            query=genre_name,
+            found_artist=f"жанр {genre_name}",
+            success=True,
+        )
+        _reset_source_state()
+        with state.playlist_lock:
+            state.playlist = []
+            state.prefetched = {}
+        state.playlist_index = 0
+        state.playlist_mode = "genre"
+        state.genre_station_id = station_id
+        state.genre_name = genre_name
+        if not refill_one():
+            return False
+        return True
+    finally:
         music.release_duck()
-        return False
-    return True
