@@ -9,6 +9,15 @@ shared/protocol.py — протокол общения между brain и worke
     tts_inbox       — что сказать → tts
     music_inbox     — команды управления музыкой → music
     asr_control     — управление ASR (старт/стоп, режим)
+
+FIX (день 29, вечер): удалены мёртвые обёртки music_hold_duck(),
+music_release_duck(), music_duck_on(), music_duck_off().
+  - hold_duck/release_duck — внутренние команды modes.py (загрузка
+    данных), из brain их не шлём.
+  - duck_on/duck_off теперь шлёт ASR при mic_off/mic_on. TTS worker
+    про музыку не знает. Обёртки в protocol.py больше не нужны.
+  - music_control("hold_duck"/"release_duck"/"duck_on"/"duck_off")
+    остаются как валидные control-имена (обработка в music/main.py).
 """
 
 import json
@@ -101,8 +110,13 @@ def play_radio(station: str, **kw) -> Message:
 
 def music_control(name: str, **kw) -> Message:
     """Управление музыкой: next, prev, pause, resume, stop,
-    volume_up, volume_down, volume_set, hold_duck, release_duck,
-    duck_on, duck_off, dislike, now_playing_request."""
+    volume_up, volume_down, volume_set,
+    duck_on, duck_off, dislike, now_playing_request.
+
+    hold_duck/release_duck — внутренние команды modes.py (загрузка
+    данных), из brain их не шлём. duck_on/duck_off шлёт ASR при
+    mic_off/mic_on (привязка ducking к микрофону).
+    """
     return Message(type="control", name=name, data=kw)
 
 
@@ -136,26 +150,6 @@ def music_volume_down() -> Message:
 
 def music_volume_set(value: int) -> Message:
     return music_control("volume_set", value=value)
-
-
-def music_hold_duck() -> Message:
-    """Держать паузу (brain ищет трек — музыка не должна играть)."""
-    return music_control("hold_duck")
-
-
-def music_release_duck() -> Message:
-    """Отпустить паузу (brain нашёл — музыка может играть)."""
-    return music_control("release_duck")
-
-
-def music_duck_on(level: float = 0.2) -> Message:
-    """Приглушить музыку до level (0.0–1.0). Не пауза — volume down."""
-    return music_control("duck_on", level=level)
-
-
-def music_duck_off() -> Message:
-    """Вернуть громкость после duck."""
-    return music_control("duck_off")
 
 
 def music_dislike(**kw) -> Message:

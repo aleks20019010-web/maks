@@ -17,6 +17,21 @@
 #   music_playing.flag (music worker) — hot words при музыке.
 #   expecting_input.flag (brain pending) — hot words при ожидании ответа.
 #   session_open.flag (TTS worker) — окно после ответа LLM.
+#
+# FIX (день 29, вечер):
+#   - DUCK_LEVEL — целевая громкость музыки при ducking (%). music/player.py
+#     читает через getattr(cfg, "DUCK_LEVEL", 20), но теперь есть явный дефолт
+#     в конфиге, чтобы не расходиться при рефакторингах.
+#   - MUSIC_INBOX_TIMEOUT — таймаут ipc.get для music-воркера. 0.05 нужен,
+#     чтобы duck_on/duck_off применялись быстро (см. music/main.py).
+#   - TTS_START_TIMEOUT_SEC / TTS_PLAY_TIMEOUT_SEC — таймауты ожидания
+#     State.Playing / Ended в tts/player.py (были хардкодом 2.0/30.0).
+#   - TTS_DUCK_TAIL_SEC — хвост после конца фразы перед duck_off (был в
+#     коде как getattr-дефолт 0.1; теперь явный).
+#   - AEC_LOOPBACK_DEVICE_INDEX — был объявлен, но не используется; оставлен
+#     как есть (совместимость), помечен комментарием.
+#   - Убрано дублирование путей: TTS_TEMP_DIR = CACHE_DIR (одна папка для
+#     временных mp3), чтобы не плодить два каталога с одинаковым смыслом.
 
 import os
 import json
@@ -73,8 +88,10 @@ CACHE_DIR = DATA_DIR / "tts_cache"
 DATA_LOGS_DIR = DATA_DIR / "logs"
 MEMORY_DB = DATA_DIR / "memory.db"
 
-# Старые пути (для обратной совместимости с core/)
-TTS_TEMP_DIR = BASE_DIR / "cache"
+# Временные mp3 TTS — та же папка, что и кэш TTS.
+# Старый TTS_TEMP_DIR (BASE_DIR / "cache") удалён: смысл тот же, а два
+# каталога с одинаковым назначением только путают.
+TTS_TEMP_DIR = CACHE_DIR
 TTS_TEMP_FILE = TTS_TEMP_DIR / "_tts_temp.mp3"
 
 
@@ -115,6 +132,17 @@ SOURCE_LIST = [
 
 PORTIONS_PER_SOURCE = 3
 WAVE_RESET_SEC = 300
+
+# --- DUCKING ---------------------------------------------------
+# Целевая громкость музыки при ducking, %. music/player.py берёт это
+# через getattr(cfg, "DUCK_LEVEL", 20). Явно здесь — чтобы не расходиться.
+DUCK_LEVEL = 20
+
+# --- MUSIC IPC -------------------------------------------------
+# Таймаут ipc.get для music-воркера. 0.05 сек нужен, чтобы duck_on/duck_off
+# применялись быстро (пока TTS говорит, задержка слышна).
+MUSIC_INBOX_TIMEOUT = 0.05
+
 
 # ============================================================
 # МИКРОФОН / ASR
@@ -174,6 +202,16 @@ TTS_ENABLED = True
 TTS_ECHO_GUARD_SEC = 0.8
 TTS_MUTE_DEFAULT_SEC = 300
 
+# --- TTS playback timeouts (tts/player.py) ---------------------
+# Ожидание реального старта (State.Playing). 2.0 сек — как было хардкодом.
+TTS_START_TIMEOUT_SEC = 2.0
+# Ожидание реального конца (Ended/Stopped). 30 сек — как было хардкодом.
+TTS_PLAY_TIMEOUT_SEC = 30.0
+# Хвост после конца фразы перед отправкой duck_off. Чтобы не обрывать
+# последние сэмплы из-за буферизации VLC.
+TTS_DUCK_TAIL_SEC = 0.1
+
+
 # ============================================================
 # СОЗДАНИЕ ПАПОК
 # ============================================================
@@ -190,4 +228,7 @@ AEC_ENABLED = False
 ECHOFF_SAMPLE_RATE_HZ = 48000
 ECHOFF_STREAM_DELAY_MS = 100
 
+# AEC_LOOPBACK_DEVICE_INDEX сейчас не используется в коде (только
+# объявлен). Оставлен для обратной совместимости с конфигами,
+# которые на него ссылаются. При включении AEC — читать отсюда.
 AEC_LOOPBACK_DEVICE_INDEX = 10

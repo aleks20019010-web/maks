@@ -1,6 +1,16 @@
 # workers/music/radio.py
 # Радио: живые интернет-потоки.
 # Music worker НЕ говорит. Brain скажет сам.
+#
+# DUCKING (день 29, вечер): ducking привязан к микрофону ASR.
+#   Убран music.release_duck() после mark_ready. Ducking от TTS
+#   (если TTS ещё говорит, пока радио стартует) снимает ASR при mic_on.
+#   Раньше: release_duck() в start_radio() снимал ducking от TTS
+#   раньше времени — та же гонка, что в playback.play_index
+#   (баг из лога 15:15:20: volume 100 → 20 → 100, TTS ещё говорит).
+#   Если TTS говорит во время старта радио, music.set_player() создаст
+#   плеер приглушённым (ducked=True), mark_ready() применит _duck_level.
+#   ASR пришлёт duck_off при mic_on — восстановит громкость.
 
 import json
 import os
@@ -93,7 +103,8 @@ def start_radio(station_key: str) -> bool:
         music.set_player(player)
         player.play()
         music.mark_ready()
-        music.release_duck()
+        # Ducking от TTS (если активен) снимает ASR при mic_on.
+        # Здесь music.release_duck() снимал ducking раньше времени (баг 15:15:20).
     except Exception as e:
         print(f"  ✗ Радио «{name}»: ошибка VLC: {e}")
         return False

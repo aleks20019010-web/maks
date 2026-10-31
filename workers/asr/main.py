@@ -17,6 +17,21 @@ A2 (день 29): Vosk-wake вернулся (ViolaWake убран).
 
 FIX: echo-фильтр не считает echo, если распознанное — hot word.
 FIX: порог echo поднят с 0.6 до 0.85.
+
+DUCKING (день 29, вечер): приглушение музыки привязано к микрофону.
+  - Микрофон ВЫКЛ (TTS идёт) → ipc.music_control("duck_on").
+  - Микрофон ВКЛ (реально слушает, после mute-паузы) → duck_off.
+  Один источник правды: пока TTS говорит, микрофон выключен — музыка
+  приглушена. TTS worker больше НЕ шлёт duck_on/duck_off.
+  - Флаг _duck_sent защищает от дублей.
+  - При старте сбрасываем залипший duck.
+
+FIX (день 29, вечер): duck_off отправляется ПОСЛЕ mute-паузы, а не в
+  момент speaking=False. Раньше: duck_off уходил мгновенно после Ended,
+  музыка возвращалась на полную громкость, а микрофон ещё 1 сек
+  не слушал (mute-пауза) — звук «возвращался сразу после TTS».
+  Теперь: duck_off в момент, когда микрофон реально начинает слушать
+  (после POST_TTS_MUTE_SEC). Музыка возвращается через 1 сек после TTS.
 """
 
 import json
@@ -54,6 +69,10 @@ _waiting_for_command = False
 _last_wake_time = 0.0
 _last_hot_word_at = 0.0
 
+# Ducking музыки через микрофон. _duck_sent=True → duck_on отправлен,
+# duck_off ещё не отправлен. Сбрасывается в _duck_off().
+_duck_sent = False
+
 
 # ── Флаги ──────────────────────────────────────────────────────
 def _flag_exists(name: str) -> bool:
@@ -69,6 +88,32 @@ def _is_music_playing() -> bool:
 
 def _is_expecting_input() -> bool:
     return _flag_exists("expecting_input.flag")
+
+
+# ── Ducking (микрофон ⇄ музыка) ───────────────────────────────
+def _duck_on():
+    """Микрофон ВЫКЛ — приглушить музыку. Идемпотентно."""
+    global _duck_sent
+    if _duck_sent:
+        return
+    _duck_sent = True
+    try:
+        ipc.put(protocol.MUSIC_INBOX, protocol.music_control("duck_on"))
+    except Exception as e:
+        _duck_sent = False  # чтобы следующий _duck_on попробовал снова
+        log(f"asr: duck_on error: {e}", tag="ASR", level="WARN")
+
+
+def _duck_off():
+    """Микрофон ВКЛ (реально слушает) — восстановить громкость."""
+    global _duck_sent
+    if not _duck_sent:
+        return
+    _duck_sent = False
+    try:
+        ipc.put(protocol.MUSIC_INBOX, protocol.music_control("duck_off"))
+    except Exception as e:
+        log(f"asr: duck_off error: {e}", tag="ASR", level="WARN")
 
 
 # ── Hot words ──────────────────────────────────────────────────
@@ -288,6 +333,14 @@ def main():
     log("asr: старт", tag="ASR")
     ipc.init()
 
+    # На старте: если TTS упал в прошлом запуске, duck_off мог не уйти —
+    # музыка осталась приглушённой. Сбрасываем.
+    try:
+        ipc.put(protocol.MUSIC_INBOX, protocol.music_control("duck_off"))
+        log("asr: старт — сбросил возможный залипший duck", tag="ASR")
+    except Exception as e:
+        log(f"asr: старт duck_off error: {e}", tag="ASR", level="WARN")
+
     log(f"asr: загружаю Vosk: {cfg.VOSK_MODEL_PATH}", tag="ASR")
     try:
         model = Model(str(cfg.VOSK_MODEL_PATH))
@@ -325,6 +378,7 @@ def main():
 
     _was_speaking = False
     _speaking_stopped_at = 0.0
+    _mic_on_logged = False   # чтобы не спамить логом "ВКЛ" после каждого тика
 
     _last_sent_text = ""
     _last_sent_time = 0.0
@@ -387,22 +441,31 @@ def main():
             if speaking:
                 if not _was_speaking:
                     _was_speaking = True
+                    _mic_on_logged = False
                     log("asr: микрофон ВЫКЛ (TTS идёт)", tag="ASR")
+                    _duck_on()
                 continue
 
             if _was_speaking:
                 _was_speaking = False
                 _speaking_stopped_at = now
+                # duck_off НЕ здесь — ниже, после mute-паузы.
                 try:
                     rec = KaldiRecognizer(model, cfg.VOSK_RATE)
                 except Exception as e:
                     log(f"asr: ошибка пересоздания rec: {e}", tag="ASR", level="WARN")
-                mute = POST_TTS_MUTE_WAKE_SEC if _waiting_for_command else POST_TTS_MUTE_SEC
-                log(f"asr: микрофон ВКЛ через {mute:.1f}s", tag="ASR")
 
             mute = POST_TTS_MUTE_WAKE_SEC if _waiting_for_command else POST_TTS_MUTE_SEC
             if (now - _speaking_stopped_at) < mute:
                 continue
+
+            # Mute-пауза прошла — микрофон реально слушает.
+            # Снимаем ducking именно здесь, а не в момент speaking=False.
+            # _duck_sent защищает от повторов после первого вызова.
+            if not _mic_on_logged:
+                _mic_on_logged = True
+                log(f"asr: микрофон ВКЛ через {mute:.1f}s", tag="ASR")
+            _duck_off()
 
             if not rec.AcceptWaveform(data):
                 continue

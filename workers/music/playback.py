@@ -32,6 +32,22 @@
 #
 # FIX (2026-10-27): play_index — счётчик попыток. Если 3 трека подряд не удалось
 # получить — сдаёмся, return False.
+#
+# DUCKING (день 29, вечер): ducking привязан к микрофону ASR.
+#   - _release_duck_safe() больше НЕ вызывает music.release_duck().
+#     Ducking от TTS снимается ASR при mic_on (duck_off). Здесь только
+#     проверка TTS-флага для случая «плеер новый, а TTS ещё говорит» —
+#     hold уже стоит в modes.py, ничего дополнительно не делаем.
+#     Раньше: _release_duck_safe() дёргал music.release_duck() в play_index
+#     после mark_ready → снимал ducking, поставленный TTS, даже если TTS
+#     ещё говорил. Именно это давало «приглушение после TTS» в логе 15:15:20
+#     (volume 100 → 20, потом volume → 100 через секунду, TTS ещё говорит).
+#   - _tts_speaking() оставлен: используется в play_index для паузы перед
+#     player.play(), чтобы не начинать трек поверх TTS.
+#   - music.set_player() при ducked=True создаст плеер приглушённым
+#     (см. player.py), TTS-hold от modes.py продолжит работать.
+#   - ⚠ music.check_duck_watchdog() надо вызывать из music/main.py при
+#     пустой очереди — иначе если TTS упадёт, ducking залипнет.
 
 import os
 import time
@@ -94,15 +110,12 @@ def _tts_speaking() -> bool:
         return False
 
 
-def _release_duck_safe():
-    """Снять duck, только если TTS не говорит.
-
-    Если TTS говорит — duck_hold остаётся, TTS сам снимет после конца фразы.
-    """
-    if _tts_speaking():
-        print("   [DUCK] TTS говорит — пауза сохраняется (release_duck пропущен)")
-        return
-    music.release_duck()
+# _release_duck_safe() удалён. Ducking от TTS снимает ASR при mic_on.
+# Если TTS ещё говорит, music.set_player() создал плеер приглушённым
+# (ducked=True), а mark_ready() применит _duck_level. ASR пришлёт duck_off
+# в момент mic_on — это и восстановит громкость. Никаких действий отсюда
+# не требуется: любой вызов music.release_duck() здесь снимает ducking
+# раньше времени (баг из лога 15:15:20).
 
 
 def refill_one():
@@ -258,8 +271,10 @@ def play_index(idx, announce=False):
                 return False
 
             music.mark_ready()
-            _release_duck_safe()
             _set_music_playing()
+            # Ducking от TTS (если активен) снимает ASR при mic_on.
+            # Здесь ничего не делаем: music.release_duck() тут снимал
+            # ducking раньше времени (баг 15:15:20).
 
             state.current_track_title = title
             state.current_track_id = track.id
@@ -289,7 +304,8 @@ def play_next(from_finish=False):
     from_finish=True — вызвано из monitor_player (трек закончился).
     from_finish=False — вызвано из _cmd_next (пользователь сказал «дальше»).
 
-    Возвращает True, если удалось переключиться, False — если нет.
+    Возвращает True, если удалось переключиться, False — если нет,
+    None — если debounce.
     """
     now = time.time()
     if now - state.last_next_time < cfg.NEXT_DEBOUNCE_SEC:

@@ -3,6 +3,14 @@
 # лайки, волна, жанр.
 #
 # Music worker НЕ говорит. Brain скажет сам, до отправки в music_inbox.
+#
+# DUCKING (день 29, вечер): ducking привязан к микрофону ASR.
+#   hold_duck/release_duck здесь — это «пока грузим данные, не восстанавливай
+#   громкость». С TTS-ducking они не пересекаются (см. player.py:
+#   restore() учитывает hold только при _ducked_by_tts=False,
+#   release_duck() при _ducked_by_tts=True не вызывает restore()).
+#   Прямых music.duck()/music.restore() тут нет и не должно быть —
+#   ducking включает/снимает только ASR через mic_off/mic_on.
 
 import threading
 import time

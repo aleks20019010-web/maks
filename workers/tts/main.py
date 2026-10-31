@@ -1,7 +1,28 @@
 # workers/tts/main.py
 # TTS worker: слушает tts_inbox, синтезирует, играет через VLC.
-# Ducking музыки — через IPC (music_inbox).
+# Ducking музыки привязан к ASR (микрофон ВЫКЛ/ВКЛ → duck_on/duck_off).
+# TTS worker про музыку не знает: только выставляет speaking в state_file,
+# ASR читает его и управляет ducking.
 # Состояние (speaking) — пишет в data/tts_state.json.
+#
+# FIX (день 29, вечер): duck_music_on/duck_music_off удалены.
+#   Ducking теперь делает ASR в момент mic_off/mic_on.
+#   - _say_one: убран duck_music_on() перед синтезом и duck_music_off()
+#     в finally. Ducking делает ASR, как только увидит speaking=True
+#     в state_file (тик ~100 мс). Задержка ~50–100 мс — приемлемо.
+#   - _say_one: tts_state.set_speaking(False) только если был
+#     set_speaking(True) (флаг spoke) — не дёргаем state_file зря,
+#     если синтез упал до старта воспроизведения.
+#   - _handle_say: TTS_ECHO_GUARD_SEC с защитой от TypeError/ValueError.
+#   - main: при KeyboardInterrupt — сброс speaking=False, чтобы
+#     state_file не залип «говорит» после падения воркера. Иначе ASR
+#     будет считать, что микрофон выключен, и музыка застрянет на 20%.
+#
+# FIX (ducking, старая версия): duck_music_on() вызывался ДО синтеза,
+#   чтобы music-воркер успел приглушить музыку до старта TTS. Сейчас эта
+#   забота на ASR: как только set_speaking(True) записан, ASR на следующем
+#   тике (≤100 мс) выключит микрофон и отправит duck_on. Синтез занимает
+#   1–2 сек — за это время music гарантированно успевает приглушить.
 
 import os
 import sys
@@ -74,28 +95,33 @@ def _synth(text, out_path, rate=None, pitch=None, emotion=None, cache=True) -> b
 
 
 def _say_one(text, rate=None, pitch=None, emotion=None, cache=True) -> bool:
-    """Синтезировать + проиграть. Ducking музыки — через IPC."""
-    temp = _unique_temp_file()
+    """Синтезировать + проиграть.
 
-    ok = _synth(text, temp, rate, pitch, emotion, cache=cache)
-    if not ok:
-        _cleanup_temp(temp)
-        log("tts: синтез не удался, пропуск", tag="TTS", level="WARN")
-        return False
+    Ducking музыки делает ASR: как только tts_state.set_speaking(True)
+    записан, ASR на следующем тике выключит микрофон и отправит duck_on.
+    Здесь про музыку ничего нет.
+    """
+    temp = _unique_temp_file()
+    spoke = False
 
     try:
-        # TTS начинает говорить
+        ok = _synth(text, temp, rate, pitch, emotion, cache=cache)
+        if not ok:
+            log("tts: синтез не удался, пропуск", tag="TTS", level="WARN")
+            return False
+
         tts_state.set_speaking(True, text)
-        tts_player.duck_music_on()
+        spoke = True
+
         tts_player.play_tts_file(temp)
         return True
     except Exception as e:
         log(f"tts: play error: {e}", tag="TTS", level="ERROR")
         return False
     finally:
-        tts_player.duck_music_off()
-        # TTS закончил говорить — last_text остаётся для echo-фильтра
-        tts_state.set_speaking(False, text)
+        if spoke:
+            # last_text остаётся для echo-фильтра в ASR
+            tts_state.set_speaking(False, text)
         _cleanup_temp(temp)
 
 
@@ -121,7 +147,12 @@ def _handle_say(msg: protocol.Message):
     ok = _say_one(text, rate=rate, pitch=pitch, emotion=emotion, cache=cache)
 
     if ok:
-        time.sleep(cfg.TTS_ECHO_GUARD_SEC)
+        try:
+            guard = float(getattr(cfg, "TTS_ECHO_GUARD_SEC", 0.3))
+        except (TypeError, ValueError):
+            guard = 0.3
+        if guard > 0:
+            time.sleep(guard)
 
 
 def main():
@@ -158,4 +189,8 @@ if __name__ == "__main__":
         main()
     except KeyboardInterrupt:
         log("tts: остановка по Ctrl+C", tag="TTS")
+        try:
+            tts_state.set_speaking(False, "")
+        except Exception:
+            pass
         sys.exit(0)
