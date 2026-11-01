@@ -6,7 +6,7 @@
       "cwd": ".",
       "auto_restart": true,
       "critical": true,
-      "ram_limit_mb": 500
+      "ram_limit_mb": 800
     },
     {
       "name": "asr",
