@@ -28,6 +28,15 @@
 # FIX (послушать): MUSIC_PLAY += фразы с «послушать»/«послушаем»
 #   («вруби что нибудь послушать» → MUSIC_PLAY, а не VOLUME_UP).
 #
+# FIX (exact-first): resolve() сначала проверяет ТОЧНОЕ совпадение с
+#   фразой из intent_routes.json (case-insensitive, strip). Если есть —
+#   возвращает (intent, 1.0) БЕЗ эмбеддингов. Иначе — эмбеддинги как раньше.
+#   Причина: «музыку» (одно слово) по эмбеддингам улетало в LLM_QUESTION
+#   (0.66), потому что семантически ближе к «что такое музыка», чем к
+#   «включи музыку». Exact-first чинит класс проблем: любая короткая
+#   фраза без глагола («арию», «киша», «рок»), добавленная в routes,
+#   теперь гарантированно попадает в свой intent.
+#
 # WARMUP (новое): warmup() — прогреть router при старте brain (в фоне).
 #   Раньше первая команда ждала 10-15 сек (загрузка intent_router.json +
 #   инициализация FastEmbedEncoder/ONNX). Теперь brain/main.py вызывает
@@ -98,6 +107,26 @@ def _load_routes() -> dict[Intent, list[str]]:
 
 # Загружаем при импорте (один раз). Тесты могут monkeypatch'ить _ROUTES.
 _ROUTES: dict[Intent, list[str]] = _load_routes()
+
+
+# ── Exact-match (приоритет над эмбеддингами) ────────────────
+def _exact_match(text: str) -> tuple[Intent, float] | None:
+    """Точное совпадение с фразой из _ROUTES (case-insensitive, strip).
+
+    Возвращает (intent, 1.0) или None, если точного совпадения нет.
+    Порядок обхода — порядок ключей в _ROUTES (как в JSON).
+    Если фраза есть в нескольких intent'ах — вернётся первый.
+    """
+    if not text:
+        return None
+    text_norm = text.lower().strip()
+    if not text_norm:
+        return None
+    for intent, phrases in _ROUTES.items():
+        for phrase in phrases:
+            if phrase.lower().strip() == text_norm:
+                return intent, 1.0
+    return None
 
 
 # ── Загрузка held-out фраз из config/intent_fit.json ─────────
@@ -227,9 +256,24 @@ def _init_router():
 
 
 def resolve(text: str) -> tuple[Intent, float]:
-    """Вернуть (Intent, confidence). UNKNOWN — если не уверен."""
+    """Вернуть (Intent, confidence). UNKNOWN — если не уверен.
+
+    Приоритет:
+      1. Exact match с фразой из _ROUTES → (intent, 1.0). Без эмбеддингов.
+      2. Эмбеддинги (IndexedRouter) → (intent, confidence) или UNKNOWN.
+    """
     if not text:
         return Intent.UNKNOWN, 0.0
+
+    # 1. Exact-first: точное совпадение с routes.
+    exact = _exact_match(text)
+    if exact is not None:
+        intent, conf = exact
+        log(f"intent: «{text}» → {intent.value} (exact, conf={conf:.2f})",
+            tag="BRAIN")
+        return intent, conf
+
+    # 2. Эмбеддинги — как раньше.
     router = _init_router()
     if router is None:
         return Intent.UNKNOWN, 0.0

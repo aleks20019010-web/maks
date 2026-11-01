@@ -125,6 +125,7 @@ def _init_skills():
     import brain.skills.weather.skill  # noqa: F401
     import brain.skills.system.skill   # noqa: F401
     import brain.skills.system.cleanup # noqa: F401
+    import brain.skills.llm.skill      # noqa: F401
     log("brain: навыки подключены", tag="BRAIN")
 
 

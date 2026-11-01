@@ -164,17 +164,6 @@ def process_command(command: str, source: CommandSource = CommandSource.VOICE):
             _repeat_count = 0
         return None
 
-    # ── FAST: find_handler (skills) ──
-    handler = skills_base.find_handler(command)
-    if handler:
-        log(f"router: → {handler.name} (fast)", tag="BRAIN")
-        try:
-            handler.handle(command)
-        except Exception as e:
-            from brain.errors import handle_error
-            handle_error(e, context=f"skill:{handler.name}", speak=True)
-        return None
-
     # ── NLU PIPELINE ──
     # find_handler вернул None. Зовём pipeline.process.
     # pipeline: normalizer → context? → intent → skill_resolver →

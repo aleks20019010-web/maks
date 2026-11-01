@@ -400,7 +400,7 @@ class LLMSkill(Skill):
     priority = 100
 
     def can_handle(self, text: str) -> bool:
-        return True
+        return False  # LLM — только через _try_llm_fallback, не fast-path
 
     def handle(self, text: str) -> bool:
         _start_workers()
