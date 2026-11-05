@@ -1,4 +1,4 @@
-﻿"""
+"""
 brain/main.py — ядро Макса.
 
 Поток:
@@ -18,6 +18,13 @@ brain/main.py — ядро Макса.
   - I: при music_started записывает привычку (time_bucket → artist).
   - F1: при первом wake за день — ритуал (утро/вечер/ночь).
   - F1: напоминания — фоновый воркер (не зависит от wake/команды).
+
+NEW (v6): событие discovery от music worker.
+  Music ловит трек-открытие и шлёт event_discovery в brain.
+  Brain решает «когда» (пришло событие) → зовёт personality_core
+  через respond_and_say("DISCOVERY_NEW", ...) → composer собирает
+  фразу → TTS. Music сам не говорит, music_discovery.json напрямую
+  не читает. Единая личность: discovery идёт через composer.
 
 FIX (день 28, аудит 1.1): при result == "exit" пишем data/brain_exit.flag
   с timestamp. Supervisor видит фреш-флаг (<60 сек) → не перезапускает brain.
@@ -230,6 +237,18 @@ def _handle_event(msg: protocol.Message):
                 respond_and_say("NOW_PLAYING", title=title, artist="")
             else:
                 respond_and_say("NO_TRACK_PLAYING")
+
+        elif msg.name == "discovery":
+            # NEW (v6): music сообщил «будет трек-открытие».
+            # Brain решает «когда» → personality_core («что и как») → TTS.
+            # artist/title не подставляем во фразу (фразы нейтральные,
+            # прогреты в кэш), но передаём — пригодится для логов/будущего.
+            artist = msg.data.get("artist", "")
+            title = msg.data.get("title", "")
+            if artist or title:
+                state.set_current(artist, title)
+            from brain.skills._helpers import respond_and_say
+            respond_and_say("DISCOVERY_NEW", artist=artist, title=title)
 
         elif msg.name == "music_stopped":
             state.clear_current()

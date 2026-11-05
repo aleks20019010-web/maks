@@ -47,7 +47,7 @@ class PersonalityEngine:
         )
         self._response_builder = ResponseBuilder(self._phrase)
 
-        from brain.composer import Composer
+        from personality_core.composer import Composer
         self._composer = Composer(base_dir, self._phrase)
 
     def respond(self, intent: str, **kw) -> JarvisResponse:

@@ -18,6 +18,10 @@ music_release_duck(), music_duck_on(), music_duck_off().
     про музыку не знает. Обёртки в protocol.py больше не нужны.
   - music_control("hold_duck"/"release_duck"/"duck_on"/"duck_off")
     остаются как валидные control-имена (обработка в music/main.py).
+
+NEW (v6): event_discovery — music сообщает brain «будет discovery-трек,
+скажи фразу». Music сам не говорит: brain решает «когда» → зовёт
+personality_core («что и как») → TTS.
 """
 
 import json
@@ -182,6 +186,16 @@ def event_music_stopped(**kw) -> Message:
 
 def event_track_finished(artist: str = "", title: str = "", **kw) -> Message:
     return Message(type="event", name="track_finished",
+                   data={"artist": artist, "title": title, **kw})
+
+
+def event_discovery(artist: str = "", title: str = "", **kw) -> Message:
+    """Music сообщает: будет трек-открытие, brain пусть скажет discovery-фразу.
+
+    Music не говорит сам — он только сигналит brain «пора». Brain решает
+    «когда» и зовёт personality_core («что и как») → TTS.
+    """
+    return Message(type="event", name="discovery",
                    data={"artist": artist, "title": title, **kw})
 
 

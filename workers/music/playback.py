@@ -20,6 +20,7 @@
 # События в brain:
 #   music_started  — после mark_ready() в play_index (трек реально играет)
 #   track_finished — в monitor_player на Ended (до play_next), с артистом/треком
+#   discovery      — NEW (v6): перед discovery-треком, brain скажет фразу
 #
 # Duck: если TTS говорит — не снимаем паузу. TTS снимет сам после конца фразы.
 #
@@ -48,6 +49,15 @@
 #     (см. player.py), TTS-hold от modes.py продолжит работать.
 #   - ⚠ music.check_duck_watchdog() надо вызывать из music/main.py при
 #     пустой очереди — иначе если TTS упадёт, ducking залипнет.
+#
+# v6 (2026-11-04): DISCOVERY через brain (единая личность).
+#   Music НЕ читает music_discovery.json и НЕ шлёт в TTS напрямую.
+#   Вместо _say_discovery: шлём event_discovery в brain → brain решает
+#   «когда» → personality_core («что и как», composer) → TTS.
+#   Ждём speaking=True до DISCOVERY_WAIT_SEC (3 сек): фразы прогреты
+#   в кэш warmup_tts.py, поэтому TTS стартует мгновенно. Если не
+#   дождались — играем без фразы (TTS не может: сеть/API).
+#   Существующий _tts_speaking()-блок ниже дождётся КОНЦА TTS.
 
 import os
 import time
@@ -71,6 +81,11 @@ from workers.music.sources import get_next_source_track
 
 PREFETCH_WAIT_SEC = 10.0
 MAX_PLAY_ATTEMPTS = 3
+
+# v6: сколько ждать, пока TTS начнёт discovery-фразу.
+# Фразы прогреты в кэш (warmup_tts.py) → TTS стартует мгновенно.
+# 3 сек — с большим запасом. Не дождались → TTS не может (сеть/API).
+DISCOVERY_WAIT_SEC = 3.0
 
 _MUSIC_PLAYING_FLAG = cfg.DATA_DIR / "music_playing.flag"
 
@@ -108,6 +123,25 @@ def _tts_speaking() -> bool:
         return bool(get_state().get("speaking", False))
     except Exception:
         return False
+
+
+def _wait_discovery_tts(timeout: float = DISCOVERY_WAIT_SEC) -> bool:
+    """v6: дождаться, пока TTS начнёт discovery-фразу.
+
+    Фразы прогреты в кэш (warmup_tts.py) → TTS ставит speaking=True
+    почти мгновенно. Если за timeout не дождались — TTS не может
+    (сеть/API/brain) — играем без фразы.
+
+    Возвращает True, если TTS начал говорить (speaking=True появился).
+    Существующий _tts_speaking()-блок в play_index дождётся КОНЦА TTS.
+    """
+    waited = 0.0
+    while waited < timeout:
+        if _tts_speaking():
+            return True
+        time.sleep(0.1)
+        waited += 0.1
+    return False
 
 
 # _release_duck_safe() удалён. Ducking от TTS снимает ASR при mic_on.
@@ -174,6 +208,7 @@ def play_index(idx, announce=False):
 
             _artist_for_mind = ""
             _title_for_mind = ""
+            _is_discovery = getattr(track, "_is_discovery", False)
 
             if isinstance(track, LocalTrack):
                 file_path = track.path
@@ -253,6 +288,23 @@ def play_index(idx, announce=False):
 
             player = vlc.MediaPlayer(file_path)
             music.set_player(player)
+
+            # v6: DISCOVERY через brain.
+            # Music не говорит сам: шлёт событие в brain → brain зовёт
+            # personality_core → composer → TTS. Ждём speaking=True до
+            # DISCOVERY_WAIT_SEC. Фразы прогреты в кэш → мгновенно.
+            # Не дождались — играем без фразы (TTS не может: сеть/API).
+            if _is_discovery:
+                try:
+                    ipc.put(protocol.BRAIN_INBOX,
+                            protocol.event_discovery(artist=_artist_for_mind,
+                                                     title=_title_for_mind))
+                except Exception as e:
+                    print(f"   ⚠ playback: event_discovery: {e}")
+
+                if not _wait_discovery_tts():
+                    print(f"   ⚠ discovery: TTS не начал за "
+                          f"{DISCOVERY_WAIT_SEC:.0f}с (сеть/API?) — играю без фразы")
 
             if _tts_speaking():
                 waited = 0.0

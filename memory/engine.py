@@ -1,4 +1,4 @@
-﻿# memory/engine.py
+# memory/engine.py
 # Главный класс памяти. remember_* мгновенно кладут событие в очередь,
 # фоновый writer пишет в SQLite.
 #
@@ -17,6 +17,11 @@
 #   + I: get_habit / set_habit — привычки (time_bucket → artist)
 #   + I: get_pattern / set_pattern — паттерны (condition → artist)
 #   + путь к БД из cfg.MEMORY_DB (D:\Maks\data\memory.db), а не memory/data/
+#
+# v5 (2026-11-04):
+#   + get_discovery_track — трек с минимальным weight > 0 (ротация снизу вверх).
+#     Не играл последние 2 часа (защита от повтора).
+#     weight + небольшой шум — random среди близких weight (ротация, не зацикливание).
 
 import os
 import json
@@ -235,6 +240,36 @@ class MemoryEngine:
 
     def unblacklist_track(self, track_id, reason='user_like'):
         self.preferences.unblacklist(track_id, reason)
+
+    # ========================================================
+    # DISCOVERY (v5) — ротация: мин. weight > 0
+    # ========================================================
+    def get_discovery_track(self, min_hours=2, pool_size=50):
+        """Трек из пула «забытых» (низкий вес), случайно.
+
+        Берём pool_size треков с самым низким weight > 0 (не играли
+        min_hours часов), затем random.choice — ротация без залипания.
+        last_played ASC — среди равных weight сначала давно не игранные.
+
+        Возвращает dict {track_id, artist, title, weight} или None.
+        """
+        import random
+        try:
+            rows = self.storage.query("""
+                SELECT track_id, artist, title, weight
+                FROM track_stats
+                WHERE weight > 0
+                  AND blacklisted = 0
+                  AND (last_played IS NULL
+                       OR last_played < datetime('now', ?))
+                ORDER BY weight ASC, last_played ASC
+                LIMIT ?
+            """, (f"-{int(min_hours)} hours", int(pool_size)))
+            if rows:
+                return dict(random.choice(rows))
+        except Exception as e:
+            print(f"⚠ get_discovery_track: {e}")
+        return None
 
     # ========================================================
     # ЧТЕНИЕ — АГРЕГАТЫ (Aggregates)

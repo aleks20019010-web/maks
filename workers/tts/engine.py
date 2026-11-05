@@ -83,7 +83,7 @@ class YandexEngine:
                 'https://tts.api.cloud.yandex.net/speech/v1/tts:synthesize',
                 headers=headers,
                 data=data,
-                timeout=30,
+                timeout=8,
             )
             if r.status_code != 200:
                 print(f"   ⚠ Yandex HTTP {r.status_code}: {r.text[:200]}")
