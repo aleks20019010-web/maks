@@ -11,16 +11,45 @@
 #   Если TTS говорит во время старта радио, music.set_player() создаст
 #   плеер приглушённым (ducked=True), mark_ready() применит _duck_level.
 #   ASR пришлёт duck_off при mic_on — восстановит громкость.
+#
+# FIX (2026-11-07): PCR is called too late / ES_OUT_SET_(GROUP_)PCR.
+#   Причина: vlc.MediaPlayer(url) использовал ДЕФОЛТНЫЙ глобальный
+#   vlc.Instance(). Media (libvlc_media_t) создавалась ВНУТРИ конструктора
+#   MediaPlayer и НЕ освобождалась (release() плеера не освобождает media
+#   в python-vlc). Утечка libvlc_media_t на каждую станцию → старый PCR
+#   «просрочен» → VLC ругается, Opening затягивается.
+#   Фикс:
+#     1) _get_music_instance() — импорт из playback.py. Один singleton
+#        vlc.Instance() на music-процесс (playback + radio делят его).
+#        Без дублирования: два instance в одном процессе = PCR-конфликт
+#        между playback и radio.
+#     2) media = inst.media_new(url) + p.set_media(media) вместо
+#        vlc.MediaPlayer(url) — media освобождается ЯВНО.
+#     3) music.set_player(player, media) — MusicManager хранит _media
+#        и освобождает её в _safe_release / clear_player.
+#   Циклический импорт: radio.py импортирует playback.py (только
+#   _get_music_instance), playback.py НЕ импортирует radio.py — цикла НЕТ.
+#
+# RADIO ABSENT (2026-11-07): «включи радио» без станции.
+#   brain/skills/music/skill.py::_command_to_result уже выбирает случайную
+#   станцию (если ent.value=None). Но здесь — страховка: если пришло
+#   None/"" (например, из другого места), тоже выбираем случайную.
+#   main.py::_handle_play делал `if not station_key: return` — радио
+#   терялось. Теперь: start_radio(None) → случайная → True.
+#   Если RADIO_STATIONS пуст — return False (нечего играть).
 
 import json
 import os
-
-import vlc
+import random
 
 from shared import config as cfg
 from workers.music import state
 from workers.music.player import music
 from memory import memory
+# FIX (2026-11-07): один vlc.Instance на music-процесс.
+# playback.py создаёт singleton, radio.py использует его же —
+# без дублирования (два instance = PCR-конфликт между playback и radio).
+from workers.music.playback import _get_music_instance
 
 
 STATIONS_FILE = os.path.join(cfg.BASE_DIR, 'config', 'radio_stations.json')
@@ -72,7 +101,21 @@ def is_radio_query(query: str) -> bool:
 
 
 def start_radio(station_key: str) -> bool:
-    """Запустить радиостанцию по ключу."""
+    """Запустить радиостанцию по ключу.
+
+    RADIO ABSENT (2026-11-07): station_key=None/"" — «включи радио»
+    без станции. Выбираем случайную из RADIO_STATIONS (страховка;
+    скил уже выбрал случайную в _command_to_result). Если станций нет —
+    return False.
+    """
+    # RADIO ABSENT (2026-11-07): None/"" → случайная станция.
+    if not station_key:
+        if not RADIO_STATIONS:
+            print("  ✗ Радио: нет станций в radio_stations.json")
+            return False
+        station_key = random.choice(list(RADIO_STATIONS.keys()))
+        print(f"📻 Радио: случайная «{station_key}»")
+
     station = RADIO_STATIONS.get(station_key)
     if not station:
         return False
@@ -99,8 +142,17 @@ def start_radio(station_key: str) -> bool:
     state.current_track_title = f"{name} — Радио"
 
     try:
-        player = vlc.MediaPlayer(url)
-        music.set_player(player)
+        # FIX (2026-11-07): явный media через singleton instance
+        # (импорт из playback.py). Раньше: vlc.MediaPlayer(url) —
+        # дефолтный instance, media внутри конструктора, не
+        # освобождалась → утечка → PCR.
+        # Теперь: media создаётся явно, music.set_player(player, media)
+        # сохраняет _media и освобождает её в _safe_release.
+        inst = _get_music_instance()
+        media = inst.media_new(url)
+        player = inst.media_player_new()
+        player.set_media(media)
+        music.set_player(player, media)
         player.play()
         music.mark_ready()
         # Ducking от TTS (если активен) снимает ASR при mic_on.

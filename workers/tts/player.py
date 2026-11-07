@@ -21,6 +21,27 @@
 #  - таймауты вынесены в cfg.TTS_START_TIMEOUT_SEC / cfg.TTS_PLAY_TIMEOUT_SEC;
 #  - при State.Error во время воспроизведения — лог ERROR + return False;
 #  - при таймауте — лог WARN, но return False.
+#
+# v6.2 (2026-11-05): play_tts_file принимает rate и применяет VLC set_rate.
+#   Причина: synth больше НЕ передаёт rate в Яндекс (mp3 всегда speed=1.0,
+#   кэш всегда попадает). rate из personality_core (prosody) применяется
+#   здесь, в VLC: set_rate(1.05) = быстрее на 5%, тон сохраняется
+#   (VLC Scaletempo). set_rate вызывается ДО play() — без щелчков.
+#   "+5%" → 1.05, "-10%" → 0.90 (хелпер _rate_to_float).
+#
+# FIX (2026-11-07): PCR is called too late / ES_OUT_SET_(GROUP_)PCR.
+#   Причина: vlc.MediaPlayer(file_path) использовал ДЕФОЛТНЫЙ глобальный
+#   vlc.Instance(). Если в том же процессе есть music-плеер — общий clock,
+#   старый PCR «просрочен» → VLC ругается, Opening затягивается.
+#   Фикс:
+#    1) явный vlc.Instance() для TTS (изоляция от music);
+#    2) media = inst.media_new(path) + p.set_media(media) вместо
+#       vlc.MediaPlayer(path) — media освобождается явно (media.release());
+#    3) media.release() в finally (утечка C-объектов libvlc_media_t);
+#    4) p.stop() УБРАН из finally — блокирует 1-2 сек (VLC flush),
+#       release() сам останавливает воспроизведение;
+#    5) TTS_START_TIMEOUT_SEC дефолт 2.0 → 3.0 (VLC Opening на Windows
+#       с directsound дольше 2 сек на cold start).
 
 import os
 import time
@@ -34,6 +55,29 @@ from shared.log import log
 TTS_VOLUME = 100
 
 
+# FIX (2026-11-07): явный vlc.Instance для TTS — изоляция от music.
+# Дефолтный vlc.MediaPlayer() использует глобальный instance; если в том же
+# процессе есть music-плеер, они делят clock → PCR «too late».
+# Один instance на процесс TTS (создаётся лениво).
+_vlc_instance = None
+
+
+def _get_instance():
+    """Ленивый singleton vlc.Instance для TTS. Изоляция от music."""
+    global _vlc_instance
+    if _vlc_instance is None:
+        _vlc_instance = vlc.Instance(
+            "--no-video",
+            "--no-osd",
+            "--quiet",
+            # Если directsound тормозит на Windows — раскомментировать:
+            # "--aout=mmdevice",
+        )
+        log("tts: vlc.Instance создан (TTS, изолирован от music)",
+            tag="TTS", level="DEBUG")
+    return _vlc_instance
+
+
 def _state_str(state):
     try:
         return str(state)
@@ -41,8 +85,32 @@ def _state_str(state):
         return "<unknown>"
 
 
-def play_tts_file(file_path: str) -> bool:
+def _rate_to_float(rate) -> float | None:
+    """'+5%' → 1.05, '-10%' → 0.90. None/'' → None.
+
+    VLC set_rate принимает float (1.0 = норма). Тон сохраняется
+    (Scaletempo). Если rate не парсится — None (не трогаем скорость).
+    """
+    if not rate:
+        return None
+    try:
+        s = str(rate).replace('%', '').replace('+', '').strip()
+        pct = int(s)
+        r = 1.0 + pct / 100.0
+        # Защита от абсурдных значений
+        if r < 0.5 or r > 2.0:
+            return None
+        return r
+    except Exception:
+        return None
+
+
+def play_tts_file(file_path: str, rate: str | None = None) -> bool:
     """Проиграть mp3. Останавливает и освобождает плеер после окончания.
+
+    rate — строка из personality_core (prosody), например "+5%".
+    Применяется в VLC (set_rate) ДО play(), тон сохраняется.
+    mp3 всегда синтезирован с speed=1.0 (кэш совпадает).
 
     Возвращает True, если проигрывание завершилось (Ended/Stopped),
     False — при ошибке или таймауте.
@@ -50,17 +118,39 @@ def play_tts_file(file_path: str) -> bool:
     if not os.path.exists(file_path):
         return False
 
-    start_timeout = float(getattr(cfg, "TTS_START_TIMEOUT_SEC", 2.0))
+    # FIX (2026-11-07): дефолт 2.0 → 3.0 (VLC Opening на Windows дольше).
+    start_timeout = float(getattr(cfg, "TTS_START_TIMEOUT_SEC", 3.0))
     play_timeout = float(getattr(cfg, "TTS_PLAY_TIMEOUT_SEC", 30.0))
 
     p = None
+    media = None
     ok = False
     try:
-        p = vlc.MediaPlayer(file_path)
+        # FIX (2026-11-07): явный instance + media_new/set_media
+        # вместо vlc.MediaPlayer(file_path). Изоляция от music,
+        # media освобождается явно (media.release() в finally).
+        inst = _get_instance()
+        media = inst.media_new(file_path)
+        p = inst.media_player_new()
+        p.set_media(media)
+
         try:
             p.audio_set_volume(TTS_VOLUME)
         except Exception:
             pass
+
+        # v6.2: rate из prosody — применяем в VLC ДО play().
+        # mp3 уже синтезирован с speed=1.0, set_rate ускоряет/замедляет
+        # воспроизведение, тон сохраняется.
+        if rate:
+            try:
+                r = _rate_to_float(rate)
+                if r is not None and abs(r - 1.0) > 1e-6:
+                    p.set_rate(r)
+            except Exception as e:
+                log(f"tts: set_rate({rate}) error: {e}",
+                    tag="TTS", level="WARN")
+
         p.play()
 
         # Ждём реального старта (State.Playing), не фиксированные 0.4 сек.
@@ -124,12 +214,17 @@ def play_tts_file(file_path: str) -> bool:
         log(f"tts: play error: {e}", tag="TTS", level="ERROR")
         return False
     finally:
+        # FIX (2026-11-07): stop() УБРАН — блокирует 1-2 сек (VLC flush),
+        # release() сам останавливает воспроизведение + освобождает
+        # libvlc_media_player_t. media.release() — освобождает
+        # libvlc_media_t (иначе утечка C-объектов на каждый вызов).
         if p is not None:
             try:
-                p.stop()
+                p.release()
             except Exception:
                 pass
+        if media is not None:
             try:
-                p.release()
+                media.release()
             except Exception:
                 pass

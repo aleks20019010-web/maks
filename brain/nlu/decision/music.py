@@ -2,8 +2,9 @@
 # DecisionEngine для музыки: Command → Decision.
 #
 # По EntityState:
-#   FOUND      → EXECUTE(play_artist / play_genre / play_track)
+#   FOUND      → EXECUTE(play_artist / play_genre / play_track / play_radio / play_mood)
 #   ABSENT     → EXECUTE(play_wave)        «включи музыку» / «вруби чего-нибудь»
+#   ABSENT+radio → EXECUTE(play_radio)     «включи радио» (без станции)
 #   UNRESOLVED → CLARIFY(«не нашёл X, может, Y?»)  «включи Орион»
 #   AMBIGUOUS  → CLARIFY(«нашёл 2: Ария, Кипелия. Какой?»)
 #
@@ -18,6 +19,13 @@
 #   - не выбирает скил (это skill_resolver)
 #   - не говорит (это router)
 #   Он только отвечает: «что делать с этой Command?».
+#
+# RADIO (2026-11-07): «включи радио» без станции.
+#   entity/music.py::match возвращает Entity(type="radio", value=None,
+#   state=ABSENT, source="radio_no_station"). Раньше ABSENT → всегда
+#   play_wave — радио терялось («включи радио» → моя волна). Теперь:
+#   ABSENT + type="radio" → EXECUTE(play_radio) без value → скил выберет
+#   случайную станцию (см. brain/skills/music/skill.py::_command_to_result).
 
 from brain.nlu.types import (
     Command, Decision, DecisionAction, ClarifyRequest,
@@ -91,6 +99,20 @@ class MusicDecisionEngine:
         # Нет entity — считаем ABSENT (пользователь не назвал параметр).
         if entity is None:
             return self._execute_wave(command, reason="entity None → ABSENT")
+
+        # RADIO (2026-11-07): «включи радио» без станции → play_radio.
+        # entity/music.py::match вернул Entity(type="radio", value=None,
+        # state=ABSENT, source="radio_no_station"). Раньше ABSENT → всегда
+        # play_wave — «включи радио» включало мою волну. Теперь — play_radio
+        # без value → скил выберет случайную станцию.
+        if entity.state == EntityState.ABSENT and entity.type == "radio":
+            command.action = "play_radio"
+            return Decision(
+                command=command,
+                action=DecisionAction.EXECUTE,
+                reason="entity ABSENT type=radio → play_radio (без станции)",
+                confidence=entity.match_confidence,
+            )
 
         if entity.state == EntityState.ABSENT:
             return self._execute_wave(command, reason="entity ABSENT → play_wave")

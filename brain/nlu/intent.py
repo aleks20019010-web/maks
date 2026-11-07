@@ -6,45 +6,22 @@
 #
 # Калибровка (fit) — только при первом создании.
 # Дальше — load_router из data/intent_router.json (без fit).
-# Если меняешь config/intent_routes.json / config/intent_fit.json —
-# удали data/intent_router.json.
-#
-# Модель: sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
-# (мультиязычная, русский есть, ~440 МБ на диске, ~300 МБ RAM, CPU, ONNX).
 #
 # FIX (routes → JSON): _ROUTES вынесен в config/intent_routes.json.
-#   _ROUTES — данные, не код. Правится без правки Python. Тесты могут
-#   подменять JSON, не патчить модуль.
-#   Формат: {"MUSIC_PLAY": ["фраза1", ...], "VOLUME_UP": [...], ...}.
-#   Если файл не найден или битый — пустой dict + WARN (router без routes
-#   не создастся, resolve → UNKNOWN; это лучше, чем падать).
-#
-# FIX (UNKNOWN): убран Intent.UNKNOWN из routes.
-#   UNKNOWN — не route, а fallback при confidence < threshold.
-#
-# MOOD: mood-фразы в MUSIC_PLAY (бодрое/весёлое/грустное), чтобы не
-#   уходило в VOLUME_UP.
-#
-# FIX (послушать): MUSIC_PLAY += фразы с «послушать»/«послушаем»
-#   («вруби что нибудь послушать» → MUSIC_PLAY, а не VOLUME_UP).
-#
-# FIX (exact-first): resolve() сначала проверяет ТОЧНОЕ совпадение с
-#   фразой из intent_routes.json (case-insensitive, strip). Если есть —
-#   возвращает (intent, 1.0) БЕЗ эмбеддингов. Иначе — эмбеддинги как раньше.
-#   Причина: «музыку» (одно слово) по эмбеддингам улетало в LLM_QUESTION
-#   (0.66), потому что семантически ближе к «что такое музыка», чем к
-#   «включи музыку». Exact-first чинит класс проблем: любая короткая
-#   фраза без глагола («арию», «киша», «рок»), добавленная в routes,
-#   теперь гарантированно попадает в свой intent.
-#
+# FIX (exact-first): resolve() сначала проверяет ТОЧНОЕ совпадение.
 # WARMUP (новое): warmup() — прогреть router при старте brain (в фоне).
-#   Раньше первая команда ждала 10-15 сек (загрузка intent_router.json +
-#   инициализация FastEmbedEncoder/ONNX). Теперь brain/main.py вызывает
-#   warmup() в фоне при старте, router греется параллельно. Первая команда
-#   → 0.05 сек (если warmup успел) или подождёт (если команда пришла раньше).
+#
+# FUZZY FALLBACK (2026-11-07, #4): если эмбеддинги дали confidence < 0.5
+#   (UNKNOWN или «на грани»), пробуем fuzzy по ВСЕМ фразам ВСЕХ интентов
+#   (difflib.SequenceMatcher, порог 0.8). Пример: «включи радio» (0.45)
+#   → fuzzy «включи радио» (0.92) → MUSIC_PLAY (1.00). Дёшево (difflib
+#   быстрый), точно (по фразам), без LLM. Не срабатывает, если
+#   эмбеддинги уже дали confidence >= 0.5 (тогда это не «ошибка ASR»,
+#   а нормальный распознанный intent).
 
 import json
 import threading
+import difflib
 
 from shared import config as cfg
 from shared.log import log
@@ -57,17 +34,18 @@ _ROUTER_FILE = cfg.DATA_DIR / "intent_router.json"
 _FIT_FILE = cfg.CONFIG_DIR / "intent_fit.json"
 _ROUTES_FILE = cfg.CONFIG_DIR / "intent_routes.json"
 
-# Порог: ниже — UNKNOWN. Начальный 0.5.
+# Порог: ниже — UNKNOWN.
 _THRESHOLD = 0.5
+# Fuzzy fallback порог (2026-11-07, #4): fuzzy по фразам всех интентов,
+# если эмбеддинги < 0.5. 0.8 — безопасно («включи радio» → «включи радио»
+# 0.92 → MUSIC_PLAY; «привет» → «привет» 1.0 → SMALLTALK; «абракадабра»
+# → «включи арию» 0.3 → не FOUND).
+_FUZZY_FALLBACK_THRESHOLD = 0.80
 
 
 # ── Загрузка routes из config/intent_routes.json ────────────
 def _load_routes() -> dict[Intent, list[str]]:
-    """Загрузить config/intent_routes.json → {Intent: [фразы]}.
-
-    Если файла нет / битый — {} + WARN. Router без routes не создастся,
-    resolve → UNKNOWN (это лучше, чем падать).
-    """
+    """Загрузить config/intent_routes.json → {Intent: [фразы]}."""
     if not _ROUTES_FILE.exists():
         log(f"intent: {_ROUTES_FILE} не найден — routes пустые",
             tag="BRAIN", level="ERROR")
@@ -105,18 +83,12 @@ def _load_routes() -> dict[Intent, list[str]]:
     return routes
 
 
-# Загружаем при импорте (один раз). Тесты могут monkeypatch'ить _ROUTES.
 _ROUTES: dict[Intent, list[str]] = _load_routes()
 
 
 # ── Exact-match (приоритет над эмбеддингами) ────────────────
 def _exact_match(text: str) -> tuple[Intent, float] | None:
-    """Точное совпадение с фразой из _ROUTES (case-insensitive, strip).
-
-    Возвращает (intent, 1.0) или None, если точного совпадения нет.
-    Порядок обхода — порядок ключей в _ROUTES (как в JSON).
-    Если фраза есть в нескольких intent'ах — вернётся первый.
-    """
+    """Точное совпадение с фразой из _ROUTES (case-insensitive, strip)."""
     if not text:
         return None
     text_norm = text.lower().strip()
@@ -129,13 +101,53 @@ def _exact_match(text: str) -> tuple[Intent, float] | None:
     return None
 
 
+# ── FUZZY FALLBACK (2026-11-07, #4) ─────────────────────────
+_fuzzy_index: list[tuple[str, Intent]] | None = None
+
+
+def _build_fuzzy_index() -> list[tuple[str, Intent]]:
+    """Плоский список (фраза, intent) из _ROUTES. Лениво, 1 раз."""
+    index: list[tuple[str, Intent]] = []
+    for intent, phrases in _ROUTES.items():
+        for phrase in phrases:
+            p = phrase.lower().strip()
+            if p:
+                index.append((p, intent))
+    return index
+
+
+def _fuzzy_fallback(text: str) -> tuple[Intent, float] | None:
+    """Fuzzy по всем фразам всех интентов (difflib, порог 0.8).
+
+    «включи радio» → «включи радио» (0.92) → MUSIC_PLAY.
+    «абракадабра» → «включи арию» (0.3) → None.
+    """
+    global _fuzzy_index
+    if not text:
+        return None
+    text_norm = text.lower().strip()
+    if not text_norm:
+        return None
+    if _fuzzy_index is None:
+        _fuzzy_index = _build_fuzzy_index()
+    if not _fuzzy_index:
+        return None
+
+    best_score = 0.0
+    best_intent: Intent | None = None
+    for phrase, intent in _fuzzy_index:
+        score = difflib.SequenceMatcher(None, text_norm, phrase).ratio()
+        if score > best_score:
+            best_score = score
+            best_intent = intent
+    if best_score >= _FUZZY_FALLBACK_THRESHOLD and best_intent is not None:
+        return best_intent, best_score
+    return None
+
+
 # ── Загрузка held-out фраз из config/intent_fit.json ─────────
 def _load_fit() -> tuple[list[str], list[Intent]]:
-    """Загрузить config/intent_fit.json → (X, Y).
-
-    Формат: {"MUSIC_PLAY": ["фраза1", ...], ..., "UNKNOWN": [...]}.
-    Если файла нет или пуст — ([], []).
-    """
+    """Загрузить config/intent_fit.json → (X, Y)."""
     if not _FIT_FILE.exists():
         log(f"intent: {_FIT_FILE} не найден, fit пропущен", tag="BRAIN", level="WARN")
         return [], []
@@ -167,10 +179,7 @@ def _load_fit() -> tuple[list[str], list[Intent]]:
 
 
 def _check_overlap(X: list[str]) -> list[str]:
-    """Проверить пересечения fit-фраз с _ROUTES (utterances).
-
-    Возвращает список фраз, которые есть в _ROUTES.
-    """
+    """Проверить пересечения fit-фраз с _ROUTES (utterances)."""
     routes_set = {u.strip() for utts in _ROUTES.values() for u in utts}
     return [p for p in X if p.strip() in routes_set]
 
@@ -195,7 +204,6 @@ def _init_router():
             log("intent: _ROUTES пуст — router не создастся", tag="BRAIN", level="ERROR")
             return None
 
-        # 1. Если файл есть — загружаем (без fit).
         if _ROUTER_FILE.exists():
             try:
                 router = load_router(path=str(_ROUTER_FILE))
@@ -209,7 +217,6 @@ def _init_router():
                 except Exception:
                     pass
 
-        # 2. Файла нет — создаём.
         try:
             routes = [
                 Route(name=intent.value, utterances=utterances)
@@ -221,7 +228,6 @@ def _init_router():
             router = IndexedRouter(encoder=encoder, routes=routes)
             router.confidence_threshold = _THRESHOLD
 
-            # fit — только если есть held-out фразы
             X, Y = _load_fit()
             if X:
                 overlap = _check_overlap(X)
@@ -261,6 +267,9 @@ def resolve(text: str) -> tuple[Intent, float]:
     Приоритет:
       1. Exact match с фразой из _ROUTES → (intent, 1.0). Без эмбеддингов.
       2. Эмбеддинги (IndexedRouter) → (intent, confidence) или UNKNOWN.
+      3. FUZZY FALLBACK (2026-11-07, #4): если эмбеддинги < 0.5 → fuzzy
+         по всем фразам всех интентов (difflib, порог 0.8). «включи радio»
+         (0.45) → «включи радио» (0.92) → MUSIC_PLAY (1.00). Без LLM.
     """
     if not text:
         return Intent.UNKNOWN, 0.0
@@ -276,33 +285,47 @@ def resolve(text: str) -> tuple[Intent, float]:
     # 2. Эмбеддинги — как раньше.
     router = _init_router()
     if router is None:
+        # Router не создался — сразу fuzzy fallback (без эмбеддингов).
+        fuzzy = _fuzzy_fallback(text)
+        if fuzzy is not None:
+            intent, conf = fuzzy
+            log(f"intent: «{text}» → {intent.value} "
+                f"(fuzzy, conf={conf:.2f}, router=None)", tag="BRAIN")
+            return intent, conf
         return Intent.UNKNOWN, 0.0
     try:
         choice = router(text)
-        if not choice.name or choice.confidence < _THRESHOLD:
-            return Intent.UNKNOWN, float(choice.confidence or 0.0)
+        emb_conf = float(choice.confidence or 0.0)
+        if not choice.name or emb_conf < _THRESHOLD:
+            # 3. FUZZY FALLBACK (2026-11-07, #4): эмбеддинги < 0.5 → fuzzy.
+            fuzzy = _fuzzy_fallback(text)
+            if fuzzy is not None:
+                intent, conf = fuzzy
+                log(f"intent: «{text}» → {intent.value} "
+                    f"(fuzzy, conf={conf:.2f}, emb={emb_conf:.2f})", tag="BRAIN")
+                return intent, conf
+            return Intent.UNKNOWN, emb_conf
         try:
             intent = Intent(choice.name)
         except ValueError:
-            return Intent.UNKNOWN, float(choice.confidence or 0.0)
+            return Intent.UNKNOWN, emb_conf
         log(f"intent: «{text}» → {intent.value} "
-            f"(confidence={choice.confidence:.2f})", tag="BRAIN")
-        return intent, float(choice.confidence)
+            f"(confidence={emb_conf:.2f})", tag="BRAIN")
+        return intent, emb_conf
     except Exception as e:
         log(f"intent: resolve error: {e}", tag="BRAIN", level="WARN")
+        # Даже при ошибке эмбеддингов — fuzzy fallback.
+        fuzzy = _fuzzy_fallback(text)
+        if fuzzy is not None:
+            intent, conf = fuzzy
+            log(f"intent: «{text}» → {intent.value} "
+                f"(fuzzy, conf={conf:.2f}, emb_error)", tag="BRAIN")
+            return intent, conf
         return Intent.UNKNOWN, 0.0
 
 
 def warmup() -> bool:
-    """Прогреть router (загрузить intent_router.json + encoder).
-
-    Вызывается из brain/main.py при старте (в фоне). Первая команда
-    не ждёт 10-15 сек холодного старта — router уже в памяти.
-    True — router готов, False — не удалось.
-
-    Идемпотентно: если router уже загружен (_router is not None) —
-    возвращает True сразу (без повторной загрузки).
-    """
+    """Прогреть router (загрузить intent_router.json + encoder)."""
     try:
         router = _init_router()
         if router is None:

@@ -11,7 +11,7 @@
 # A2: TTS ДО play_index, с каноничным именем из алиаса. Один TTS.
 #
 # MOOD: action="play_mood" → protocol.play_mood(mood_tag).
-#   mood_tag — tag метатега («Энергичное»). Воркер музыки делает
+#   mood_tag — tag метагега («Энергичное»). Воркер музыки делает
 #   client.metatag(tag) → station_id (mood:energetic) → start_genre.
 #
 # ЭТАП 9 (часть 2, НОВОЕ): fast-path для музыки УБРАН.
@@ -29,8 +29,23 @@
 #   LLM скажет «Простите, можно ещё раз?». Это дольше (4.5 сек), но
 #   правильно. Если хочешь быстро — вернём fast-path для not_understood
 #   отдельно (потом).
+#
+# RADIO (2026-11-07): «включи радио» без станции → ent.value=None.
+#   Раньше: if ent is None or not ent.value: return None (радио терялось).
+#   Теперь: для play_radio без value — выбираем случайную станцию здесь,
+#   чтобы _dispatch получил непустой station. _dispatch → protocol.play_radio
+#   → workers/music/main.py::_handle_play → radio.start_radio(station).
+#   Если станций нет — return None (нечего играть, router скажет «не понял»).
+#
+# RADIO TTS (2026-11-07): _dispatch("play_radio") теперь говорит
+#   PLAY_RADIO (responses/radio.json, {name}) с человеческим именем
+#   станции («Дорожное Радио», не ключ «дорожное»). _station_name()
+#   читает radio_stations.json → entry["name"]. Раньше TTS не было —
+#   радио включалось молча. TTS ДО ipc.put → радио стартует ПОСЛЕ TTS
+#   (как play_wave: TTS первый, музыка после).
 
 import json
+import random
 
 from brain.skills.base import Skill, register
 from brain.skills._helpers import respond_and_say as _respond_and_say
@@ -65,6 +80,52 @@ def _resolve_alias_name(query: str) -> str | None:
         if name:
             return name
     return None
+
+
+def _pick_random_radio() -> str | None:
+    """Выбрать случайную станцию из config/radio_stations.json.
+
+    RADIO (2026-11-07): «включи радио» без станции → любая.
+    Читаем напрямую (без импорта из workers — brain не должен зависеть
+    от воркеров, хотя _shared.GENRE_ALIASES уже импортируется — прецедент есть).
+    """
+    import os
+    path = os.path.join(cfg.BASE_DIR, "config", "radio_stations.json")
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path, "r", encoding="utf-8-sig") as f:
+            data = json.load(f)
+        if not isinstance(data, dict) or not data:
+            return None
+        return random.choice(list(data.keys()))
+    except Exception as e:
+        log(f"music: _pick_random_radio: {e}", tag="BRAIN", level="WARN")
+        return None
+
+
+def _station_name(station_key: str) -> str:
+    """Ключ станции → человеческое имя из radio_stations.json.
+
+    RADIO TTS (2026-11-07): «дорожное» → «Дорожное Радио» для фразы
+    PLAY_RADIO ({name}). Если ключ не найден — возвращаем ключ как есть
+    (лучше сказать «дорожное», чем ничего).
+    """
+    import os
+    path = os.path.join(cfg.BASE_DIR, "config", "radio_stations.json")
+    if not os.path.exists(path):
+        return station_key
+    try:
+        with open(path, "r", encoding="utf-8-sig") as f:
+            data = json.load(f)
+        entry = data.get(station_key) if isinstance(data, dict) else None
+        if isinstance(entry, dict):
+            name = entry.get("name")
+            if name:
+                return name
+    except Exception as e:
+        log(f"music: _station_name: {e}", tag="BRAIN", level="WARN")
+    return station_key
 
 
 class MusicSkill(Skill):
@@ -127,6 +188,24 @@ class MusicSkill(Skill):
         if action == "play_liked":
             return result
 
+        # RADIO (2026-11-07): «включи радио» без станции → ent.value=None.
+        # Раньше: if ent is None or not ent.value: return None (радио терялось).
+        # Теперь: для play_radio без value — выбираем случайную станцию
+        # здесь, чтобы _dispatch получил непустой station.
+        if action == "play_radio":
+            station = ent.value if ent and ent.value else None
+            if not station:
+                station = _pick_random_radio()
+                if station:
+                    log(f"music: play_radio без станции → случайная «{station}»",
+                        tag="BRAIN")
+            if not station:
+                log("music: play_radio — нет станций в radio_stations.json",
+                    tag="BRAIN", level="WARN")
+                return None
+            result["station"] = station
+            return result
+
         if ent is None or not ent.value:
             return None
 
@@ -146,9 +225,6 @@ class MusicSkill(Skill):
                 result["station"] = GENRE_ALIASES.get(ent.value, f"genre:{ent.value}")
             except Exception:
                 result["station"] = f"genre:{ent.value}"
-            return result
-        if action == "play_radio":
-            result["station"] = ent.value
             return result
 
         return None
@@ -250,7 +326,14 @@ class MusicSkill(Skill):
             ipc.put(protocol.MUSIC_INBOX, protocol.play_liked())
 
         elif action == "play_radio":
+            # RADIO (2026-11-07): station гарантированно непустой
+            # (выбран в _command_to_result — value или случайная).
+            # RADIO TTS (2026-11-07): говорим PLAY_RADIO (responses/radio.json,
+            # {name}) с ЧЕЛОВЕЧЕСКИМ именем («Дорожное Радио», не «дорожное»).
+            # TTS ДО ipc.put → радио стартует ПОСЛЕ TTS (как play_wave).
             station = result["station"]
+            name = _station_name(station)
+            _respond_and_say("PLAY_RADIO", name=name)
             ipc.put(protocol.MUSIC_INBOX, protocol.play_radio(station))
 
         elif action == "dislike":

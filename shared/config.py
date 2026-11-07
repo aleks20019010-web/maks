@@ -136,7 +136,7 @@ WAVE_RESET_SEC = 300
 # --- DUCKING ---------------------------------------------------
 # Целевая громкость музыки при ducking, %. music/player.py берёт это
 # через getattr(cfg, "DUCK_LEVEL", 20). Явно здесь — чтобы не расходиться.
-DUCK_LEVEL = 20
+DUCK_LEVEL = 30
 
 # --- MUSIC IPC -------------------------------------------------
 # Таймаут ipc.get для music-воркера. 0.05 сек нужен, чтобы duck_on/duck_off
@@ -204,7 +204,7 @@ TTS_MUTE_DEFAULT_SEC = 300
 
 # --- TTS playback timeouts (tts/player.py) ---------------------
 # Ожидание реального старта (State.Playing). 2.0 сек — как было хардкодом.
-TTS_START_TIMEOUT_SEC = 2.0
+TTS_START_TIMEOUT_SEC = 3.0
 # Ожидание реального конца (Ended/Stopped). 30 сек — как было хардкодом.
 TTS_PLAY_TIMEOUT_SEC = 30.0
 # Хвост после конца фразы перед отправкой duck_off. Чтобы не обрывать

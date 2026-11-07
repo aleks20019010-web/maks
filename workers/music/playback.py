@@ -20,7 +20,7 @@
 # События в brain:
 #   music_started  — после mark_ready() в play_index (трек реально играет)
 #   track_finished — в monitor_player на Ended (до play_next), с артистом/треком
-#   discovery      — NEW (v6): перед discovery-треком, brain скажет фразу
+#   discovery      — v6: перед discovery-треком, brain скажет фразу
 #
 # Duck: если TTS говорит — не снимаем паузу. TTS снимет сам после конца фразы.
 #
@@ -57,7 +57,37 @@
 #   Ждём speaking=True до DISCOVERY_WAIT_SEC (3 сек): фразы прогреты
 #   в кэш warmup_tts.py, поэтому TTS стартует мгновенно. Если не
 #   дождались — играем без фразы (TTS не может: сеть/API).
-#   Существующий _tts_speaking()-блок ниже дождётся КОНЦА TTS.
+#
+# v6.1 (2026-11-05): убраны time.sleep(2.0) и else: time.sleep(1.0)
+#   перед player.play(). Причина: _tts_speaking()-цикл уже ждёт КОНЦА
+#   TTS (если говорит), а ASR даёт 1.0 сек на «хвост VLC» (микрофон ВКЛ
+#   через 1.0s). Эхо не услышит. Лишние 2–3 сек задержки убраны.
+#   TTS перед треком сохраняется: ждём speaking=False, если TTS говорит.
+#
+# FIX (2026-11-07): PCR is called too late / ES_OUT_SET_(GROUP_)PCR.
+#   Причина: vlc.MediaPlayer(file_path) использовал ДЕФОЛТНЫЙ глобальный
+#   vlc.Instance(). Media (libvlc_media_t) создавалась ВНУТРИ конструктора
+#   MediaPlayer и НЕ освобождалась (release() плеера не освобождает media
+#   в python-vlc). Утечка libvlc_media_t на каждый трек → старый PCR
+#   «просрочен» → VLC ругается, Opening затягивается, музыка стартует с
+#   задержкой.
+#   Фикс:
+#     1) _get_music_instance() — явный singleton vlc.Instance() для music
+#        (изоляция от TTS/radio-плееров, которые могут делить clock в том
+#        же процессе).
+#     2) media = inst.media_new(path) + p.set_media(media) вместо
+#        vlc.MediaPlayer(path) — media освобождается ЯВНО.
+#     3) music.set_player(player, media) — MusicManager хранит _media и
+#        освобождает её в _safe_release / clear_player.
+#   radio.py импортирует _get_music_instance из этого модуля — один
+#   instance на music-процесс (без дублирования и PCR-конфликта между
+#   playback и radio).
+#
+# FIX (2026-11-07, #2): дублирование _get_music_instance в radio.py
+#   невозможно (импорт из playback.py) — но если radio.py импортирует
+#   playback.py, а playback.py импортирует radio.py — циклический импорт.
+#   Проверено: playback.py НЕ импортирует radio.py. radio.py импортирует
+#   playback.py (только _get_music_instance) — цикла НЕТ.
 
 import os
 import time
@@ -88,6 +118,32 @@ MAX_PLAY_ATTEMPTS = 3
 DISCOVERY_WAIT_SEC = 3.0
 
 _MUSIC_PLAYING_FLAG = cfg.DATA_DIR / "music_playing.flag"
+
+
+# ── FIX (2026-11-07): явный vlc.Instance для music ────────────────
+# Изоляция от TTS-плеера (у TTS свой instance в workers/tts/player.py)
+# и от любых других плееров в music-процессе. Один instance на процесс.
+# radio.py импортирует _get_music_instance отсюда — без дублирования.
+_music_instance = None
+
+
+def _get_music_instance():
+    """Ленивый singleton vlc.Instance для music-процесса.
+
+    Изоляция от TTS (у TTS свой instance). Один instance на процесс —
+    radio.py и playback.py делят его (через импорт).
+    """
+    global _music_instance
+    if _music_instance is None:
+        _music_instance = vlc.Instance(
+            "--no-video",
+            "--no-osd",
+            "--quiet",
+            # Если directsound тормозит на Windows — раскомментировать:
+            # "--aout=mmdevice",
+        )
+        print("   [MUSIC] vlc.Instance создан (music, изолирован от TTS)")
+    return _music_instance
 
 
 # ── A2: music_playing.flag ────────────────────────────────────
@@ -286,14 +342,18 @@ def play_index(idx, announce=False):
                 attempts += 1
                 continue
 
-            player = vlc.MediaPlayer(file_path)
-            music.set_player(player)
+            # FIX (2026-11-07): явный media через singleton instance.
+            # Раньше: vlc.MediaPlayer(file_path) — дефолтный instance,
+            # media внутри конструктора, не освобождалась → утечка → PCR.
+            # Теперь: media создаётся явно, music.set_player(player, media)
+            # сохраняет _media и освобождает её в _safe_release.
+            inst = _get_music_instance()
+            media = inst.media_new(file_path)
+            player = inst.media_player_new()
+            player.set_media(media)
+            music.set_player(player, media)
 
             # v6: DISCOVERY через brain.
-            # Music не говорит сам: шлёт событие в brain → brain зовёт
-            # personality_core → composer → TTS. Ждём speaking=True до
-            # DISCOVERY_WAIT_SEC. Фразы прогреты в кэш → мгновенно.
-            # Не дождались — играем без фразы (TTS не может: сеть/API).
             if _is_discovery:
                 try:
                     ipc.put(protocol.BRAIN_INBOX,
@@ -306,14 +366,15 @@ def play_index(idx, announce=False):
                     print(f"   ⚠ discovery: TTS не начал за "
                           f"{DISCOVERY_WAIT_SEC:.0f}с (сеть/API?) — играю без фразы")
 
+            # TTS перед треком: если TTS говорит — ждём КОНЦА TTS.
+            # v6.1: time.sleep(2.0) и else: time.sleep(1.0) УБРАНЫ.
+            # ASR даёт 1.0 сек на «хвост VLC» (микрофон ВКЛ через 1.0s),
+            # эхо не услышит. player.play() сам стартует.
             if _tts_speaking():
                 waited = 0.0
                 while _tts_speaking() and waited < 30:
                     time.sleep(0.1)
                     waited += 0.1
-                time.sleep(2.0)
-            else:
-                time.sleep(1.0)
 
             try:
                 player.play()
@@ -324,9 +385,6 @@ def play_index(idx, announce=False):
 
             music.mark_ready()
             _set_music_playing()
-            # Ducking от TTS (если активен) снимает ASR при mic_on.
-            # Здесь ничего не делаем: music.release_duck() тут снимал
-            # ducking раньше времени (баг 15:15:20).
 
             state.current_track_title = title
             state.current_track_id = track.id
