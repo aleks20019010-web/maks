@@ -43,6 +43,16 @@
 #   читает radio_stations.json → entry["name"]. Раньше TTS не было —
 #   радио включалось молча. TTS ДО ipc.put → радио стартует ПОСЛЕ TTS
 #   (как play_wave: TTS первый, музыка после).
+#
+# FIX (2026-11-08): ipc.put ДО TTS (все ветки _dispatch).
+#   Раньше: _respond_and_say (TTS, 5-6 сек) → ipc.put (музыка ПОСЛЕ TTS).
+#   Музыка стартовала через 2 сек после TTS (VLC Opening) — 0 сек тишины
+#   не было.
+#   Теперь: ipc.put (музыка стартует сразу, VLC Opening 2 сек) →
+#   _respond_and_say (TTS 5-6 сек поверх). TTS-hold (modes.py) приглушает
+#   музыку до mark_ready, ASR mic_off → duck_on (30%). Музыка 30% пока
+#   TTS говорит, 100% после. Пользователь слышит TTS сразу, музыка
+#   стартует параллельно (0 сек тишины после TTS).
 
 import json
 import random
@@ -284,25 +294,28 @@ class MusicSkill(Skill):
         log(f"music: спросил ({kind}), pending={PENDING_KEY} (wait_tts)", tag="BRAIN")
 
     def _dispatch(self, action: str, result: dict):
+        # FIX (2026-11-08): ipc.put ДО _respond_and_say (все ветки).
+        # Музыка стартует сразу (VLC Opening 2 сек параллельно с TTS),
+        # TTS поверх (ducking 30%). 0 сек тишины после TTS.
         if action == "play_artist":
             artist = result["artist"]
             canonical = _resolve_alias_name(artist)
             name_for_tts = canonical or artist
-            _respond_and_say("PLAY_ARTIST_STARTED", artist=name_for_tts)
             ipc.put(protocol.MUSIC_INBOX, protocol.play_artist(artist))
+            _respond_and_say("PLAY_ARTIST_STARTED", artist=name_for_tts)
 
         elif action == "play_track":
             track = result["track"]
             canonical = _resolve_alias_name(track)
             name_for_tts = canonical or track
-            _respond_and_say("PLAY_TRACK_STARTED", title=name_for_tts)
             ipc.put(protocol.MUSIC_INBOX, protocol.play_track(track))
+            _respond_and_say("PLAY_TRACK_STARTED", title=name_for_tts)
 
         elif action == "play_genre":
             genre = result["genre"]
             station = result.get("station", "")
-            _respond_and_say("PLAY_GENRE", genre=genre)
             ipc.put(protocol.MUSIC_INBOX, protocol.play_genre(genre, station=station))
+            _respond_and_say("PLAY_GENRE", genre=genre)
 
         elif action == "play_mood":
             mood_tag = result["mood"]
@@ -315,30 +328,29 @@ class MusicSkill(Skill):
 
         elif action == "play_wave":
             language = result.get("language")
+            ipc.put(protocol.MUSIC_INBOX, protocol.play_wave(language=language))
             if language == "russian":
                 _respond_and_say("PLAY_PLAYLIST", name="русскую волну")
             else:
                 _respond_and_say("PLAY_PLAYLIST", name="мою волну")
-            ipc.put(protocol.MUSIC_INBOX, protocol.play_wave(language=language))
 
         elif action == "play_liked":
-            _respond_and_say("PLAY_PLAYLIST", name="твою музыку")
             ipc.put(protocol.MUSIC_INBOX, protocol.play_liked())
+            _respond_and_say("PLAY_PLAYLIST", name="твою музыку")
 
         elif action == "play_radio":
             # RADIO (2026-11-07): station гарантированно непустой
             # (выбран в _command_to_result — value или случайная).
             # RADIO TTS (2026-11-07): говорим PLAY_RADIO (responses/radio.json,
             # {name}) с ЧЕЛОВЕЧЕСКИМ именем («Дорожное Радио», не «дорожное»).
-            # TTS ДО ipc.put → радио стартует ПОСЛЕ TTS (как play_wave).
             station = result["station"]
             name = _station_name(station)
-            _respond_and_say("PLAY_RADIO", name=name)
             ipc.put(protocol.MUSIC_INBOX, protocol.play_radio(station))
+            _respond_and_say("PLAY_RADIO", name=name)
 
         elif action == "dislike":
-            _respond_and_say("MUSIC_DISLIKE")
             ipc.put(protocol.MUSIC_INBOX, protocol.music_dislike())
+            _respond_and_say("MUSIC_DISLIKE")
 
 
 def on_music_started(artist: str, title: str) -> None:

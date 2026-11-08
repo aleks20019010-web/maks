@@ -84,6 +84,13 @@ FIX (2026-11-07, #2): segfault-риски в fade.
   - duck(): "(intent)" в логе ТОЛЬКО для ветки «плеер не готов».
     Раньше: "(intent)" и когда duck уже применён (fade) — путало
     (в логе "volume 100 → 30 (intent)", а duck применён сразу).
+
+FIX (2026-11-08): clear_player и set_player не блокируют release().
+  Раньше: _safe_release(player) вызывал release() (VLC на Windows —
+  до 5 сек, если плеер Opening/Playing). Блокировал play_index →
+  «включи музыку» ждал 5+ сек.
+  Теперь: pause() + set_media(None) (0.1 сек) + release() в фоне
+  (daemon thread). play_index не ждёт release() старого плеера.
 """
 
 import threading
@@ -141,15 +148,13 @@ class MusicManager:
         clear_player. Раньше media создавалась ВНУТРИ vlc.MediaPlayer()
         и не освобождалась → утечка C-объектов + PCR-конфликт.
 
-        new_media может быть None (обратная совместимость: radio.py
-        до патча, или если плеер создан без media — но это НЕ
-        рекомендуется, см. playback.py).
+        FIX (2026-11-08): release() старого плеера — в фоне (daemon).
+        Блокировка release() (5 сек на Windows) не ждёт play_index.
         """
         with self.lock:
             self._cancel_fade()
-            if self.player and self.player is not new_player:
-                self._safe_release(self.player, self._media)
-
+            old_player = self.player
+            old_media = self._media
             self._ready = False
             self.player = new_player
             self._media = new_media
@@ -164,6 +169,14 @@ class MusicManager:
             pid = id(new_player) if new_player else None
             print(f"   [MUSIC] set_player id={pid}, vol={self.volume}, "
                   f"ducked={self.ducked}, hold={self.duck_hold}, ready=False")
+
+        # FIX (2026-11-08): release() старого — в фоне (0 сек).
+        if old_player is not None and old_player is not new_player:
+            threading.Thread(
+                target=self._safe_release,
+                args=(old_player, old_media),
+                daemon=True,
+            ).start()
 
     def mark_ready(self):
         with self.lock:
@@ -182,13 +195,38 @@ class MusicManager:
             print(f"   [MUSIC] mark_ready id={pid}")
 
     def clear_player(self):
+        """Очистить плеер. FIX (2026-11-08): release() в фоне (0 сек).
+
+        Раньше: _safe_release(player) вызывал release() (VLC на Windows —
+        до 5 сек, если плеер Opening/Playing). Блокировал play_index →
+        «включи музыку» ждал 5+ сек.
+        Теперь: pause() + set_media(None) (0.1 сек) + release() в фоне.
+        """
         with self.lock:
             self._cancel_fade()
-            if self.player:
-                self._safe_release(self.player, self._media)
+            old_player = self.player
+            old_media = self._media
             self.player = None
             self._media = None
             self._ready = False
+
+        if old_player is not None:
+            # FIX (2026-11-08): pause() + set_media(None) — быстро (0.1 сек),
+            # release() — в фоне. Без pause() release() может блокировать
+            # до 5 сек (VLC flush).
+            try:
+                old_player.pause()
+            except Exception:
+                pass
+            try:
+                old_player.set_media(None)
+            except Exception:
+                pass
+            threading.Thread(
+                target=self._safe_release,
+                args=(old_player, old_media),
+                daemon=True,
+            ).start()
 
     def has_player(self):
         with self.lock:
