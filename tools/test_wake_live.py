@@ -5,7 +5,7 @@
 # Использует violawake_sdk.WakeDetector.process(), НЕ detect().
 #
 # Использование:
-#   python tools/test_wake_live.py --model D:\Projects\openwakeword-train\viola_models\max_viola.onnx --threshold 0.8
+#   python tools/test_wake_live.py --model D:\Projects\openwakeword-train\viola_models\max_viola_v3.onnx --threshold 0.8
 #
 # Что делает:
 #   - Слушает микрофон 16 кГц.

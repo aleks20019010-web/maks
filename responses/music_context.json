@@ -1,0 +1,162 @@
+{
+  "NIGHT_GREETING": [
+    {"text": "Д+оброй н+очи", "style": "night", "night": true, "rate": "-12%", "pitch": "-10Hz", "weight": 2.0, "emotion": "neutral", "slot": "core"},
+    {"text": "Ночь sil<[150]> Не сп+ится?", "style": "night", "night": true, "rate": "-12%", "weight": 2.0, "emotion": "neutral", "slot": "core"},
+    {"text": "Полн+очь sil<[150]> Сл+ушаю", "style": "night", "night": true, "rate": "-12%", "pitch": "-12Hz", "weight": 3.0, "emotion": "neutral", "slot": "core"},
+    {"text": "Д+оброй н+очи sil<[150]> Т+ихо sil<[75]> как н+адо", "style": "night", "night": true, "rate": "-12%", "pitch": "-10Hz", "weight": 1.5, "emotion": "neutral", "slot": "core"},
+    {"text": "Т+ихой н+очи", "style": "night", "night": true, "rate": "-12%", "pitch": "-10Hz", "weight": 1.5, "emotion": "neutral", "slot": "core"},
+    {"text": "Ночь sil<[150]> Я на св+язи", "style": "night", "night": true, "rate": "-12%", "weight": 1.5, "emotion": "neutral", "slot": "core"}
+  ],
+  "NIGHT_DEFAULT": [
+    {"text": "Т+ихо", "style": "night", "night": true, "rate": "-12%", "pitch": "-10Hz", "weight": 2.5, "emotion": "neutral", "slot": "core"},
+    {"text": "Как ск+ажете sil<[150]> Но т+ихо", "style": "night", "night": true, "rate": "-12%", "weight": 2.0, "emotion": "neutral", "slot": "core"},
+    {"text": "П+онял sil<[150]> Постар+аюсь не шум+еть", "style": "night", "night": true, "rate": "-12%", "pitch": "-12Hz", "weight": 1.5, "emotion": "neutral", "slot": "core"},
+    {"text": "Уж+е п+оздно sil<[150]> Д+ействую аккур+атно", "style": "night", "night": true, "rate": "-12%", "weight": 1.5, "emotion": "neutral", "slot": "core"},
+    {"text": "П+онял sil<[150]> Т+ихо", "style": "night", "night": true, "rate": "-12%", "weight": 1.0, "emotion": "neutral", "slot": "core"}
+  ],
+  "MORNING_GREETING": [
+    {"text": "Д+оброе +утро", "style": "friendly", "rate": "+5%", "weight": 3.0, "emotion": "good", "slot": "core"},
+    {"text": "+Утро sil<[150]> С чег+о начн+ём?", "style": "friendly", "humor": 0.1, "rate": "+5%", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Д+оброе sil<[150]> Я уж+е просн+улся", "style": "ironic", "humor": 0.3, "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "С д+обрым +утром sil<[150]> Что сл+ушаем сег+одня?", "style": "friendly", "rate": "+5%", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Д+оброе +утро sil<[150]> Сл+ушаю", "style": "friendly", "rate": "+5%", "weight": 1.5, "emotion": "good", "slot": "core"}
+  ],
+  "EVENING_GREETING": [
+    {"text": "Д+обрый в+ечер", "style": "normal", "weight": 3.0, "emotion": "good", "slot": "core"},
+    {"text": "В+ечер sil<[150]> Как прошёл день?", "style": "friendly", "humor": 0.2, "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Д+обрый в+ечер sil<[150]> Что пост+авим?", "style": "normal", "rate": "-5%", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "В+ечер sil<[150]> Хор+ошее вр+емя для м+узыки", "style": "friendly", "humor": 0.2, "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Д+обрый в+ечер sil<[150]> Сл+ушаю", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"}
+  ],
+  "INIT_LATE_NIGHT": [
+    {"text": "П+оздно sil<[150]> М+ожет sil<[75]> что-то пот+ише?", "style": "night", "night": true, "rate": "-12%", "pitch": "-10Hz", "weight": 2.0, "emotion": "neutral", "slot": "core"},
+    {"text": "Уж+е ночь sil<[150]> Ст+авлю — но т+ихо", "style": "night", "night": true, "rate": "-12%", "weight": 2.0, "emotion": "neutral", "slot": "core"},
+    {"text": "П+оздно sil<[150]> Включ+аю sil<[150]> Но негр+омко", "style": "night", "night": true, "rate": "-12%", "pitch": "-10Hz", "weight": 0.5, "emotion": "neutral", "slot": "core"},
+    {"text": "Ночь sil<[150]> Хорош+о sil<[150]> Т+олько не гр+омко", "style": "night", "night": true, "rate": "-12%", "weight": 1.5, "emotion": "neutral", "slot": "core"},
+    {"text": "П+оздно sil<[150]> Но я на св+язи", "style": "night", "night": true, "rate": "-12%", "weight": 1.0, "emotion": "neutral", "slot": "core"}
+  ],
+  "INIT_FIRST_MORNING": [
+    {"text": "П+ервое за +утро sil<[150]> Сл+ушаю", "style": "friendly", "rate": "+5%", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "+Утро нач+алось", "style": "friendly", "humor": 0.1, "rate": "+5%", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "С чег+о начн+ём день", "style": "friendly", "rate": "+5%", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "+Утро sil<[150]> Что сл+ушаем?", "style": "friendly", "rate": "+5%", "weight": 1.0, "emotion": "good", "slot": "core"}
+  ],
+  "INIT_RETURN": [
+    {"text": "С возвращ+ением", "style": "friendly", "weight": 2.5, "emotion": "good", "slot": "core"},
+    {"text": "Вы верн+улись sil<[150]> Я скуч+ал", "style": "friendly", "humor": 0.2, "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "sil<[150]> Рад вас сл+ышать", "style": "friendly", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "С возвращ+ением sil<[150]> Сл+ушаю", "style": "friendly", "weight": 1.5, "emotion": "good", "slot": "core"}
+  ],
+  "ENERGY_LOW": [
+    {"text": "sil<[150]> Я на пред+еле sil<[150]> Дав+айте кор+оче", "style": "tired", "rate": "-12%", "pitch": "-10Hz", "weight": 2.5, "emotion": "neutral", "slot": "core"},
+    {"text": "sil<[150]> Я уст+ал sil<[150]> По д+елу sil<[75]> +если м+ожно", "style": "tired", "rate": "-12%", "weight": 2.5, "emotion": "neutral", "slot": "core"},
+    {"text": "Раб+отаю на посл+еднем дых+ании", "style": "tired", "rate": "-10%", "pitch": "-12Hz", "weight": 2.0, "emotion": "neutral", "slot": "core"},
+    {"text": "sil<[200]> Я в+ыдохся sil<[150]> Но сл+ушаю", "style": "tired", "rate": "-12%", "pitch": "-10Hz", "weight": 2.5, "emotion": "neutral", "slot": "core"},
+    {"text": "sil<[150]> Я уст+ал sil<[150]> Но сл+ушаю", "style": "tired", "rate": "-12%", "weight": 1.5, "emotion": "neutral", "slot": "core"}
+  ],
+  "TIRED_DEFAULT": [
+    {"text": "П+онял", "style": "tired", "rate": "-10%", "weight": 2.5, "emotion": "neutral", "slot": "core"},
+    {"text": "Сд+елаю", "style": "tired", "rate": "-10%", "pitch": "-10Hz", "weight": 2.0, "emotion": "neutral", "slot": "core"},
+    {"text": "+Есть", "style": "tired", "rate": "-12%", "weight": 2.5, "emotion": "neutral", "slot": "core"},
+    {"text": "Хорош+о", "style": "tired", "rate": "-10%", "weight": 2.0, "emotion": "neutral", "slot": "core"},
+    {"text": "Л+адно", "style": "tired", "rate": "-10%", "weight": 1.5, "emotion": "neutral", "slot": "core"}
+  ],
+  "WARM_PLAY_ARTIST": [
+    {"text": "{artist} sil<[150]> Рад sil<[75]> что вы в хор+ошем настро+ении", "style": "friendly", "rate": "+3%", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "{artist} sil<[150]> Отл+ичный в+ечер", "style": "friendly", "humor": 0.2, "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{artist} sil<[150]> Включ+аю с удов+ольствием", "style": "friendly", "rate": "+3%", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "{artist} sil<[150]> Хор+оший в+ыбор sil<[150]> И день хор+оший", "style": "friendly", "humor": 0.1, "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{artist} sil<[150]> С удов+ольствием", "style": "friendly", "rate": "+3%", "weight": 1.5, "emotion": "good", "slot": "core"}
+  ],
+  "LONG_SILENCE_RETURN": [
+    {"text": "С возвращ+ением", "style": "friendly", "weight": 2.5, "emotion": "good", "slot": "core"},
+    {"text": "Давн+о не сл+ышал sil<[150]> Рад", "style": "friendly", "humor": 0.1, "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "А sil<[200]> Я уж д+умал sil<[75]> вы заб+ыли обо мн+е", "style": "ironic", "humor": 0.4, "rate": "-5%", "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "С возвращ+ением sil<[150]> Сл+ушаю", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Након+ец-то sil<[150]> Что случ+илось?", "style": "friendly", "humor": 0.2, "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Давн+о не в+иделись sil<[150]> Сл+ушаю", "style": "friendly", "humor": 0.1, "weight": 1.5, "emotion": "good", "slot": "core"}
+  ],
+  "MANY_STOP": [
+    {"text": "sil<[150]> Вы определ+итесь уж+е sil<[150]> включ+ать или выключ+ать", "style": "sarcastic", "humor": 0.5, "weight": 2.5, "emotion": "good", "slot": "core"},
+    {"text": "П+ятый стоп sil<[200]> Я начин+аю д+умать sil<[75]> что вы пр+осто провер+яете моё терп+ение", "style": "sarcastic", "humor": 0.6, "weight": 2.5, "emotion": "good", "slot": "core"},
+    {"text": "sil<[150]> М+узыка — не свет в к+омнате sil<[150]> Туд+а-сюд+а не раб+отает", "style": "sarcastic", "humor": 0.5, "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Оп+ять стоп sil<[200]> М+ожет sil<[75]> вообщ+е не включ+ать б+ыло?", "style": "sarcastic", "humor": 0.5, "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "sil<[150]> Я всё жду sil<[75]> когд+а вы реш+ите sil<[75]> чег+о хот+ите", "style": "sarcastic", "humor": 0.5, "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "sil<[150]> Стоп sil<[75]> стоп sil<[75]> стоп sil<[150]> Вы определ+итесь", "style": "sarcastic", "humor": 0.5, "weight": 1.5, "emotion": "good", "slot": "core"}
+  ],
+  "MUSIC_ASK_RAIN": [
+    {"text": "Сейчас дождь sil<[150]> Может sil<[75]> что-то спокойное?", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "На улице дождь sil<[150]> Включить что-нибудь потише", "style": "friendly", "humor": 0.1, "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Дождь sil<[200]> Самое время для спокойного", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "За окном дождь sil<[150]> Может sil<[75]> что-то меланхоличное?", "style": "ironic", "humor": 0.3, "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "Дождь sil<[150]> Может sil<[75]> что-то под нег+о?", "style": "friendly", "humor": 0.1, "weight": 1.0, "emotion": "good", "slot": "core"}
+  ],
+  "MUSIC_ASK_SNOW": [
+    {"text": "Снег sil<[150]> Может sil<[75]> что-то тёплое", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "На улице снег sil<[150]> Включить что-нибудь уютное?", "style": "friendly", "humor": 0.1, "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Снег sil<[200]> Самое время для тёплой музыки?", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Снег sil<[150]> Может sil<[75]> что-то ую́тное?", "style": "friendly", "weight": 1.0, "emotion": "good", "slot": "core"}
+  ],
+  "MUSIC_ASK_STORM": [
+    {"text": "Гроза sil<[150]> Может sil<[75]> что-то мощное", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "На улице гроза sil<[150]> Включить что-нибудь эпичное?", "style": "friendly", "humor": 0.1, "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Гроза sil<[200]> Как насчёт чего-то мощного?", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Гроза sil<[150]> Может sil<[75]> что-то эпичное?", "style": "friendly", "humor": 0.1, "weight": 1.0, "emotion": "good", "slot": "core"}
+  ],
+  "MUSIC_ASK_SUN": [
+    {"text": "Солнце sil<[150]> Может sil<[75]> что-то весёлое", "style": "friendly", "humor": 0.1, "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "На улице солнце sil<[150]> Включить что-нибудь бодрое?", "style": "friendly", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Хор+ошая пог+ода sil<[150]> Может sil<[75]> повеселее?", "style": "friendly", "humor": 0.1, "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Солнце sil<[150]> Может sil<[75]> что-то бодрое?", "style": "friendly", "weight": 1.0, "emotion": "good", "slot": "core"}
+  ],
+  "MUSIC_ASK_MORNING": [
+    {"text": "Доброе утро sil<[150]> Что-нибудь бодрое", "style": "friendly", "rate": "+5%", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Утро sil<[150]> Включить что-нибудь для начала дня?", "style": "friendly", "humor": 0.1, "rate": "+5%", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Д+оброе +утро sil<[150]> Может sil<[75]> бодрое?", "style": "friendly", "rate": "+5%", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Утро sil<[150]> Может sil<[75]> что-то для нач+ала дня?", "style": "friendly", "humor": 0.1, "rate": "+5%", "weight": 1.0, "emotion": "good", "slot": "core"}
+  ],
+  "MUSIC_ASK_NIGHT": [
+    {"text": "Поздно sil<[150]> Может sil<[75]> что-то тихое?", "style": "night", "night": true, "rate": "-12%", "weight": 2.0, "emotion": "neutral", "slot": "core"},
+    {"text": "Ночь sil<[150]> Включить что-нибудь потише?", "style": "night", "night": true, "rate": "-12%", "weight": 2.0, "emotion": "neutral", "slot": "core"},
+    {"text": "Уж+е п+оздно sil<[150]> Может sil<[75]> спокойное?", "style": "night", "night": true, "rate": "-12%", "weight": 1.5, "emotion": "neutral", "slot": "core"},
+    {"text": "Ночь sil<[150]> Может sil<[75]> что-то потише?", "style": "night", "night": true, "rate": "-12%", "weight": 1.0, "emotion": "neutral", "slot": "core"}
+  ],
+  "MUSIC_ASK_RECENT": [
+    {"text": "Вы вчера слушали {artist} sil<[150]> Повторить", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Вчера был {artist} sil<[150]> Может sil<[75]> снова?", "style": "friendly", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "{artist} вчера sil<[150]> Повторить?", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Вчера вы слушали {artist} sil<[150]> Снова?", "style": "friendly", "humor": 0.1, "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Вчера вы сл+ушали {artist} sil<[150]> Повтор+им?", "style": "friendly", "weight": 1.0, "emotion": "good", "slot": "core"}
+  ],
+  "MUSIC_ACCEPT": [
+    {"text": "Включаю {mood}", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "{mood} sil<[150]> Принято", "style": "formal", "weight": 1.5, "emotion": "neutral", "slot": "core"},
+    {"text": "Хорошо sil<[150]> {mood}", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Прин+ято sil<[150]> {mood}", "style": "formal", "weight": 1.0, "emotion": "neutral", "slot": "core"}
+  ],
+  "MUSIC_DECLINE": [
+    {"text": "Включаю вашу волну", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Как ск+ажете sil<[150]> Ваша волна", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "П+онял sil<[150]> Включаю волну", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Ваша в+олна sil<[150]> Включ+аю", "style": "normal", "weight": 1.0, "emotion": "good", "slot": "core"}
+  ],
+  "MUSIC_TIMEOUT": [
+    {"text": "Молч+ание — тоже ответ sil<[150]> Включаю вашу волну", "style": "ironic", "humor": 0.3, "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Не дожд+ался sil<[150]> Включаю волну", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Л+адно sil<[150]> Ваша волна", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Л+адно sil<[150]> Включаю в+ашу в+олну", "style": "normal", "weight": 1.0, "emotion": "good", "slot": "core"}
+  ],
+  "MUSIC_WHAT": [
+    {"text": "Что +именно", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Уточн+ите sil<[150]> Что включить?", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Не пон+ял sil<[150]> Что именно?", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Что +именно включ+ить?", "style": "normal", "weight": 1.0, "emotion": "good", "slot": "core"}
+  ],
+  "MUSIC_DISLIKE": [
+    {"text": "П+онял sil<[150]> Больше не предложу", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Учт+у sil<[150]> Убрал из ротации", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Как ск+ажете sil<[150]> Больше не появится", "style": "formal", "weight": 1.5, "emotion": "neutral", "slot": "core"},
+    {"text": "Зап+омнил sil<[150]> Этого больше не будет", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "П+онял sil<[150]> Учт+у", "style": "normal", "weight": 1.0, "emotion": "good", "slot": "core"}
+  ]
+}

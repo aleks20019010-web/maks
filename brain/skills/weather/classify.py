@@ -14,6 +14,10 @@
 #   drizzle     — морось (rain_mm < 1)
 #   rain        — обычный (1 <= rain_mm <= 5)
 #   heavy_rain  — ливень (rain_mm > 5)
+#
+# FIX (gradus): добавлено согласование «градус/градуса/градусов».
+#   Раньше: «{temp} градусов» → «4 градусов» (неправильно).
+#   Теперь: «{temp} {gradus}» → «4 градуса» (правильно).
 
 RAIN_THRESHOLD_MM = 1.0
 SNOW_THRESHOLD_MM = 1.0
@@ -30,6 +34,22 @@ def _temp_bucket(t):
     if t >= -20:
         return "cold"
     return "freeze"
+
+
+def _gradus(temp: int) -> str:
+    """Согласование «градус/градуса/градусов» с числом.
+
+    «4 градуса», «5 градусов», «1 градус», «21 градус», «11 градусов».
+    """
+    t = abs(int(temp)) % 100
+    if 11 <= t <= 14:
+        return "градусов"
+    t = t % 10
+    if t == 1:
+        return "градус"
+    if 2 <= t <= 4:
+        return "градуса"
+    return "градусов"
 
 
 def _precip_kind(wid, rain_mm=0.0, snow_mm=0.0):
@@ -152,6 +172,7 @@ def classify(data):
             "sky": "",
             "wind_ru": "",
             "advice": "",
+            "gradus": "градусов",
         }
 
     temp = data["temp"]
@@ -173,4 +194,5 @@ def classify(data):
         "sky": _sky_ru(precip),
         "wind_ru": _wind_ru(wind),
         "advice": _advice(temp, precip, wind),
+        "gradus": _gradus(temp),
     }

@@ -22,17 +22,12 @@
 #   _INTENT_TO_SKILL переехал в brain/nlu/skill_resolver.py (этап 4).
 #   router больше не знает соответствие intent → skill_name.
 #
-# FIX (этап 9, часть 1): music получает Command, остальные — текст.
+# FIX (этап 9): скилы получают Command.
 #   Раньше: skill.handle(command) — ВСЕГДА текст. MusicSkill.handle ждёт
 #   Command (isinstance(Command) → диспатч по action). Получал текст →
-#   isinstance False → classify(text) → None (для «вруби что-нибудь
-#   послушать» classify вычитает «вруби»/«послушать» → пусто → None) →
-#   музыка НЕ играла. Теперь:
-#     if skill.name in ("music", "controls", "weather"):
-#         skill.handle(decision.command)   # Command
-#     else:
-#         skill.handle(command)            # текст (controls/weather/...)
-#   Переходный период: controls/weather/cleanup/smalltalk — пока на str.
+#   isinstance False → classify(text) → None → музыка НЕ играла.
+#   Теперь: router передаёт Command скилам, у которых handle(Command).
+#   Переходный период: cleanup/smalltalk — пока на str.
 #   Когда все скилы будут на Command — убрать if и оставить skill.handle(Command).
 #
 # FIX: CommandSource enum вместо magic strings "voice"/"voice_dialog".
@@ -169,10 +164,6 @@ def process_command(command: str, source: CommandSource = CommandSource.VOICE):
     # pipeline: normalizer → context? → intent → skill_resolver →
     #           entity → decision → Decision
     # router исполняет decision.action.
-    #
-    # FIX (NLU v2): раньше здесь был «половинчатый» NLU: intent.resolve +
-    # _INTENT_TO_SKILL + find_by_name. Теперь — pipeline.process, который
-    # делает всё: intent, entity, decision. router не знает про _INTENT_TO_SKILL.
     try:
         nlu_ctx = nlu_context_mod.get()
         decision = nlu_pipeline.process(command, context=nlu_ctx)
@@ -203,8 +194,8 @@ def process_command(command: str, source: CommandSource = CommandSource.VOICE):
 def _execute_decision(decision, command: str, source: CommandSource) -> bool:
     """Исполнить Decision из pipeline. True — обработали, False — нет.
 
-    EXECUTE  → music: skill.handle(decision.command)  (Command)
-               остальные: skill.handle(command)       (текст, переходный период)
+    EXECUTE  → music/controls/weather/system: skill.handle(decision.command)  (Command)
+               остальные: skill.handle(command)                             (текст, переходный период)
     CLARIFY  → respond_and_say(clarify.phrase_set, **clarify.kwargs)
     FALLBACK → False (router пойдёт в LLM / NOT_UNDERSTOOD)
     """
@@ -224,10 +215,9 @@ def _execute_decision(decision, command: str, source: CommandSource) -> bool:
             f"{skill_name}.{decision.command.action or 'handle'} "
             f"(conf={decision.confidence:.2f})", tag="BRAIN")
         try:
-            # ЭТАП 9, часть 1: music получает Command, остальные — текст.
-            # MusicSkill.handle ждёт Command (isinstance → диспатч по action).
-            # controls/weather/cleanup/smalltalk — пока на str (переходный период).
-            if skill.name in ("music", "controls", "weather"):
+            # ЭТАП 9: music/controls/weather/system получают Command.
+            # cleanup/smalltalk — пока на str (переходный период).
+            if skill.name in ("music", "controls", "weather", "system"):
                 skill.handle(decision.command)
             else:
                 skill.handle(command)

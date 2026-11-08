@@ -12,6 +12,12 @@ FIX (день 28, 5.16): удалены мёртвые:
   - source_cycle_pos — объявлялся, но нигде не читался.
   - _audio_cache, _audio_cache_lock — аудио-кэш живёт в shared/audio_cache.py.
   Не закомментированы, а удалены: мёртвый код не должен притворяться живым.
+
+v5 (2026-11-04): discovery — ротация треков с мин. weight > 0.
+  tracks_since_discovery — счётчик треков с последнего discovery.
+  DISCOVERY_NEXT — порог (перезаписывается random.randint(10,20) после каждого).
+  DISCOVERY_MIN / DISCOVERY_MAX — диапазон.
+  DISCOVERY_MIN_HOURS — не играл N часов (защита от повтора).
 """
 
 import threading
@@ -99,6 +105,13 @@ last_next_time = 0.0
 
 # ── Рефреш ────────────────────────────────────────────────────
 refill_lock = threading.Lock()
+
+# ── Discovery (ротация: мин. weight > 0) ─────────────────────
+tracks_since_discovery = 0
+DISCOVERY_NEXT = 15          # перезапишется random.randint(10,20)
+DISCOVERY_MIN = 10
+DISCOVERY_MAX = 20
+DISCOVERY_MIN_HOURS = 2
 
 # ── Кэш алиасов ───────────────────────────────────────────────
 _aliases_cache = None

@@ -15,6 +15,12 @@ A2 (день 29): Vosk-wake вернулся (ViolaWake убран).
     а ответ на pending. Проверяем expecting_input.flag.
   - Router-страховка: YES/NO без pending → игнор.
 
+FIX (warmup v6): pending (expecting_input.flag) проверяется ДО music_playing.
+  Раньше «нет» после music_ask: _is_music_playing() = False (музыка не играет,
+  ждём ответ), hot_words = controls (без «нет») → пропуск → timeout.
+  Теперь: если expecting_input.flag есть — «да»/«нет»/«ок»/«отмена» идут
+  в brain с source=VOICE_HOT, router → _handle_pending_music → _decline/accept.
+
 FIX: echo-фильтр не считает echo, если распознанное — hot word.
 FIX: порог echo поднят с 0.6 до 0.85.
 
@@ -63,6 +69,12 @@ DIALOG_SESSION_SEC = 20.0
 
 _COMMANDS_FILE = "commands.json"
 
+# YES/NO (ответ на pending) — не hot words controls, а ответ на вопрос.
+# Проверяются ДО music_playing, если expecting_input.flag есть.
+_YES_NO_WORDS = {
+    "да", "нет", "ок", "окей", "подтверждаю",
+    "не надо", "неважно", "не важно", "не хочу", "отмена",
+}
 
 # ── Внутренние состояния ────────────────────────────────────────
 _waiting_for_command = False
@@ -100,7 +112,7 @@ def _duck_on():
     try:
         ipc.put(protocol.MUSIC_INBOX, protocol.music_control("duck_on"))
     except Exception as e:
-        _duck_sent = False  # чтобы следующий _duck_on попробовал снова
+        _duck_sent = False
         log(f"asr: duck_on error: {e}", tag="ASR", level="WARN")
 
 
@@ -300,11 +312,7 @@ def _find_wake_word(text: str):
 
 # ── Hot words с контекстом (A2) ───────────────────────────────
 def _hot_word_appropriate(text_lower: str) -> bool:
-    yes_no = {
-        "да", "нет", "ок", "окей", "подтверждаю",
-        "не надо", "неважно", "не важно", "не хочу", "отмена",
-    }
-    if text_lower in yes_no:
+    if text_lower in _YES_NO_WORDS:
         return _is_expecting_input()
 
     control_words = {
@@ -333,8 +341,6 @@ def main():
     log("asr: старт", tag="ASR")
     ipc.init()
 
-    # На старте: если TTS упал в прошлом запуске, duck_off мог не уйти —
-    # музыка осталась приглушённой. Сбрасываем.
     try:
         ipc.put(protocol.MUSIC_INBOX, protocol.music_control("duck_off"))
         log("asr: старт — сбросил возможный залипший duck", tag="ASR")
@@ -378,7 +384,7 @@ def main():
 
     _was_speaking = False
     _speaking_stopped_at = 0.0
-    _mic_on_logged = False   # чтобы не спамить логом "ВКЛ" после каждого тика
+    _mic_on_logged = False
 
     _last_sent_text = ""
     _last_sent_time = 0.0
@@ -449,7 +455,6 @@ def main():
             if _was_speaking:
                 _was_speaking = False
                 _speaking_stopped_at = now
-                # duck_off НЕ здесь — ниже, после mute-паузы.
                 try:
                     rec = KaldiRecognizer(model, cfg.VOSK_RATE)
                 except Exception as e:
@@ -459,9 +464,6 @@ def main():
             if (now - _speaking_stopped_at) < mute:
                 continue
 
-            # Mute-пауза прошла — микрофон реально слушает.
-            # Снимаем ducking именно здесь, а не в момент speaking=False.
-            # _duck_sent защищает от повторов после первого вызова.
             if not _mic_on_logged:
                 _mic_on_logged = True
                 log(f"asr: микрофон ВКЛ через {mute:.1f}s", tag="ASR")
@@ -499,12 +501,10 @@ def main():
                                 protocol.command(after, source=CommandSource.VOICE))
                     continue
                 if after:
-                    # Слитно «макс включи киша» — команда уже есть, бип НЕ играет.
                     log(f"asr: [{wake.upper()}] + команда «{after}» (без бипа)", tag="ASR")
                     ipc.put(protocol.BRAIN_INBOX,
                             protocol.command(after, source=CommandSource.VOICE))
                 else:
-                    # Только «макс» — бип, wake, ждём команду.
                     play_beep()
                     log(f"asr: [{wake.upper()}] (бип, ждём команду)", tag="ASR")
                     _waiting_for_command = True
@@ -520,6 +520,20 @@ def main():
                         protocol.command(text, source=CommandSource.VOICE))
                 continue
 
+            # ── PENDING (music_ask) — «да»/«нет» без wake ──
+            # ВАЖНО: ДО _is_music_playing(). Музыка может не играть
+            # (мы спросили, ждём ответ), а «нет» — ответ на pending.
+            if _is_expecting_input():
+                if text_lower in _YES_NO_WORDS:
+                    if (now - _last_hot_word_at) < HOT_WORD_COOLDOWN_SEC:
+                        continue
+                    _last_hot_word_at = now
+                    log(f"asr: [PENDING] ответ «{text}»", tag="ASR")
+                    ipc.put(protocol.BRAIN_INBOX,
+                            protocol.command(text, source=CommandSource.VOICE_HOT))
+                    continue
+
+            # ── Диалог ──
             if _session_open():
                 if text_lower in hot_words and _hot_word_appropriate(text_lower):
                     if (now - _last_hot_word_at) < HOT_WORD_COOLDOWN_SEC:
@@ -538,6 +552,7 @@ def main():
                         protocol.command(text, source=CommandSource.VOICE_DIALOG))
                 continue
 
+            # ── Музыка играет (hot words controls) ──
             if _is_music_playing():
                 if text_lower in hot_words and _hot_word_appropriate(text_lower):
                     if (now - _last_hot_word_at) < HOT_WORD_COOLDOWN_SEC:

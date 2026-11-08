@@ -3,12 +3,11 @@
 # Все фразы — через brain/skills/_helpers.
 #
 # A5 (день 29): parse_intent(text) → "now" | "tomorrow".
-#   now → WEATHER_NOW (как было).
+#   now → WEATHER_NOW (composer мапит по temp_bucket × precip).
 #   tomorrow → WEATHER_TOMORROW_* (по temp_bucket × precip).
 #
-# Почему WEATHER_TOMORROW_* отдельно, а не «WEATHER_NOW + слово завтра»:
-#   фразы разные («завтра днём», «завтра к обеду»), категории разные,
-#   composer-правила разные. Смешивать — хуже.
+# FIX (gradus): передаём gradus в respond_and_say.
+#   Фразы «{temp} градусов» → «{temp} {gradus}» → «4 градуса».
 
 from brain.skills._helpers import respond_and_say as _respond_and_say
 from brain.skills.weather.sources import fetch_weather
@@ -83,24 +82,18 @@ def handle_weather_query(text=None):
 
     if when == "tomorrow":
         phrase_set = _tomorrow_phrase_set(vars_out)
-        _respond_and_say(
-            phrase_set,
-            temp=vars_out["temp"],
-            sky=vars_out["sky"],
-            wind=vars_out["wind_ru"],
-            advice=vars_out["advice"],
-            temp_bucket=vars_out["temp_bucket"],
-            precip=vars_out["precip"],
-        )
     else:
-        _respond_and_say(
-            'WEATHER_NOW',
-            temp=vars_out["temp"],
-            sky=vars_out["sky"],
-            wind=vars_out["wind_ru"],
-            advice=vars_out["advice"],
-            temp_bucket=vars_out["temp_bucket"],
-            precip=vars_out["precip"],
-        )
+        phrase_set = 'WEATHER_NOW'
+
+    _respond_and_say(
+        phrase_set,
+        temp=vars_out["temp"],
+        gradus=vars_out["gradus"],   # новое: «градус/градуса/градусов»
+        sky=vars_out["sky"],
+        wind=vars_out["wind_ru"],
+        advice=vars_out["advice"],
+        temp_bucket=vars_out["temp_bucket"],
+        precip=vars_out["precip"],
+    )
 
     return True

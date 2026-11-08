@@ -1,0 +1,162 @@
+{
+  "WEATHER_TOMORROW_WARM_CLEAR": [
+    {"text": "Завтра днём {temp} {gradus} sil<[75]> ясно sil<[150]> {wind}", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp} sil<[75]> солнце sil<[150]> {wind}", "style": "friendly", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра днём ясно sil<[75]> {temp} {gradus} sil<[150]> Хороший день", "style": "friendly", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp} sil<[75]> ясно sil<[150]> {advice}", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp} {gradus} sil<[75]> солнечно sil<[150]> Отл+ичный день", "style": "friendly", "weight": 1.2, "emotion": "good", "slot": "core"},
+    {"text": "Завтра ясно sil<[75]> {temp} sil<[150]> Можно гулять", "style": "friendly", "humor": 0.1, "weight": 1.0, "emotion": "good", "slot": "core"}
+  ],
+  "WEATHER_TOMORROW_WARM_CLOUDY": [
+    {"text": "Завтра днём {temp} {gradus} sil<[75]> облачно sil<[150]> {wind}", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp} sil<[75]> пасмурно sil<[150]> Но тепло", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра облачно sil<[75]> {temp} {gradus} sil<[150]> Дождя нет", "style": "friendly", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp} sil<[75]> облачно sil<[150]> {wind}", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp} {gradus} sil<[75]> облачно sil<[150]> Но т+епло", "style": "friendly", "weight": 1.2, "emotion": "good", "slot": "core"},
+    {"text": "Завтра пасмурно sil<[75]> {temp} sil<[150]> Дождя нет", "style": "normal", "weight": 1.0, "emotion": "good", "slot": "core"}
+  ],
+  "WEATHER_TOMORROW_COLD_CLEAR": [
+    {"text": "Завтра днём {temp} {gradus} sil<[75]> ясно sil<[150]> Морозно", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp} sil<[75]> солнце sil<[150]> Но холодно", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра ясно sil<[75]> {temp} {gradus} sil<[150]> Одевайтесь теплее", "style": "friendly", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp} sil<[75]> ясно sil<[150]> {wind}", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp} {gradus} sil<[75]> ясно sil<[150]> Шапка не помешает", "style": "friendly", "humor": 0.2, "weight": 1.2, "emotion": "good", "slot": "core"},
+    {"text": "Завтра морозно sil<[75]> {temp} sil<[150]> Одевайтесь теплее", "style": "friendly", "weight": 1.0, "emotion": "good", "slot": "core"}
+  ],
+  "WEATHER_TOMORROW_COLD_CLOUDY": [
+    {"text": "Завтра днём {temp} {gradus} sil<[75]> облачно sil<[150]> Пасмурно", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp} sil<[75]> облачно sil<[150]> Серо sil<[75]> но сухо", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра пасмурно sil<[75]> {temp} {gradus} sil<[150]> Дождя нет", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp} sil<[75]> облачно sil<[150]> {wind}", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp} {gradus} sil<[75]> пасмурно sil<[150]> Одевайтесь теплее", "style": "friendly", "weight": 1.2, "emotion": "good", "slot": "core"},
+    {"text": "Завтра серо sil<[75]> {temp} sil<[150]> Но без осадков", "style": "normal", "weight": 1.0, "emotion": "good", "slot": "core"}
+  ],
+  "WEATHER_TOMORROW_SNOW": [
+    {"text": "Завтра днём {temp} {gradus} sil<[75]> снег sil<[150]> {advice}", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp} sil<[75]> снег sil<[150]> Зимняя сказка", "style": "friendly", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра снегопад sil<[75]> {temp} {gradus} sil<[150]> Осторожно на дорогах", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp} sil<[75]> снег sil<[150]> {advice}", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp} {gradus} sil<[75]> снег sil<[150]> Не забудьте перчатки", "style": "friendly", "weight": 1.2, "emotion": "good", "slot": "core"},
+    {"text": "Завтра снег sil<[75]> {temp} sil<[150]> Красиво sil<[75]> но холодно", "style": "friendly", "weight": 1.0, "emotion": "good", "slot": "core"}
+  ],
+  "WEATHER_TOMORROW_WARM_SNOW": [
+    {"text": "Завтра днём {temp} {gradus} sil<[75]> снег sil<[150]> Неожиданно", "style": "ironic", "humor": 0.3, "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp} sil<[75]> снег sil<[150]> Природа шутит", "style": "ironic", "humor": 0.3, "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Завтра снег sil<[75]> {temp} {gradus} sil<[150]> {advice}", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp} sil<[75]> снег sil<[150]> Так бывает", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp} {gradus} sil<[75]> снег sil<[150]> Странно sil<[75]> но красиво", "style": "ironic", "humor": 0.2, "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра снег в тепле sil<[75]> {temp} sil<[150]> Бывает", "style": "ironic", "humor": 0.2, "weight": 1.0, "emotion": "good", "slot": "core"}
+  ],
+  "WEATHER_TOMORROW_RAIN": [
+    {"text": "Завтра днём {temp} {gradus} sil<[75]> дождь sil<[150]> {advice}", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp} sil<[75]> дождь sil<[150]> Зонт не забудьте", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра дождь sil<[75]> {temp} {gradus} sil<[150]> {advice}", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp} sil<[75]> дождь sil<[150]> {wind}", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp} {gradus} sil<[75]> дождь sil<[150]> Зонт обязателен", "style": "friendly", "weight": 1.2, "emotion": "good", "slot": "core"},
+    {"text": "Завтра дождь sil<[75]> {temp} sil<[150]> Не промокните", "style": "friendly", "weight": 1.0, "emotion": "good", "slot": "core"}
+  ],
+  "WEATHER_TOMORROW_COLD_RAIN": [
+    {"text": "Завтра днём {temp} {gradus} sil<[75]> дождь sil<[150]> {advice}", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp} sil<[75]> дождь sil<[150]> Промокнете", "style": "friendly", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра льёт sil<[75]> {temp} {gradus} sil<[150]> {advice}", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp} sil<[75]> дождь sil<[150]> Зонт обязателен", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp} {gradus} sil<[75]> холодный дождь sil<[150]> Зонт и куртка", "style": "friendly", "weight": 1.2, "emotion": "good", "slot": "core"},
+    {"text": "Завтра дождь sil<[75]> {temp} sil<[150]> Не забудьте зонт", "style": "normal", "weight": 1.0, "emotion": "good", "slot": "core"}
+  ],
+  "WEATHER_TOMORROW_DRIZZLE": [
+    {"text": "Завтра днём {temp} {gradus} sil<[75]> мелкий дождь sil<[150]> {advice}", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp} sil<[75]> моросящий sil<[150]> {advice}", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра крапает sil<[75]> {temp} {gradus} sil<[150]> {advice}", "style": "friendly", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp} sil<[75]> мелкий дождь sil<[150]> {wind}", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp} {gradus} sil<[75]> моросит sil<[150]> Зонт пригодится", "style": "friendly", "weight": 1.2, "emotion": "good", "slot": "core"},
+    {"text": "Завтра морось sil<[75]> {temp} sil<[150]> Но не страшно", "style": "friendly", "humor": 0.1, "weight": 1.0, "emotion": "good", "slot": "core"}
+  ],
+  "WEATHER_TOMORROW_HEAVY_RAIN": [
+    {"text": "Завтра днём {temp} {gradus} sil<[75]> ливень sil<[150]> Лучше переждать", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp} sil<[75]> ливень sil<[150]> Зонт не спасёт", "style": "ironic", "humor": 0.3, "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра льёт как из ведра sil<[75]> {temp} {gradus}", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp} sil<[75]> ливень sil<[150]> {advice}", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp} {gradus} sil<[75]> сильный дождь sil<[150]> Переждите", "style": "friendly", "weight": 1.2, "emotion": "good", "slot": "core"},
+    {"text": "Завтра ливень sil<[75]> {temp} sil<[150]> Дома надёжнее", "style": "friendly", "weight": 1.0, "emotion": "good", "slot": "core"}
+  ],
+  "WEATHER_TOMORROW_STORM": [
+    {"text": "Завтра днём {temp} {gradus} sil<[75]> гроза sil<[150]> Лучше дома", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp} sil<[75]> гроза sil<[150]> Зонт не спасёт", "style": "ironic", "humor": 0.3, "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра гроза sil<[75]> {temp} {gradus} sil<[150]> Не выходите", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp} sil<[75]> гроза sil<[150]> Переждите", "style": "friendly", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp} {gradus} sil<[75]> гроза sil<[150]> Лучше переждать", "style": "friendly", "weight": 1.2, "emotion": "good", "slot": "core"},
+    {"text": "Завтра гроза sil<[75]> {temp} sil<[150]> Дома безопаснее", "style": "normal", "weight": 1.0, "emotion": "good", "slot": "core"}
+  ],
+  "WEATHER_TOMORROW_FOG": [
+    {"text": "Завтра днём {temp} {gradus} sil<[75]> туман sil<[150]> Осторожно на дороге", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp} sil<[75]> туман sil<[150]> Видимость плохая", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра туман sil<[75]> {temp} {gradus} sil<[150]> Будьте осторожны", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp} sil<[75]> туман sil<[150]> {wind}", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp} {gradus} sil<[75]> туман sil<[150]> Фары включите", "style": "friendly", "weight": 1.2, "emotion": "good", "slot": "core"},
+    {"text": "Завтра туман sil<[75]> {temp} sil<[150]> Но не холодно", "style": "friendly", "weight": 1.0, "emotion": "good", "slot": "core"}
+  ],
+  "WEATHER_TOMORROW_ICE": [
+    {"text": "Завтра днём {temp} {gradus} sil<[75]> гололёд sil<[150]> {advice}", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp} sil<[75]> гололёд sil<[150]> Осторожно на дороге", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра скользко sil<[75]> {temp} {gradus} sil<[150]> Не выходите без надобности", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp} sil<[75]> гололёд sil<[150]> {wind}", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp} {gradus} sil<[75]> гололёд sil<[150]> Шагайте осторожно", "style": "friendly", "weight": 1.2, "emotion": "good", "slot": "core"},
+    {"text": "Завтра гололёд sil<[75]> {temp} sil<[150]> Как на катке", "style": "ironic", "humor": 0.3, "weight": 1.0, "emotion": "good", "slot": "core"}
+  ],
+  "WEATHER_TOMORROW_HAIL": [
+    {"text": "Завтра днём {temp} {gradus} sil<[75]> град sil<[150]> Не выходите", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp} sil<[75]> град sil<[150]> Осторожно", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра град sil<[75]> {temp} {gradus} sil<[150]> Лучше переждать", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp} sil<[75]> град sil<[150]> Плохая идея выходить", "style": "friendly", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp} {gradus} sil<[75]> град sil<[150]> Дома безопаснее", "style": "friendly", "weight": 1.2, "emotion": "good", "slot": "core"},
+    {"text": "Завтра град sil<[75]> {temp} sil<[150]> Как из ведра камней", "style": "ironic", "humor": 0.3, "weight": 1.0, "emotion": "good", "slot": "core"}
+  ],
+  "WEATHER_TOMORROW_SLEET": [
+    {"text": "Завтра днём {temp} {gradus} sil<[75]> дождь со снегом sil<[150]> {advice}", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp} sil<[75]> дождь со снегом sil<[150]> Осторожно sil<[75]> скользко", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра мокрый снег sil<[75]> {temp} {gradus} sil<[150]> {advice}", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp} sil<[75]> дождь со снегом sil<[150]> {wind}", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp} {gradus} sil<[75]> слякоть sil<[150]> Осторожно", "style": "friendly", "weight": 1.2, "emotion": "good", "slot": "core"},
+    {"text": "Завтра слякоть sil<[75]> {temp} sil<[150]> Но не зима", "style": "ironic", "humor": 0.2, "weight": 1.0, "emotion": "good", "slot": "core"}
+  ],
+  "WEATHER_TOMORROW_WINDY": [
+    {"text": "Завтра днём {temp} {gradus} sil<[75]> сильный ветер sil<[150]> {advice}", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp} sil<[75]> ветер sil<[150]> Продует насквозь", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра ветрено sil<[75]> {temp} {gradus} sil<[150]> Одежда плотнее", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp} sil<[75]> сильный ветер sil<[150]> Шапка", "style": "friendly", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp} {gradus} sil<[75]> ветрено sil<[150]> Держитесь за шапку", "style": "ironic", "humor": 0.3, "weight": 1.2, "emotion": "good", "slot": "core"},
+    {"text": "Завтра ветер sil<[75]> {temp} sil<[150]> Но тепло", "style": "friendly", "weight": 1.0, "emotion": "good", "slot": "core"}
+  ],
+  "WEATHER_TOMORROW_HOT": [
+    {"text": "Завтра днём {temp} {gradus} sil<[150]> Жарко sil<[150]> {advice}", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp} sil<[75]> пекло sil<[150]> {advice}", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра жара sil<[75]> {temp} {gradus} sil<[150]> Тень", "style": "friendly", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp} sil<[75]> солнце sil<[150]> Осторожно sil<[75]> перегрев", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp} {gradus} sil<[75]> жарко sil<[150]> Лёгкая одежда", "style": "friendly", "weight": 1.2, "emotion": "good", "slot": "core"},
+    {"text": "Завтра пекло sil<[75]> {temp} sil<[150]> Вода и тень", "style": "friendly", "weight": 1.0, "emotion": "good", "slot": "core"}
+  ],
+  "WEATHER_TOMORROW_RAIN_WIND": [
+    {"text": "Завтра днём {temp} {gradus} sil<[75]> дождь и ветер sil<[150]> {advice}", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp} sil<[75]> дождь с ветром sil<[150]> Зонт может не помочь", "style": "ironic", "humor": 0.3, "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра дождь и сильный ветер sil<[75]> {temp} {gradus} sil<[150]> Осторожно", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp} sil<[75]> дождь sil<[75]> ветер sil<[150]> {advice}", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp} {gradus} sil<[75]> дождь с ветром sil<[150]> Куртка и зонт", "style": "friendly", "weight": 1.2, "emotion": "good", "slot": "core"},
+    {"text": "Завтра дождь и ветер sil<[75]> {temp} sil<[150]> Но переживём", "style": "ironic", "humor": 0.2, "weight": 1.0, "emotion": "good", "slot": "core"}
+  ],
+  "WEATHER_TOMORROW_SNOW_WIND": [
+    {"text": "Завтра днём {temp} {gradus} sil<[75]> снег и ветер sil<[150]> {advice}", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp} sil<[75]> метель sil<[150]> Осторожно на дорогах", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра снег и сильный ветер sil<[75]> {temp} {gradus} sil<[150]> Одежда плотнее", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp} sil<[75]> метель sil<[150]> Не выходите", "style": "friendly", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp} {gradus} sil<[75]> снег и ветер sil<[150]> Шапка и шарф", "style": "friendly", "weight": 1.2, "emotion": "good", "slot": "core"},
+    {"text": "Завтра метель sil<[75]> {temp} sil<[150]> Но красиво", "style": "ironic", "humor": 0.2, "weight": 1.0, "emotion": "good", "slot": "core"}
+  ],
+  "WEATHER_TOMORROW_DEFAULT": [
+    {"text": "Завтра днём {temp} {gradus} sil<[75]> {sky} sil<[150]> {wind}", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp} sil<[75]> {sky} sil<[150]> {wind}", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp} {gradus} sil<[150]> {sky}", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp} sil<[75]> {sky} sil<[150]> {advice}", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {temp} {gradus} sil<[75]> {sky} sil<[150]> {advice}", "style": "friendly", "weight": 1.2, "emotion": "good", "slot": "core"},
+    {"text": "Завтра {sky} sil<[75]> {temp} sil<[150]> {wind}", "style": "normal", "weight": 1.0, "emotion": "good", "slot": "core"}
+  ]
+}

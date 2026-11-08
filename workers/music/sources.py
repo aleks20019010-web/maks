@@ -1,6 +1,12 @@
 # workers/music/sources.py
 # Источники треков: chart, feed, rotor, similar.
 # Blacklist: треки с флагом blacklisted пропускаются в автовыборе.
+#
+# v5 (2026-11-04): discovery — ротация треков с мин. weight > 0.
+#   _try_discovery() — берёт трек через memory.get_discovery_track().
+#   Счётчик state.tracks_since_discovery, порог state.DISCOVERY_NEXT
+#   (рандомно 10–20, перезаписывается после каждого discovery).
+#   Проверка ДО playlist_mode — discovery работает в любом режиме.
 
 import time
 import random
@@ -20,6 +26,63 @@ def _is_blacklisted(track_id) -> bool:
         return memory.is_blacklisted(track_id)
     except Exception:
         return False
+
+
+# ============================================================
+# DISCOVERY (v5) — ротация: мин. weight > 0
+# ============================================================
+def _try_discovery():
+    """Трек с мин. weight > 0 (ротация снизу вверх). Рандомно каждые 10–20.
+
+    1. Локальный файл — find_local_by_track(fake_track) по artist+title.
+    2. Яндекс — tracks([int(id)]) для цифровых id.
+    """
+    try:
+        from memory import memory
+        row = memory.get_discovery_track(
+            min_hours=getattr(state, "DISCOVERY_MIN_HOURS", 0)
+        )
+        if not row:
+            return None
+        track_id = row.get("track_id")
+        artist = row.get("artist", "")
+        title = row.get("title", "")
+        if not track_id:
+            return None
+
+        # 1. Локальный файл — через fake track (find_local_by_track)
+        try:
+            from types import SimpleNamespace
+            from shared.audio_cache import find_local_by_track
+            fake_track = SimpleNamespace(
+                id=track_id,
+                title=title,
+                artists=[SimpleNamespace(name=artist)],
+            )
+            local_path = find_local_by_track(fake_track)
+            if local_path:
+                lt = LocalTrack(local_path)
+                lt._is_discovery = True
+                lt._discovery_kind = "rotation"
+                return lt
+        except Exception as e:
+            print(f"   ⚠ discovery local: {e}")
+
+        # 2. Яндекс — tracks([int(id)]), только цифровые
+        tid_str = str(track_id)
+        if state.client is not None and tid_str.isdigit():
+            try:
+                result = state.client.tracks([int(track_id)])
+                if result:
+                    track = result[0]
+                    track._is_discovery = True
+                    track._discovery_kind = "rotation"
+                    return track
+            except Exception as e:
+                print(f"   ⚠ discovery fetch: {e}")
+    except Exception as e:
+        print(f"   ⚠ discovery: {e}")
+    return None
 
 
 # ============================================================
@@ -302,6 +365,20 @@ def _try_similar():
 # ============================================================
 def get_next_source_track():
     playlist_mode = state.playlist_mode
+
+    # ── DISCOVERY (v5): рандомно каждые 10–20 треков — мин. weight > 0 ──
+    # Проверка ДО playlist_mode — работает в любом режиме.
+    state.tracks_since_discovery += 1
+    if state.tracks_since_discovery >= state.DISCOVERY_NEXT:
+        state.tracks_since_discovery = 0
+        state.DISCOVERY_NEXT = random.randint(
+            state.DISCOVERY_MIN, state.DISCOVERY_MAX
+        )
+        disc_track = _try_discovery()
+        if disc_track:
+            print(f"   🔄 DISCOVERY ROTATION (next in {state.DISCOVERY_NEXT}): "
+                  f"{getattr(disc_track, 'title', '?')}")
+            return disc_track
 
     if playlist_mode == "single":
         print("📻 Одиночный трек закончился...")

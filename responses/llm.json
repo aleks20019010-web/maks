@@ -1,106 +1,40 @@
 {
   "LLM_THINKING": [
-    {
-      "text": "Д+умаю. . . ",
-      "style": "normal",
-      "rate": "-10%",
-      "emotion": "neutral",
-      "slot": "core"
-    },
-    {
-      "text": "Сек+унду. . . ",
-      "style": "normal",
-      "emotion": "neutral",
-      "slot": "core"
-    },
-    {
-      "text": "Прик+идываю. . . ",
-      "style": "normal",
-      "rate": "-5%",
-      "emotion": "neutral",
-      "slot": "core"
-    },
-    {
-      "text": "Мом+ент. . . ",
-      "style": "normal",
-      "emotion": "neutral",
-      "slot": "core"
-    },
-    {
-      "text": "Сейчас. . . ",
-      "style": "normal",
-      "emotion": "neutral",
-      "slot": "core"
-    }
+    {"text": "Д+умаю sil<[150]>", "style": "normal", "rate": "-10%", "emotion": "neutral", "slot": "core"},
+    {"text": "Сек+унду sil<[150]>", "style": "normal", "emotion": "neutral", "slot": "core"},
+    {"text": "Прик+идываю sil<[150]>", "style": "normal", "rate": "-5%", "emotion": "neutral", "slot": "core"},
+    {"text": "Мом+ент sil<[150]>", "style": "normal", "emotion": "neutral", "slot": "core"},
+    {"text": "Сейчас sil<[150]>", "style": "normal", "emotion": "neutral", "slot": "core"},
+    {"text": "Д+умаю sil<[150]>", "style": "normal", "rate": "-10%", "emotion": "neutral", "slot": "core"},
+    {"text": "Од+ин мом+ент sil<[150]>", "style": "normal", "emotion": "neutral", "slot": "core"},
+    {"text": "Сек+ундочку sil<[150]>", "style": "friendly", "humor": 0.1, "emotion": "good", "slot": "core"},
+    {"text": "Провер+яю sil<[150]>", "style": "formal", "emotion": "neutral", "slot": "core"},
+    {"text": "Хм sil<[150]> Д+айте под+умаю", "style": "normal", "rate": "-5%", "emotion": "neutral", "slot": "core"}
   ],
   "LLM_ERROR": [
-    {
-      "text": "sil<[50]> не мог+у сформул+ировать. sil<[150]> Попр+обуйте ещё раз",
-      "style": "normal",
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "sil<[50]> я пот+ерял мысль. sil<[150]> Повтор+ите",
-      "style": "ironic",
-      "humor": 0.3,
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Бо+юсь sil<[50]> не получилось. sil<[150]> Что-то сл+омалось",
-      "style": "formal",
-      "emotion": "neutral",
-      "slot": "core"
-    }
+    {"text": "sil<[50]> Не мог+у сформул+ировать sil<[150]> Попр+обуйте ещё раз", "style": "normal", "emotion": "good", "slot": "core"},
+    {"text": "sil<[50]> Я пот+ерял мысль sil<[150]> Повтор+ите", "style": "ironic", "humor": 0.3, "emotion": "good", "slot": "core"},
+    {"text": "Бо+юсь sil<[50]> не получилось sil<[150]> Что-то сл+омалось", "style": "formal", "emotion": "neutral", "slot": "core"},
+    {"text": "sil<[50]> Что-то пошл+о не так sil<[150]> Попр+обуйте ещё раз", "style": "normal", "emotion": "good", "slot": "core"},
+    {"text": "sil<[50]> Не получилось sil<[150]> Дав+айте сн+ова", "style": "friendly", "humor": 0.1, "emotion": "good", "slot": "core"},
+    {"text": "Ош+ибка sil<[150]> Повтор+ите запр+ос", "style": "formal", "emotion": "neutral", "slot": "core"}
   ],
   "LLM_TOO_LONG": [
-    {
-      "text": "sil<[50]> сл+ишком длинно. sil<[150]> Сокр+атите",
-      "style": "normal",
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Мн+ого т+екста. sil<[150]> Дав+айте к+ороче",
-      "style": "ironic",
-      "humor": 0.3,
-      "emotion": "good",
-      "slot": "core"
-    }
+    {"text": "sil<[50]> Сл+ишком длинно sil<[150]> Сокр+атите", "style": "normal", "emotion": "good", "slot": "core"},
+    {"text": "Мн+ого т+екста sil<[150]> Дав+айте к+ороче", "style": "ironic", "humor": 0.3, "emotion": "good", "slot": "core"},
+    {"text": "Сл+ишком мн+ого sil<[150]> Сокр+атите", "style": "normal", "emotion": "good", "slot": "core"},
+    {"text": "sil<[50]> Не усп+ею прочит+ать sil<[150]> Кор+оче", "style": "ironic", "humor": 0.3, "emotion": "good", "slot": "core"}
   ],
   "LLM_FALLBACK": [
-    {
-      "text": "sil<[50]> я не ув+ерен. sil<[150]> М+ожет sil<[50]> ут+очните?",
-      "style": "normal",
-      "emotion": "good",
-      "slot": "core"
-    },
-    {
-      "text": "Бо+юсь sil<[50]> не знаю. sil<[150]> Но мог+у попр+обовать",
-      "style": "friendly",
-      "emotion": "good",
-      "slot": "core"
-    }
+    {"text": "sil<[50]> Я не ув+ерен sil<[150]> М+ожет sil<[50]> ут+очните?", "style": "normal", "emotion": "good", "slot": "core"},
+    {"text": "Бо+юсь sil<[50]> не знаю sil<[150]> Но мог+у попр+обовать", "style": "friendly", "emotion": "good", "slot": "core"},
+    {"text": "sil<[50]> Не ув+ерен sil<[150]> Ут+очните", "style": "normal", "emotion": "good", "slot": "core"},
+    {"text": "М+ожет sil<[50]> перефраз+ируете?", "style": "friendly", "humor": 0.1, "emotion": "good", "slot": "core"},
+    {"text": "sil<[50]> Не совс+ем пон+ял sil<[150]> Повтор+ите", "style": "normal", "emotion": "good", "slot": "core"}
   ],
   "LLM_CORE": [
-    {
-      "text": "{answer}",
-      "style": "normal",
-      "emotion": "neutral",
-      "slot": "core"
-    },
-    {
-      "text": "{answer}",
-      "style": "normal",
-      "emotion": "neutral",
-      "slot": "core"
-    },
-    {
-      "text": "{answer}",
-      "style": "normal",
-      "emotion": "neutral",
-      "slot": "core"
-    }
+    {"text": "{answer}", "style": "normal", "weight": 3.0, "emotion": "neutral", "slot": "core"},
+    {"text": "{answer}", "style": "friendly", "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "{answer}", "style": "formal", "weight": 1.0, "emotion": "neutral", "slot": "core"}
   ]
 }

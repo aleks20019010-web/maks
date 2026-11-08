@@ -5,6 +5,10 @@
   с подстановкой {CPU}, {RAM}, {DISK} + отправка в TTS и MAX.
 
 Речь — через ipc.put(TTS_INBOX, protocol.say(text, rate=..., emotion=...)).
+
+NLU-путь: router передаёт Command (skill.name in ("music","controls","weather","system")).
+Fast-path убран: can_handle → False. SystemSkill.handle принимает Command | str;
+text не используется (сбор CPU/RAM/дисков не зависит от текста).
 """
 
 import json
@@ -122,10 +126,17 @@ class SystemSkill(Skill):
     priority = 5
 
     def can_handle(self, text: str) -> bool:
-        lower = text.lower().strip()
-        return any(word in lower for word in TRIGGERS)
+        # Fast-path убран: system — через NLU (decision/system).
+        # NLU intent SYSTEM_STATUS → resolver → system → decision → EXECUTE(status)
+        # → router → SystemSkill.handle(Command).
+        return False
 
-    def handle(self, text: str) -> str | None:
+    def handle(self, command=None) -> str | None:
+        """Command | str — оба принимаем.
+
+        text не используется: SystemSkill собирает CPU/RAM/диски
+        независимо от текста. command (NLU-путь) игнорируется по содержимому.
+        """
         metrics.inc("system_status")
 
         # 1. ACK — «Сию минуту, сэр. Собираю данные.»

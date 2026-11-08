@@ -9,15 +9,18 @@ Engine сам ничего не решает — он склеивает сло�
 Плюс: обновляет self_state (mood, energy, valence, arousal).
 Плюс: обновляет mind_stream (контекст сессии).
 Плюс: отмечает сработавшие правила для cooldown.
-Плюс: process_llm_answer — сборка ответа LLM через composer (opening + core + closing)
-      + prosody на финальный текст (паузы + ударения).
-Плюс: prosody для обычных фраз — тон по mood/energy + style.
+Плюс: process_llm_answer — сборка ответа LLM через composer
+      (opening + core + closing) + prosody на финальный текст.
 
-СОВМЕСТИМОСТЬ:
-    pick(event)       → str
-    pick_full(event)  → dict
-    respond(...)      → JarvisResponse
-    process_llm_answer(text, explicit_detail) → JarvisResponse
+v6.3 (2026-11-05): emotion из prosody НЕ применяется (кэш = warmup).
+
+v6.4 (2026-11-06): respond_event → event.type="event".
+  SELF-реакции (behavior_*) срабатывают только на command (st.on_command).
+  На event SELF не трогается, mind_stream.on_command не зовётся.
+  Это нужно, чтобы discovery/wake/now_playing не перехватывались
+  behavior_energy_low — composer собирает фразу напрямую.
+  В _process: if event.type == "command" — SELF, elif "tick" — SELF tick,
+  иначе (event) — SELF не трогаем.
 """
 
 import os
@@ -51,10 +54,12 @@ class PersonalityEngine:
         self._composer = Composer(base_dir, self._phrase)
 
     def respond(self, intent: str, **kw) -> JarvisResponse:
+        """Команда пользователя (event.type="command"). SELF срабатывает."""
         event = Event(type="command", name=intent, data=kw)
         return self._process(event)
 
     def respond_event(self, name: str, **kw) -> JarvisResponse:
+        """Событие (event.type="event"). SELF НЕ срабатывает."""
         event = Event(type="event", name=name, data=kw)
         return self._process(event)
 
@@ -72,8 +77,6 @@ class PersonalityEngine:
 
         LLM даёт смысл (text). Composer оборачивает в личность Макса:
         OPENING_LLM + LLM_CORE({answer}) + CLOSING_LLM.
-        Затем prosody применяется ко ВСЕМУ финальному тексту:
-        запятые/точки/тире → sil<[...]>, ударения из stress_words.json.
         """
         from personality_core import self_state as _self_state
         from personality_core import prosody as _prosody
@@ -81,13 +84,11 @@ class PersonalityEngine:
 
         st = _self_state.get()
 
-        # 1. Определить style
         if context is not None:
             current_style = _style.pick_style(context)
         else:
             current_style = _style.pick_style_from_state(st)
 
-        # 2. Выбрать правило composer по style
         if current_style == "night":
             rule_name = "llm_answer_night"
         elif current_style == "friendly":
@@ -95,14 +96,12 @@ class PersonalityEngine:
         else:
             rule_name = "llm_answer"
 
-        # 3. Payload: answer — текст LLM (сырой, prosody применим в конце)
         payload = {
             "answer": text,
             "explicit_detail": explicit_detail,
             "style": current_style,
         }
 
-        # 4. Composer
         composed = None
         try:
             if context is not None:
@@ -127,7 +126,6 @@ class PersonalityEngine:
             print(f"⚠ engine: composer llm_answer: {e}")
             composed = None
 
-        # 5. Prosody ко всему финальному тексту (composer + LLM)
         if composed is not None and composed.text:
             composed.text = _prosody.apply_prosody(composed.text)
 
@@ -136,19 +134,17 @@ class PersonalityEngine:
                 composed.rate = rpe["rate"]
             if composed.pitch is None and rpe.get("pitch"):
                 composed.pitch = rpe["pitch"]
-            if composed.emotion is None and rpe.get("emotion"):
-                composed.emotion = rpe["emotion"]
+            # v6.3: emotion из prosody НЕ применяем (кэш = warmup).
             composed.explain = f"llm_answer style={current_style} (composer+prosody)"
             return composed
 
-        # Fallback: prosody поверх текста (как было)
         marked = _prosody.apply_prosody(text)
         rpe = _prosody.get_rate_pitch_emotion(st, current_style)
         return JarvisResponse(
             text=marked,
             rate=rpe.get("rate"),
             pitch=rpe.get("pitch"),
-            emotion=rpe.get("emotion"),
+            emotion=None,
             explain=f"llm_answer style={current_style} (fallback)",
         )
 
@@ -176,6 +172,9 @@ class PersonalityEngine:
         try:
             from personality_core import self_state as _self_state
             st = _self_state.get()
+            # v6.4: SELF обновляется ТОЛЬКО на command и tick.
+            # На event (discovery, wake, now_playing) SELF не трогаем —
+            # иначе behavior_energy_low перехватит событие.
             if event.type == "command":
                 st.on_command(intent=event.name, **event.data)
             elif event.type == "tick":
@@ -187,6 +186,7 @@ class PersonalityEngine:
         try:
             from personality_core import mind_stream as _mind
             ms = _mind.get()
+            # v6.4: mind_stream.on_command — только на command.
             if event.type == "command":
                 ms.on_command(intent=event.name, **event.data)
             elif event.type == "tick":
@@ -208,12 +208,10 @@ class PersonalityEngine:
             except Exception as e:
                 print(f"⚠ engine: mark_rule_fired: {e}")
 
-        # 4. Composer (сборка из слотов), fallback — ResponseBuilder
         response = self._composer.compose(policy_result, ctx)
         if response is None:
             response = self._response_builder.build(policy_result, ctx)
 
-        # 4b. Prosody для обычных фраз — тон по mood/energy + style
         if response and response.text and st is not None:
             try:
                 from personality_core import prosody as _prosody
@@ -224,8 +222,7 @@ class PersonalityEngine:
                     response.rate = rpe["rate"]
                 if response.pitch is None and rpe.get("pitch"):
                     response.pitch = rpe["pitch"]
-                if response.emotion is None and rpe.get("emotion"):
-                    response.emotion = rpe["emotion"]
+                # v6.3: emotion из prosody НЕ применяем (кэш = warmup).
             except Exception as e:
                 print(f"⚠ engine: prosody для обычной фразы: {e}")
 

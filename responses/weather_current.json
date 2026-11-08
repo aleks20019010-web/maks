@@ -1,0 +1,124 @@
+{
+  "WEATHER_MILD_CLEAR": [
+    {"text": "{temp} {gradus} sil<[150]> {sky} sil<[150]> {wind}", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "{temp} sil<[50]> ясно sil<[150]> {wind}", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "{temp} {gradus} sil<[50]> ясно sil<[150]> Хор+оший день", "style": "friendly", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{temp} sil<[150]> {sky} sil<[150]> {wind}", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "{temp} {gradus} sil<[50]> ясно sil<[150]> Прогул+яться можно", "style": "friendly", "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "{temp} sil<[50]> ясно sil<[50]> {wind}", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{temp} {gradus} sil<[150]> Солнце sil<[150]> {wind}", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{temp} {gradus} sil<[150]> Ясно sil<[150]> Отл+ичная пог+ода", "style": "friendly", "weight": 1.2, "emotion": "good", "slot": "core"},
+    {"text": "{temp} sil<[50]> ясно sil<[150]> С+олнечно и сухо", "style": "normal", "weight": 1.2, "emotion": "good", "slot": "core"},
+    {"text": "{temp} {gradus} sil<[150]> Ясно sil<[150]> Можно гулять", "style": "friendly", "humor": 0.1, "weight": 1.0, "emotion": "good", "slot": "core"}
+  ],
+  "WEATHER_MILD_CLOUDY": [
+    {"text": "{temp} {gradus} sil<[50]> {sky} sil<[150]> {wind}", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "{temp} sil<[50]> облачно sil<[150]> {wind}", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "{temp} {gradus} sil<[150]> Небо хм+урится sil<[50]> но сухо", "style": "ironic", "humor": 0.2, "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "{temp} sil<[50]> {sky} sil<[150]> {wind}", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{temp} {gradus} sil<[150]> П+асмурно", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{temp} sil<[50]> облачно sil<[150]> Дожд+я нет", "style": "friendly", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{temp} {gradus} sil<[150]> Облачно sil<[150]> Но без дождя", "style": "friendly", "weight": 1.2, "emotion": "good", "slot": "core"},
+    {"text": "{temp} sil<[50]> пасм+урно sil<[150]> Можно выходить", "style": "friendly", "humor": 0.1, "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "{temp} {gradus} sil<[150]> Облака sil<[50]> но сухо", "style": "normal", "weight": 1.0, "emotion": "good", "slot": "core"}
+  ],
+  "WEATHER_MILD_RAIN": [
+    {"text": "{temp} {gradus} sil<[50]> {sky} sil<[150]> {advice}", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "{temp} sil<[50]> дождь sil<[150]> {advice}", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "{temp} {gradus} sil<[150]> Льёт sil<[150]> {advice}", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{temp} sil<[50]> дождь sil<[150]> {wind} sil<[150]> {advice}", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{temp} {gradus} sil<[50]> ливень sil<[150]> {advice}", "style": "normal", "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "{temp} sil<[50]> дождь sil<[150]> Пром+окнете", "style": "friendly", "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "{temp} {gradus} sil<[150]> Дождь sil<[150]> Зонт не помеш+ает", "style": "friendly", "humor": 0.1, "weight": 1.2, "emotion": "good", "slot": "core"},
+    {"text": "{temp} sil<[50]> дождь sil<[150]> {advice} sil<[150]> И зонт", "style": "normal", "weight": 1.0, "emotion": "good", "slot": "core"}
+  ],
+  "WEATHER_WARM_CLEAR": [
+    {"text": "{temp} {gradus} sil<[150]> Солнце sil<[150]> {wind}", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "{temp} sil<[50]> ясно sil<[150]> Хор+оший день", "style": "friendly", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "{temp} {gradus} sil<[50]> солнце sil<[150]> {wind}", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{temp} sil<[50]> ясно sil<[150]> Пог+ода шепчет", "style": "friendly", "humor": 0.2, "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "{temp} {gradus} sil<[150]> День для прогулки", "style": "friendly", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{temp} sil<[50]> {sky} sil<[150]> {wind}", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{temp} {gradus} sil<[150]> Тепло и ясно sil<[150]> Гул+яем", "style": "friendly", "humor": 0.1, "weight": 1.2, "emotion": "good", "slot": "core"},
+    {"text": "{temp} sil<[50]> ясно sil<[150]> Отл+ичная пог+ода", "style": "normal", "weight": 1.2, "emotion": "good", "slot": "core"}
+  ],
+  "WEATHER_WARM_CLOUDY": [
+    {"text": "{temp} {gradus} sil<[50]> облачно sil<[150]> Но т+епло", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "{temp} sil<[50]> {sky} sil<[150]> Дожд+я нет", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "{temp} {gradus} sil<[150]> Облака sil<[50]> но т+епло", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{temp} sil<[50]> пасм+урно sil<[150]> Прогул+яться можно", "style": "friendly", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{temp} {gradus} sil<[150]> Небо хм+урится sil<[50]> но сухо", "style": "ironic", "humor": 0.2, "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "{temp} sil<[50]> облачно sil<[150]> {wind}", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{temp} {gradus} sil<[150]> Тепло sil<[150]> Облачно sil<[75]> но без дождя", "style": "friendly", "weight": 1.2, "emotion": "good", "slot": "core"},
+    {"text": "{temp} sil<[50]> облачно sil<[150]> Тепло и сухо", "style": "normal", "weight": 1.0, "emotion": "good", "slot": "core"}
+  ],
+  "WEATHER_COLD_CLEAR": [
+    {"text": "{temp} {gradus} sil<[50]> ясно sil<[150]> Мор+озно", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "{temp} sil<[50]> солнце sil<[150]> Но х+олодно", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "{temp} {gradus} sil<[150]> Мор+оз и солнце", "style": "friendly", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{temp} sil<[50]> ясно sil<[150]> Одев+айтесь тепл+ее", "style": "friendly", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{temp} {gradus} sil<[150]> Ш+апка не помеш+ает", "style": "friendly", "humor": 0.2, "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "{temp} sil<[50]> ясно sil<[150]> {wind}", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{temp} {gradus} sil<[150]> Ясно sil<[75]> но мор+озно sil<[150]> Одев+айтесь", "style": "friendly", "weight": 1.2, "emotion": "good", "slot": "core"},
+    {"text": "{temp} sil<[50]> солнце sil<[150]> Но не расслабляйтесь", "style": "ironic", "humor": 0.2, "weight": 1.0, "emotion": "good", "slot": "core"}
+  ],
+  "WEATHER_COLD_CLOUDY": [
+    {"text": "{temp} {gradus} sil<[50]> {sky} sil<[150]> П+асмурно", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "{temp} sil<[50]> облачно sil<[150]> С+еро sil<[50]> но сухо", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "{temp} {gradus} sil<[150]> П+асмурно sil<[150]> {advice}", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{temp} sil<[50]> п+асмурно sil<[150]> Дожд+я нет", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{temp} {gradus} sil<[150]> Облака sil<[150]> Свеж+о", "style": "friendly", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{temp} sil<[50]> {sky} sil<[150]> {wind}", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{temp} {gradus} sil<[150]> П+асмурно sil<[75]> но без ос+адков", "style": "normal", "weight": 1.2, "emotion": "good", "slot": "core"},
+    {"text": "{temp} sil<[50]> с+еро sil<[150]> Зато сухо", "style": "friendly", "humor": 0.1, "weight": 1.0, "emotion": "good", "slot": "core"}
+  ],
+  "WEATHER_COLD_SNOW": [
+    {"text": "{temp} sil<[50]> снег sil<[150]> {advice}", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "{temp} {gradus} sil<[50]> снег sil<[150]> Зимняя ск+азка", "style": "friendly", "humor": 0.2, "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "{temp} sil<[50]> снегоп+ад sil<[150]> Остор+ожно на дор+огах", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{temp} {gradus} sil<[150]> Снег sil<[150]> {advice}", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{temp} sil<[50]> снег sil<[150]> Крас+иво sil<[50]> но х+олодно", "style": "friendly", "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "{temp} {gradus} sil<[50]> снег sil<[150]> Не заб+удьте перч+атки", "style": "friendly", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{temp} {gradus} sil<[150]> Снег sil<[75]> но крас+иво sil<[150]> Гул+яем?", "style": "friendly", "humor": 0.2, "weight": 1.2, "emotion": "good", "slot": "core"},
+    {"text": "{temp} sil<[50]> снег sil<[150]> Од+ежда т+еплее sil<[75]> и перч+атки", "style": "normal", "weight": 1.0, "emotion": "good", "slot": "core"}
+  ],
+  "WEATHER_COLD_RAIN": [
+    {"text": "{temp} {gradus} sil<[50]> дождь sil<[150]> {advice}", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "{temp} sil<[50]> дождь sil<[150]> Пром+окнете", "style": "friendly", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "{temp} {gradus} sil<[150]> Льёт sil<[150]> {advice}", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{temp} sil<[50]> дождь sil<[150]> {wind} sil<[150]> {advice}", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{temp} {gradus} sil<[50]> ливень sil<[150]> {advice}", "style": "normal", "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "{temp} sil<[50]> дождь sil<[150]> Зонт обяз+ателен", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{temp} {gradus} sil<[150]> Х+олодный дождь sil<[150]> Зонт и куртка", "style": "friendly", "weight": 1.2, "emotion": "good", "slot": "core"},
+    {"text": "{temp} sil<[50]> дождь sil<[150]> Не заб+удьте зонт", "style": "normal", "weight": 1.0, "emotion": "good", "slot": "core"}
+  ],
+  "WEATHER_WARM_SNOW": [
+    {"text": "{temp} {gradus} sil<[50]> снег sil<[150]> Неож+иданно", "style": "ironic", "humor": 0.3, "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "{temp} sil<[50]> снег sil<[150]> Прир+ода ш+утит", "style": "ironic", "humor": 0.3, "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{temp} {gradus} sil<[50]> снег sil<[150]> {advice}", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "{temp} sil<[50]> снег sil<[150]> Так быв+ает", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{temp} {gradus} sil<[150]> Снег sil<[150]> Странно sil<[50]> но крас+иво", "style": "ironic", "humor": 0.2, "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "{temp} {gradus} sil<[150]> Снег в тепле sil<[150]> Быв+ает", "style": "ironic", "humor": 0.2, "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "{temp} sil<[50]> снег sil<[150]> Неож+иданно sil<[75]> но крас+иво", "style": "friendly", "weight": 1.0, "emotion": "good", "slot": "core"}
+  ],
+  "WEATHER_HOT": [
+    {"text": "{temp} {gradus} sil<[150]> Жарко sil<[150]> {advice}", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "{temp} sil<[50]> п+екло sil<[150]> {advice}", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "{temp} {gradus} sil<[150]> Жар+а sil<[150]> Тень", "style": "friendly", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{temp} sil<[50]> солнце sil<[150]> Остор+ожно sil<[50]> перегр+ев", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{temp} {gradus} sil<[150]> Жарко sil<[150]> Лёгкая од+ежда", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{temp} sil<[150]> П+екло sil<[150]> Берег+ите себ+я", "style": "friendly", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{temp} {gradus} sil<[150]> Жарко sil<[75]> как в п+ечке", "style": "ironic", "humor": 0.3, "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "{temp} sil<[50]> п+екло sil<[150]> В+ода и тень", "style": "friendly", "weight": 1.0, "emotion": "good", "slot": "core"}
+  ],
+  "WEATHER_WINDY": [
+    {"text": "{temp} {gradus} sil<[50]> сильный ветер sil<[150]> {advice}", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "{temp} sil<[50]> ветер sil<[150]> Проду+ет наскв+озь", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "{temp} {gradus} sil<[150]> В+етрено sil<[150]> Од+ежда плотн+ее", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{temp} sil<[50]> сильный ветер sil<[150]> Ш+апка", "style": "friendly", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{temp} {gradus} sil<[150]> Ветер sil<[150]> Остор+ожно", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{temp} sil<[150]> В+етрено sil<[50]> вас сд+ует", "style": "ironic", "humor": 0.3, "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "{temp} {gradus} sil<[150]> Ветер sil<[75]> но т+епло", "style": "friendly", "weight": 1.2, "emotion": "good", "slot": "core"},
+    {"text": "{temp} sil<[50]> ветрено sil<[150]> Д+ержитесь за ш+апку", "style": "ironic", "humor": 0.3, "weight": 1.0, "emotion": "good", "slot": "core"}
+  ]
+}

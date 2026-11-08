@@ -1,5 +1,11 @@
 # brain/skills/_helpers.py
 # Общие хелперы для навыков: запрос фразы у Personality + отправка в TTS через IPC.
+#
+# v6.4: respond_and_say(..., is_event=False) — для событий (discovery, wake,
+# now_playing) вызывается engine.respond_event (event.type="event"), а не
+# engine.respond (event.type="command"). SELF-реакции (behavior_*) срабатывают
+# только на command, не на event. Discovery не должен перехватываться
+# behavior_energy_low.
 
 from shared import ipc
 from shared import protocol
@@ -7,17 +13,15 @@ from shared import metrics
 from shared.log import log
 
 
-_engine = None  # ссылка на PersonalityEngine (ставится из brain/main.py)
+_engine = None
 
 
 def set_engine(engine):
-    """Установить ссылку на PersonalityEngine (вызывается из brain/main.py)."""
     global _engine
     _engine = engine
 
 
 def phrase(key, **kw):
-    """Запросить фразу у PersonalityEngine.pick_full. Текст или None."""
     if _engine is None:
         return None
     try:
@@ -32,7 +36,6 @@ def phrase(key, **kw):
 
 
 def _extract_text(response) -> str:
-    """Достать строку из JarvisResponse.text (может быть str или dict)."""
     if response is None:
         return ""
     text = getattr(response, "text", "")
@@ -44,7 +47,6 @@ def _extract_text(response) -> str:
 
 
 def _extract_attr(response, name, default=None):
-    """Достать поле из response или из dict-фразы внутри text."""
     val = getattr(response, name, None)
     if val is not None:
         return val
@@ -54,20 +56,29 @@ def _extract_attr(response, name, default=None):
     return default
 
 
-def respond_and_say(intent, sync=True, **kw):
+def respond_and_say(intent, sync=True, is_event=False, **kw):
     """Спросить Personality и отправить ответ в TTS через IPC.
 
-    Путь 1: engine.respond(intent) → если есть текст → ipc.put(TTS_INBOX, say).
-    Путь 2 (fallback): engine.pick_full(intent) → если фраза → ipc.put.
+    is_event=True — событие (discovery, wake, now_playing):
+        engine.respond_event → event.type="event" → SELF-реакции (behavior_*)
+        НЕ срабатывают, composer собирает фразу напрямую.
+    is_event=False (по умолчанию) — команда: engine.respond → event.type="command"
+        → SELF-реакции (behavior_*) срабатывают.
+
+    Путь 1: engine.respond/respond_event → если текст → ipc.put(TTS_INBOX, say).
+    Путь 2 (fallback): engine.pick_full → если фраза → ipc.put.
     Путь 3 (тишина): ничего.
     """
     if _engine is None:
         log(f"helpers.respond_and_say({intent}): engine не установлен", tag="BRAIN", level="WARN")
         return
 
-    # Путь 1 — новый
+    # Путь 1 — новый (command или event)
     try:
-        response = _engine.respond(intent, **kw)
+        if is_event:
+            response = _engine.respond_event(intent, **kw)
+        else:
+            response = _engine.respond(intent, **kw)
         text = _extract_text(response)
         if text:
             msg = protocol.say(

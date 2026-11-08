@@ -22,9 +22,17 @@ brain/main.py — ядро Макса.
 NEW (v6): событие discovery от music worker.
   Music ловит трек-открытие и шлёт event_discovery в brain.
   Brain решает «когда» (пришло событие) → зовёт personality_core
-  через respond_and_say("DISCOVERY_NEW", ...) → composer собирает
-  фразу → TTS. Music сам не говорит, music_discovery.json напрямую
-  не читает. Единая личность: discovery идёт через composer.
+  через respond_and_say("DISCOVERY_NEW", is_event=True, ...) → composer
+  собирает фразу → TTS. Music сам не говорит, music_discovery.json
+  напрямую не читает. Единая личность: discovery идёт через composer.
+
+FIX (v6.4): события (discovery, wake, wake_wait, wake_repeat, now_playing,
+  no_track_playing) → respond_and_say(..., is_event=True).
+  Раньше respond_and_say звал engine.respond (event.type="command") —
+  SELF-реакции (behavior_energy_low) перехватывали событие и вместо
+  DISCOVERY_NEW звучало «Я устал». Теперь события идут через
+  engine.respond_event (event.type="event") — SELF не трогается,
+  composer собирает фразу напрямую.
 
 FIX (день 28, аудит 1.1): при result == "exit" пишем data/brain_exit.flag
   с timestamp. Supervisor видит фреш-флаг (<60 сек) → не перезапускает brain.
@@ -38,9 +46,6 @@ WARMUP (новое): NLU warmup в фоне при старте.
   intent_router.json + FastEmbedEncoder/ONNX). Теперь _start_nlu_warmup()
   запускает brain.nlu.intent.warmup() в daemon-thread при старте.
   Router греется параллельно, brain слушает brain_inbox сразу.
-  Первая команда → 0.05 сек (если warmup успел) или подождёт (если
-  команда пришла раньше — resolve сам загрузит router, _init_router
-  идемпотентен под lock).
 """
 
 import sys
@@ -90,7 +95,7 @@ def _maybe_ritual():
             return
 
         from brain.skills._helpers import respond_and_say
-        respond_and_say(phrase_set)
+        respond_and_say(phrase_set, is_event=True)
         relationship.mark_asked_today(key)
         log(f"brain: ritual {bucket} → {phrase_set}", tag="BRAIN")
     except Exception as e:
@@ -215,15 +220,15 @@ def _handle_event(msg: protocol.Message):
         if msg.name == "wake":
             _maybe_ritual()
             from brain.skills._helpers import respond_and_say
-            respond_and_say("WAKE")
+            respond_and_say("WAKE", is_event=True)
 
         elif msg.name == "wake_wait":
             from brain.skills._helpers import respond_and_say
-            respond_and_say("WAKE_WAIT")
+            respond_and_say("WAKE_WAIT", is_event=True)
 
         elif msg.name == "wake_repeat":
             from brain.skills._helpers import respond_and_say
-            respond_and_say("WAKE_REPEAT")
+            respond_and_say("WAKE_REPEAT", is_event=True)
 
         elif msg.name == "now_playing":
             artist = msg.data.get("artist", "")
@@ -232,23 +237,23 @@ def _handle_event(msg: protocol.Message):
                 state.set_current(artist, title)
             from brain.skills._helpers import respond_and_say
             if title and artist:
-                respond_and_say("NOW_PLAYING", title=title, artist=artist)
+                respond_and_say("NOW_PLAYING", is_event=True, title=title, artist=artist)
             elif title:
-                respond_and_say("NOW_PLAYING", title=title, artist="")
+                respond_and_say("NOW_PLAYING", is_event=True, title=title, artist="")
             else:
-                respond_and_say("NO_TRACK_PLAYING")
+                respond_and_say("NO_TRACK_PLAYING", is_event=True)
 
         elif msg.name == "discovery":
             # NEW (v6): music сообщил «будет трек-открытие».
             # Brain решает «когда» → personality_core («что и как») → TTS.
-            # artist/title не подставляем во фразу (фразы нейтральные,
-            # прогреты в кэш), но передаём — пригодится для логов/будущего.
+            # is_event=True → event.type="event" → SELF-реакции НЕ срабатывают,
+            # behavior_energy_low не перехватывает DISCOVERY_NEW.
             artist = msg.data.get("artist", "")
             title = msg.data.get("title", "")
             if artist or title:
                 state.set_current(artist, title)
             from brain.skills._helpers import respond_and_say
-            respond_and_say("DISCOVERY_NEW", artist=artist, title=title)
+            respond_and_say("DISCOVERY_NEW", is_event=True, artist=artist, title=title)
 
         elif msg.name == "music_stopped":
             state.clear_current()
