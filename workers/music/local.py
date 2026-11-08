@@ -3,28 +3,28 @@
 # Blacklist: локальные треки проверяются по названию (track_stats.title).
 #
 # FIX (2026-11-08): LocalTrack читает теги (mutagen) — artist, title, album.
-#   Раньше: artist из имени файла ("1 - School Guide" → artist="1"),
-#   или "Локальная" (если нет " - "). Теги (@ilymeedy, School Guide) НЕ
-#   читались — LLM говорила "от Локальная", TTS "Молодость Ведьмы — Локальная".
-#   Теперь: mutagen.File(path, easy=True) → artist="ilymeedy" (без @),
-#   title="School Guide". Fallback на имя файла — если тегов нет.
-#   mutagen — уже установлен (1.48.1). .m4a, .mp3, .flac — все читаются.
-#
 # FIX (2026-11-08, #2): JSON-кэш индекса (data/local_index.json).
-#   Раньше: all_audio_files() → glob (8 сек на 3000 файлов) при первом
-#   вызове. Первый «включи музыку» ждал 8 сек (glob) до локального трека.
-#   Теперь:
-#     - _load_index_sync() — JSON (0.05 сек) или _build_index (8 сек,
-#       первый раз). Синхронно, но быстро (JSON).
-#     - _refresh_index_async() — фон: glob (8 сек) → обновить JSON,
-#       если mtime MUSIC_DIR изменился. НЕ блокирует музыку.
-#     - Библиотека пополняется — JSON старый, музыка играет (старый
-#       индекс). Фон обновляет (8 сек). Следующий запуск — актуальный JSON.
-#   Ключевое: glob НИКОГДА не блокирует первый трек. Всегда JSON (0.05 сек).
-#   Обновление — в фоне (после старта музыки).
+#
+# ── FIX (этап 0.5): get_local_random_track — O(N), не O(N×normalize×SQL) ──
+#   _played_key_cache (dict[path, key]) — первый вызов 3–5 сек,
+#   дальше 0.05. _get_blacklisted_titles — ОДИН SQL → set.
+#   get_local_random_track / get_local_by_genre — через два set.
+#
+# ── FIX (этап 0.5): регистр в blacklist ────────────────────────
+#   SQLite LOWER() не работает для кириллицы. SELECT title БЕЗ LOWER(),
+#   .lower() в Python.
+#
+# ── FIX (этап 0.4): invalidate_index + add_path_to_index ───────
+#   download_track после subprocess → invalidate_index() +
+#   add_path_to_index(path). Инкрементально, 0.001 сек, вместо
+#   _build_index (8 сек) или all_audio_files(force_refresh=True),
+#   который читает СТАРЫЙ JSON (новый файл не виден).
+#
+# ── FIX (этап 0.5): print → log(tag="MUSIC") ────────────────────
+#   Раньше все сообщения local.py шли в stderr (print), в jarvis.log
+#   их не было.
 
 import os
-import re
 import json
 import glob
 import random
@@ -32,12 +32,12 @@ import threading
 from datetime import datetime
 
 from shared import config as cfg
-from shared.audio_cache import all_audio_files, normalize
+from shared.log import log
+from shared.audio_cache import normalize
 from workers.music import state
 from workers.music._shared import GENRE_TAGS_MAP, _clean_filename
 
 
-# FIX (2026-11-08): mutagen для чтения тегов. Если нет — fallback на имя файла.
 try:
     from mutagen import File as MutagenFile
 except ImportError:
@@ -51,12 +51,13 @@ _refresh_thread = None
 _INDEX_FILE = cfg.DATA_DIR / "local_index.json"
 
 
-def _read_tags(path: str) -> dict:
-    """Прочитать теги (artist, title, album, genre). {} — если нет mutagen/тегов.
+# ── FIX (этап 0.5): кэш played_key ─────────────────────────
+_played_key_cache: dict[str, str] = {}
+_played_key_lock = threading.Lock()
 
-    FIX (2026-11-08): .m4a (MP4) — ©ART, ©nam, ©alb, ©gen.
-    .mp3 (ID3) — TPE1, TIT2, TALB, TCON. easy=True — универсально.
-    """
+
+def _read_tags(path: str) -> dict:
+    """Прочитать теги (artist, title, album, genre). {} — если нет mutagen/тегов."""
     if MutagenFile is None:
         return {}
     try:
@@ -67,7 +68,6 @@ def _read_tags(path: str) -> dict:
             v = f.get(key)
             return v[0] if v else None
         artist = _first("artist")
-        # FIX (2026-11-08): убрать "@" (Яндекс-метка в теге: "@ilymeedy" → "ilymeedy")
         if artist:
             artist = artist.lstrip("@").strip()
         return {
@@ -81,11 +81,7 @@ def _read_tags(path: str) -> dict:
 
 
 def _build_index() -> dict:
-    """Скан E:\\Music + mutagen → {version, mtime, tracks: [...]}.
-
-    FIX (2026-11-08, #2): вызывается только при первом запуске (нет JSON)
-    или в фоне (_refresh_index_async) при изменении библиотеки.
-    """
+    """Скан MUSIC_DIR + mutagen → {version, mtime, tracks: [...]}."""
     files = []
     for ext in ('*.mp3', '*.flac', '*.m4a', '*.aac', '*.ogg'):
         files += glob.glob(os.path.join(cfg.MUSIC_DIR, '**', ext), recursive=True)
@@ -123,20 +119,15 @@ def _build_index() -> dict:
 
 
 def _save_index(data: dict):
-    """Сохранить индекс в data/local_index.json."""
     try:
         _INDEX_FILE.parent.mkdir(parents=True, exist_ok=True)
         with open(_INDEX_FILE, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False)
     except Exception as e:
-        print(f"⚠ local: save index: {e}")
+        log(f"save index: {e}", tag="MUSIC", level="WARN")
 
 
 def _load_index_sync() -> dict:
-    """Синхронно: JSON (0.05 сек) или _build_index (8 сек, первый раз).
-
-    НЕ проверяет mtime MUSIC_DIR — обновление в фоне (_refresh_index_async).
-    """
     global _index_cache
     if _index_cache is not None:
         return _index_cache
@@ -148,26 +139,20 @@ def _load_index_sync() -> dict:
             _index_cache = data
             return data
         except Exception as e:
-            print(f"⚠ local: индекс битый: {e} — строю заново")
+            log(f"индекс битый: {e} — строю заново", tag="MUSIC", level="WARN")
 
-    # Первый запуск (нет JSON) — строим синхронно (8 сек)
-    print("🔨 local: первый запуск — строю индекс (8 сек)...")
+    log("первый запуск — строю индекс (8 сек)...", tag="MUSIC")
     data = _build_index()
     _save_index(data)
     _index_cache = data
-    print(f"✅ local: индекс построен ({len(data['tracks'])} треков)")
+    log(f"индекс построен ({len(data['tracks'])} треков)", tag="MUSIC")
     return data
 
 
 def _refresh_index_async():
-    """Фон: glob (8 сек) → обновить JSON, если mtime MUSIC_DIR изменился.
-
-    FIX (2026-11-08, #2): вызывается ПОСЛЕ старта музыки (из main.py или
-    при первом play_index). Не блокирует. Если библиотека не изменилась — пропуск.
-    """
     global _refresh_thread, _index_cache
     if _refresh_thread is not None and _refresh_thread.is_alive():
-        return  # уже обновляется
+        return
 
     def runner():
         try:
@@ -181,29 +166,73 @@ def _refresh_index_async():
                     with open(_INDEX_FILE, "r", encoding="utf-8") as f:
                         old = json.load(f)
                     if old.get("music_dir_mtime") == music_mtime:
-                        return  # библиотека не изменилась
+                        return
                 except Exception:
                     pass
 
-            print("🔄 local: обновляю индекс в фоне...")
+            log("обновляю индекс в фоне...", tag="MUSIC")
             data = _build_index()
             _save_index(data)
             with _index_lock:
                 _index_cache = data
-            print(f"✅ local: индекс обновлён ({len(data['tracks'])} треков)")
+            log(f"индекс обновлён ({len(data['tracks'])} треков)", tag="MUSIC")
         except Exception as e:
-            print(f"⚠ local: refresh index: {e}")
+            log(f"refresh index: {e}", tag="MUSIC", level="WARN")
 
     _refresh_thread = threading.Thread(target=runner, daemon=True)
     _refresh_thread.start()
 
 
 def _load_index(force_refresh=False) -> dict:
-    """Публичная: синхронно (JSON) + асинхронное обновление в фоне."""
     data = _load_index_sync()
     if not force_refresh:
-        _refresh_index_async()  # фон (8 сек, не блокирует)
+        _refresh_index_async()
     return data
+
+
+# ── FIX (этап 0.4): invalidate + add_path ──────────────────
+def invalidate_index():
+    """Сбросить _index_cache. После download_track — чтобы новый файл
+    был виден (add_path_to_index допишет, _load_index_sync перечитает)."""
+    global _index_cache
+    with _index_lock:
+        _index_cache = None
+
+
+def add_path_to_index(path: str):
+    """Дописать одну запись в JSON, не пересобирая.
+
+    FIX (этап 0.4): download_track после subprocess → add_path_to_index.
+    Раньше: all_audio_files(force_refresh=True) читает СТАРЫЙ JSON,
+    new_files пусто → download_track возвращает None (Яндекс-треки
+    не играют). Теперь: инкрементально, 0.001 сек.
+    """
+    try:
+        idx = _load_index_sync()
+        tracks = idx.get("tracks") or []
+        if any(t.get("path") == path for t in tracks):
+            return
+        tags = _read_tags(path)
+        try:
+            st = os.stat(path)
+            mtime, size = st.st_mtime, st.st_size
+        except Exception:
+            mtime, size = 0, 0
+        tracks.append({
+            "path": path,
+            "artist": tags.get("artist") or "",
+            "title": tags.get("title") or _clean_filename(path),
+            "album": tags.get("album") or "",
+            "genre": (tags.get("genre") or "").lower(),
+            "mtime": mtime,
+            "size": size,
+        })
+        idx["tracks"] = tracks
+        _save_index(idx)
+        with _index_lock:
+            _index_cache = idx
+    except Exception as e:
+        log(f"add_path_to_index: {e}", tag="MUSIC", level="WARN")
 
 
 class LocalTrack:
@@ -211,17 +240,14 @@ class LocalTrack:
         self.path = path
         self.id = hash(path)
 
-        # FIX (2026-11-08): сначала теги (mutagen), потом имя файла.
         tags = _read_tags(path)
         if tags.get("artist") and tags.get("title"):
             self._artist = tags["artist"]
             self.title = tags["title"]
         elif tags.get("title"):
-            # artist нет, title есть — fallback "Локальная"
             self._artist = "Локальная"
             self.title = tags["title"]
         else:
-            # Тегов нет — имя файла (как раньше)
             name = _clean_filename(path)
             if ' - ' in name:
                 parts = name.split(' - ', 1)
@@ -237,27 +263,64 @@ class LocalTrack:
         self.albums = []
 
 
-def _local_played_key(path):
-    name = os.path.splitext(os.path.basename(path))[0]
-    return normalize(name)
+def _local_played_key(path: str) -> str:
+    """normalize(имя файла без расширения), с кэшем.
+
+    Первый вызов для path — normalize (0.001 сек). Дальше — словарь.
+    На 3000 треков: первый раз 3–5 сек, дальше 0.05.
+    """
+    key = _played_key_cache.get(path)
+    if key is not None:
+        return key
+    with _played_key_lock:
+        key = _played_key_cache.get(path)
+        if key is None:
+            name = os.path.splitext(os.path.basename(path))[0]
+            key = normalize(name)
+            _played_key_cache[path] = key
+    return key
 
 
-def _is_local_blacklisted(path) -> bool:
-    """Проверить blacklist для локального файла по названию трека."""
+def _get_blacklisted_titles() -> set[str]:
+    """Все заблокированные title (lower) одним запросом.
+
+    FIX (этап 0.5): SELECT title БЕЗ LOWER(). SQLite LOWER() работает
+    только для ASCII, кириллицу не трогает. .lower() в Python.
+    Раньше: _is_local_blacklisted(path) → query_one на КАЖДЫЙ трек
+    (3000 SQL = 5–10 сек). Теперь: один SELECT → set[str], O(1).
+    """
+    try:
+        from memory import memory
+        rows = memory.storage.query(
+            "SELECT title FROM track_stats WHERE blacklisted = 1"
+        )
+        return {(r.get("title") or "").lower() for r in rows if r.get("title")}
+    except Exception:
+        return set()
+
+
+def _is_local_blacklisted(path: str) -> bool:
+    """[DEPRECATED, не использовать в цикле]
+
+    FIX (этап 0.5): SELECT title БЕЗ LOWER(), .lower() в Python
+    (SQLite LOWER не работает для кириллицы).
+    В цикле по 3000 трекам — 5–10 сек, используйте
+    _get_blacklisted_titles() + set.
+    """
     try:
         from memory import memory
         name = _local_played_key(path)
-        row = memory.storage.query_one(
-            "SELECT blacklisted FROM track_stats WHERE LOWER(title) = ?",
-            (name.lower(),)
+        rows = memory.storage.query(
+            "SELECT title FROM track_stats WHERE blacklisted = 1"
         )
-        return bool(row and row.get('blacklisted'))
+        titles = {(r.get("title") or "").lower() for r in rows if r.get("title")}
+        return name.lower() in titles
     except Exception:
         return False
 
 
 def get_local_random_track():
-    """FIX (2026-11-08, #2): из индекса (0.01 сек), не glob."""
+    """FIX (этап 0.5): O(N) по словарю, не O(N×normalize×SQL)."""
     idx = _load_index()
     tracks = idx.get("tracks") or []
     if not tracks:
@@ -265,14 +328,20 @@ def get_local_random_track():
 
     with state.session_played_lock:
         played = set(state.session_played_ids)
+    blacklisted = _get_blacklisted_titles()
 
-    candidates = [t for t in tracks if _local_played_key(t["path"]) not in played]
+    candidates = [
+        t for t in tracks
+        if _local_played_key(t["path"]) not in played
+        and _local_played_key(t["path"]).lower() not in blacklisted
+    ]
     if not candidates:
         with state.session_played_lock:
             state.session_played_ids.clear()
-        candidates = tracks
-
-    candidates = [t for t in candidates if not _is_local_blacklisted(t["path"])]
+        candidates = [
+            t for t in tracks
+            if _local_played_key(t["path"]).lower() not in blacklisted
+        ]
     if not candidates:
         return None
 
@@ -283,7 +352,6 @@ def get_local_random_track():
 
 
 def _read_genre(file_path):
-    """Прочитать жанр: сначала .genre файл (кэш), потом теги (mutagen)."""
     genre_file = os.path.splitext(file_path)[0] + ".genre"
     if os.path.exists(genre_file):
         try:
@@ -291,7 +359,6 @@ def _read_genre(file_path):
                 return f.read().strip().lower()
         except Exception:
             pass
-    # FIX (2026-11-08): fallback на теги
     tags = _read_tags(file_path)
     genre = tags.get("genre")
     if genre:
@@ -300,21 +367,23 @@ def _read_genre(file_path):
 
 
 def get_local_by_genre(genre_query):
-    """FIX (2026-11-08, #2): из индекса (0.01 сек), не glob."""
+    """FIX (этап 0.5): из индекса (0.05 сек), не glob + не SQL в цикле."""
     idx = _load_index()
     q = normalize(genre_query)
     tags = GENRE_TAGS_MAP.get(q, [q])
 
     with state.session_played_lock:
         played = set(state.session_played_ids)
+    blacklisted = _get_blacklisted_titles()
 
     candidates = []
     for t in idx.get("tracks", []):
         if t.get("genre") not in tags:
             continue
-        if _local_played_key(t["path"]) in played:
+        key = _local_played_key(t["path"])
+        if key in played:
             continue
-        if _is_local_blacklisted(t["path"]):
+        if key.lower() in blacklisted:
             continue
         candidates.append(t)
 
@@ -324,5 +393,6 @@ def get_local_by_genre(genre_query):
     t = random.choice(candidates)
     with state.session_played_lock:
         state.session_played_ids.add(_local_played_key(t["path"]))
-    print(f"🎸 Локальный по жанру «{genre_query}»: {os.path.basename(t['path'])}")
+    log(f"локальный по жанру «{genre_query}»: {os.path.basename(t['path'])}",
+        tag="MUSIC", level="DEBUG")
     return t["path"]

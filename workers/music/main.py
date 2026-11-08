@@ -3,52 +3,57 @@ workers/music/main.py — Music worker.
 
 Принимает команды из music_inbox, выполняет.
 
+── FIX (этап 0.1): music_playing через runtime_state ──────────────
+  Раньше _set_music_playing / _clear_music_playing были СКОПИРОВАНЫ
+  здесь и в playback.py — два места писали один флаг по-разному.
+  Теперь: set_music_playing / clear_music_playing импортируются
+  из playback.py (единственный источник правды).
+
+── FIX (этап 0.2): MUSIC_AVAILABLE ────────────────────────────────
+  Если внешний диск (E:\\Music) отключён, cfg.MUSIC_AVAILABLE = False.
+  Music-воркер при старте это видит, логирует WARN и продолжает
+  работать «вхолостую»: команды принимает, но на play отвечает в лог
+  «музыка недоступна». Не выходим через sys.exit(1) — иначе supervisor
+  увидит returncode != 0 и будет рестартить в цикле, забивая лог.
+
+── FIX (этап 0.5): warm_up_prefetch — первый трек готов заранее ──
+  _reset_playback_state (из _stop_old_track, _handle_control("stop"))
+  вызывает warm_up_prefetch СИНХРОННО (0.21 сек): get_local_random_track
+  + _append_and_prefetch → playlist[0] = локальный. Дальше queue_wave
+  (modes.py) НЕ чистит playlist и НЕ делает refill_one — play_index(0)
+  берёт готовый локальный → ▶ за 0.5 сек.
+  Синхронно, не в потоке: если в потоке, play_index(0) может успеть
+  раньше, чем warm_up положит трек → «Очередь закончилась». 0.21 сек
+  в _reset_playback_state — приемлемо (не 10 секунд).
+
 A2 (день 29):
-  - music_playing.flag — пишем при start (play_index), удаляем при
-    stop / pause / music_stopped. При старте удаляем залипший флаг
-    (музыка не играет после рестарта).
+  - music_playing — пишем при start (play_index), удаляем при
+    stop / pause / music_stopped. При старте — clear.
   - _handle_play: перед play_index — music.stop() (старый трек СТОП,
     не пауза). TTS уже был до (brain _dispatch). Музыка стартует после
-    TTS. Старый трек не возобновляется. TTS не поверх музыки.
-  - Убран music.hold_duck() из _handle_play (stop достаточно).
+    TTS. Старый трек не возобновляется.
 
-MOOD (новое):
+MOOD:
   - _handle_play(name="mood") → client.metatag(mood_tag) → station_id
     (mood:energetic) → modes.start_genre(station_id, mood_tag).
-  - modes.start_genre уже умеет играть любую станцию по station_id
-    (внутри — refill_one → rotor_station_tracks). Название «genre» —
-    историческое, но работает и для mood.
   - НЕ используем client.station() — такого метода нет в yandex-music.
-  - НЕ используем radio.start_radio() — он для живых потоков из
-    radio_stations.json, а mood-станция — не поток.
+  - НЕ используем radio.start_radio() — он для живых потоков.
 
 DUCKING (день 29, вечер):
-  - duck_on/duck_off → music.duck()/music.restore() — приглушение
-    громкости, а не пауза.
-  - duck_on приходит от ASR (микрофон ВЫКЛ = TTS идёт). TTS worker
-    больше НЕ шлёт duck_on/duck_off.
-  - timeout ipc.get — cfg.MUSIC_INBOX_TIMEOUT (0.05), чтобы duck_on
-    применялся быстро.
-  - check_duck_watchdog() вызывается в главном цикле при пустой
-    очереди — снимает залипший ducking.
-
-FIX (день 29, вечер):
-  - _stop_old_track: убран mark_user_paused().
-  - _handle_control("resume"): убран mark_user_paused().
-  - _reset_playback_state(): общий блок.
-  - resume: _set_music_playing() только если есть плеер.
-  - check_duck_watchdog в главном цикле.
+  - duck_on/duck_off → music.duck()/music.restore().
+  - duck_on приходит от ASR (микрофон ВЫКЛ = TTS идёт).
+  - timeout ipc.get — cfg.MUSIC_INBOX_TIMEOUT (0.05).
+  - check_duck_watchdog() при пустой очереди — снимает залипший ducking.
 
 FIX (день 29, вечер, #2): _handle_play в отдельном потоке.
   Раньше: play_wave/start_genre/play_mood грузят трек 5–10 сек
   синхронно в главном цикле — music_inbox НЕ читается. duck_on от ASR
-  лежит в очереди до конца загрузки. В логе 15:39: duck_on пришёл в
-  15:39:21 (микрофон ВЫКЛ), а music обработал его в 15:39:31 — ducking
-  опоздал на 10 сек, TTS уже сказал фразу.
-  Теперь: _handle_play в threading.Thread(daemon=True). music_inbox
-  читается сразу, duck_on/duck_off обрабатываются в пределах 0.05 сек.
-  state.switching ставится/снимается внутри потока — monitor_player
-  по-прежнему не дёргает play_next во время переключения.
+  лежит в очереди до конца загрузки.
+  Теперь: _handle_play в threading.Thread(daemon=True).
+  music_inbox читается сразу.
+
+── FIX (этап 0.5): print → log(tag="MUSIC") ────────────────────
+  Раньше main.py уже использовал log, но проверил — да, всё ок.
 """
 
 import sys
@@ -62,29 +67,23 @@ from shared.log import log
 
 from workers.music import state
 from workers.music.player import music
-
-
-_MUSIC_PLAYING_FLAG = cfg.DATA_DIR / "music_playing.flag"
-
-
-def _set_music_playing():
-    try:
-        _MUSIC_PLAYING_FLAG.parent.mkdir(parents=True, exist_ok=True)
-        _MUSIC_PLAYING_FLAG.write_text(str(time.time()), encoding="utf-8")
-    except Exception as e:
-        log(f"music: set music_playing.flag: {e}", tag="MUSIC", level="WARN")
-
-
-def _clear_music_playing():
-    try:
-        if _MUSIC_PLAYING_FLAG.exists():
-            _MUSIC_PLAYING_FLAG.unlink()
-    except Exception as e:
-        log(f"music: clear music_playing.flag: {e}", tag="MUSIC", level="WARN")
+# FIX (этап 0.1): единственный источник правды для music_playing.
+# FIX (этап 0.5): warm_up_prefetch — первый трек готов заранее.
+from workers.music.playback import (
+    set_music_playing, clear_music_playing, warm_up_prefetch,
+)
 
 
 def _reset_playback_state():
-    """Очистка playlist/queued/индекса + снятие music_playing.flag.
+    """Очистка playlist/queued/индекса + снятие music_playing.
+
+    FIX (этап 0.5): после очистки — warm_up_prefetch СИНХРОННО
+    (0.21 сек): get_local_random_track + _append_and_prefetch →
+    playlist[0] = локальный. Дальше queue_wave (modes.py) НЕ чистит
+    playlist — play_index(0) берёт готовый.
+
+    Синхронно, не в потоке: если в потоке, play_index(0) может успеть
+    раньше, чем warm_up положит трек → «Очередь закончилась».
 
     Общий блок для _stop_old_track() и _handle_control("stop").
     Ducking-флаги НЕ трогает.
@@ -96,7 +95,9 @@ def _reset_playback_state():
         state.queued_track_ids.clear()
     state.playlist_index = 0
     state.playlist_mode = None
-    _clear_music_playing()
+    clear_music_playing()
+    # FIX (этап 0.5): синхронный warm_up — см. docstring модуля.
+    warm_up_prefetch()
 
 
 def _stop_old_track():
@@ -108,7 +109,7 @@ def _stop_old_track():
     try:
         music.stop()
     except Exception as e:
-        log(f"music: _stop_old_track: {e}", tag="MUSIC", level="WARN")
+        log(f"_stop_old_track: {e}", tag="MUSIC", level="WARN")
     _reset_playback_state()
 
 
@@ -122,13 +123,15 @@ def _play_mood(mood_tag: str):
 
     client = yandex.get_client()
     if client is None:
-        log(f"music: play_mood({mood_tag}) — нет клиента Яндекса", tag="MUSIC", level="WARN")
+        log(f"play_mood({mood_tag}) — нет клиента Яндекса",
+            tag="MUSIC", level="WARN")
         return
 
     try:
         mt = client.metatag(mood_tag)
     except Exception as e:
-        log(f"music: play_mood({mood_tag}) metatag error: {e}", tag="MUSIC", level="WARN")
+        log(f"play_mood({mood_tag}) metatag error: {e}",
+            tag="MUSIC", level="WARN")
         return
 
     station_id = getattr(mt, "station_id", None)
@@ -136,28 +139,30 @@ def _play_mood(mood_tag: str):
         playlists = getattr(mt, "playlists", []) or []
         if playlists:
             first_title = getattr(playlists[0], "title", "<no title>")
-            log(
-                f"music: play_mood({mood_tag}) — нет station_id, "
+            log(f"play_mood({mood_tag}) — нет station_id, "
                 f"есть плейлист «{first_title}», но modes не умеет play_playlist",
-                tag="MUSIC", level="WARN",
-            )
+                tag="MUSIC", level="WARN")
         else:
-            log(f"music: play_mood({mood_tag}) — нет station_id и плейлистов",
+            log(f"play_mood({mood_tag}) — нет station_id и плейлистов",
                 tag="MUSIC", level="WARN")
         return
 
     if modes.start_genre(station_id, mood_tag):
         playback.play_index(0)
-        log(f"music: play_mood({mood_tag}) → start_genre({station_id})", tag="MUSIC")
+        log(f"play_mood({mood_tag}) → start_genre({station_id})", tag="MUSIC")
     else:
-        log(
-            f"music: play_mood({mood_tag}) — start_genre({station_id}) не сработал",
-            tag="MUSIC", level="WARN",
-        )
+        log(f"play_mood({mood_tag}) — start_genre({station_id}) не сработал",
+            tag="MUSIC", level="WARN")
 
 
 def _handle_play(name: str, data: dict):
     from workers.music import modes, radio, search, playback
+
+    # FIX (этап 0.2): если MUSIC_DIR недоступен — не пытаемся качать/играть.
+    if not cfg.MUSIC_AVAILABLE:
+        log(f"play({name}) — музыка недоступна (MUSIC_DIR отключён)",
+            tag="MUSIC", level="WARN")
+        return
 
     _stop_old_track()
 
@@ -167,7 +172,7 @@ def _handle_play(name: str, data: dict):
             return
         artist = search.search_artist(artist_name)
         if not artist:
-            log(f"music: артист «{artist_name}» не найден", tag="MUSIC", level="WARN")
+            log(f"артист «{artist_name}» не найден", tag="MUSIC", level="WARN")
             return
         from workers.music.aliases import remember_alias
         remember_alias(artist_name, artist.id, artist.name)
@@ -180,7 +185,7 @@ def _handle_play(name: str, data: dict):
             return
         track = search.search_track(track_name)
         if not track:
-            log(f"music: трек «{track_name}» не найден", tag="MUSIC", level="WARN")
+            log(f"трек «{track_name}» не найден", tag="MUSIC", level="WARN")
             return
         if modes.start_single_track(track):
             playback.play_index(0)
@@ -216,9 +221,9 @@ def _handle_play(name: str, data: dict):
         if not station_key:
             return
         if radio.start_radio(station_key):
-            log(f"music: radio {station_key} → start_radio ok", tag="MUSIC")
+            log(f"radio {station_key} → start_radio ok", tag="MUSIC")
         else:
-            log(f"music: radio {station_key} — start_radio не сработал",
+            log(f"radio {station_key} — start_radio не сработал",
                 tag="MUSIC", level="WARN")
 
 
@@ -233,8 +238,7 @@ def _run_play_async(name: str, data: dict):
     try:
         _handle_play(name, data)
     except Exception as e:
-        log(f"music: _handle_play({name}) error: {e}",
-            tag="MUSIC", level="ERROR")
+        log(f"_handle_play({name}) error: {e}", tag="MUSIC", level="ERROR")
         try:
             music.release_duck()
         except Exception:
@@ -266,16 +270,16 @@ def _handle_control(name: str, data: dict):
     elif name == "pause":
         music.pause()
         music.mark_user_paused()
-        _clear_music_playing()
+        clear_music_playing()
     elif name == "resume":
         music.resume()
         if music.has_player():
-            _set_music_playing()
+            set_music_playing()
     elif name == "stop":
         try:
             music.stop()
         except Exception as e:
-            log(f"music: stop: {e}", tag="MUSIC", level="WARN")
+            log(f"stop: {e}", tag="MUSIC", level="WARN")
         music.mark_user_paused()
         _reset_playback_state()
         ipc.put(protocol.BRAIN_INBOX, protocol.event_music_stopped())
@@ -286,7 +290,7 @@ def _handle_control(name: str, data: dict):
     elif name == "volume_set":
         val = data.get("value")
         if val is None:
-            log("music: volume_set без value", tag="MUSIC", level="WARN")
+            log("volume_set без value", tag="MUSIC", level="WARN")
         else:
             music.set_volume(val)
     elif name == "hold_duck":
@@ -301,7 +305,7 @@ def _handle_control(name: str, data: dict):
             try:
                 target = _level_to_percent(level)
             except (TypeError, ValueError) as e:
-                log(f"music: duck_on bad level={level!r}: {e}",
+                log(f"duck_on bad level={level!r}: {e}",
                     tag="MUSIC", level="WARN")
                 return
             music.duck(target)
@@ -313,10 +317,10 @@ def _handle_control(name: str, data: dict):
         if track_id:
             from memory import memory
             memory.blacklist_track(track_id, reason='user_dislike')
-            log(f"music: blacklist {track_id} — «{title}»", tag="MUSIC")
+            log(f"blacklist {track_id} — «{title}»", tag="MUSIC")
             playback.play_next(from_finish=False)
         else:
-            log("music: dislike — нет текущего трека", tag="MUSIC", level="WARN")
+            log("dislike — нет текущего трека", tag="MUSIC", level="WARN")
     elif name == "now_playing_request":
         title = state.current_track_title or ""
         if " — " in title:
@@ -333,6 +337,12 @@ def main():
     log("music: старт", tag="MUSIC")
     ipc.init()
 
+    # FIX (этап 0.2): MUSIC_DIR мог быть недоступен при импорте config.py.
+    if not cfg.MUSIC_AVAILABLE:
+        log(f"music: MUSIC_DIR недоступен ({cfg.MUSIC_DIR}). "
+            f"Воркер работает вхолостую: команды принимает, play — отказ.",
+            tag="MUSIC", level="WARN")
+
     # FIX (2026-11-08): прогреть VLC instance — первый _get_music_instance
     # создаёт vlc.Instance (2 сек). Иначе первый «включи музыку» ждёт 2 сек.
     try:
@@ -342,25 +352,34 @@ def main():
     except Exception as e:
         log(f"music: VLC warmup: {e}", tag="MUSIC", level="WARN")
 
-    try:
-        if _MUSIC_PLAYING_FLAG.exists():
-            _MUSIC_PLAYING_FLAG.unlink()
-            log("music: удалил залипший music_playing.flag",
-                tag="MUSIC", level="WARN")
-    except Exception as e:
-        log(f"music: clear music_playing.flag: {e}", tag="MUSIC", level="WARN")
+    # FIX (этап 0.1): залипший music_playing мог остаться от прошлого запуска.
+    clear_music_playing()
+    log("music: сбросил music_playing при старте", tag="MUSIC")
 
-    from shared import yandex
-    if yandex.init():
-        state.client = yandex.get_client()
-        state.TOKEN = yandex.get_token()
-        log("music: Яндекс.Музыка подключена", tag="MUSIC")
+    # FIX (этап 0.2): если MUSIC_DIR нет — yandex.init() не пытаемся.
+    if cfg.MUSIC_AVAILABLE:
+        from shared import yandex
+        if yandex.init():
+            state.client = yandex.get_client()
+            state.TOKEN = yandex.get_token()
+            log("music: Яндекс.Музыка подключена", tag="MUSIC")
+        else:
+            log("music: Яндекс.Музыка НЕ подключена",
+                tag="MUSIC", level="WARN")
     else:
-        log("music: Яндекс.Музыка НЕ подключена", tag="MUSIC", level="WARN")
+        log("music: Яндекс.Музыка не инициализируется (MUSIC_DIR недоступен)",
+            tag="MUSIC", level="WARN")
 
     from workers.music.playback import monitor_player
     threading.Thread(target=monitor_player, daemon=True).start()
     log("music: monitor_player запущен", tag="MUSIC")
+
+    # FIX (этап 0.5): warm_up_prefetch при старте — в фоне.
+    # К моменту первой команды playlist[0] уже локальный.
+    # В фоне (не синхронно): старт не ждёт 0.21 сек. Если пользователь
+    # скажет «включи» сразу — _reset_playback_state сделает warm_up
+    # синхронно (см. выше). Двойной вызов безопасен (идемпотентно).
+    threading.Thread(target=warm_up_prefetch, daemon=True).start()
 
     log("music: слушаю music_inbox", tag="MUSIC")
 
@@ -390,9 +409,9 @@ def main():
                 else:
                     _handle_control(msg.name, msg.data)
             else:
-                log(f"music: неизвестный тип {msg.type}", tag="MUSIC", level="WARN")
+                log(f"неизвестный тип {msg.type}", tag="MUSIC", level="WARN")
         except Exception as e:
-            log(f"music: ошибка обработки {msg.type}/{msg.name}: {e}",
+            log(f"ошибка обработки {msg.type}/{msg.name}: {e}",
                 tag="MUSIC", level="ERROR")
             try:
                 music.release_duck()

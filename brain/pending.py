@@ -6,19 +6,37 @@ brain/pending.py — менеджер ожиданий.
 
 wait_tts=True — таймер стартует ТОЛЬКО когда TTS замолчал.
 
-A2 (день 29): expecting_input.flag — пишем при set(), удаляем при pop()/cancel_all().
-ASR читает флаг: если pending есть — hot words («да», «нет») пропускаются
-как ответ на вопрос, а не как музыкальная команда.
+── FIX (этап 0.1): expecting_input через runtime_state ────────────
+  Раньше: EXPECTING_FLAG = cfg.DATA_DIR / "expecting_input.flag",
+  _write_expecting_flag() → write_text(str(time.time())), БЕЗ TTL.
+  Если brain падал между set() и pop() — флаг залипал, ASR навсегда
+  считал, что ждём ответ, и «да»/«нет» шли в brain как VOICE_HOT без
+  pending → router молча игнорил. Пользователь говорит «да» — тишина.
+
+  Теперь: rt.set(FLAG_EXPECTING_INPUT, True, ttl=60). TTL — 60 сек
+  (TTL_EXPECTING_INPUT). Если brain упал — флаг протухает через 60 сек,
+  ASR перестаёт считать, что ждём ответ. brain при рестарте тоже
+  сбрасывает (rt.clear в main, если надо — но сейчас не надо: TTL).
+
+  ASR читает через rt.exists(FLAG_EXPECTING_INPUT) — не через pending.is_expecting()
+  (кросс-процессный импорт brain в ASR не хочу).
+
+  is_expecting() оставлен для brain-внутреннего использования (если
+  router захочет проверить «есть ли pending» — но router и так знает
+  через pending.get(key)).
+
+── FIX (этап 0.1): формат ────────────────────────────────────────
+  data/runtime/expecting_input.flag.json:
+    {"value": true, "ts": <float>, "ttl": 60.0}
+  Вместо data/expecting_input.flag (write_text(str(time.time()))).
 """
 
 import threading
 import time
 from typing import Callable, Optional
 
-from shared import config as cfg
-
-
-EXPECTING_FLAG = cfg.DATA_DIR / "expecting_input.flag"
+from shared import runtime_state as rt
+from shared.log import log
 
 
 def _tts_speaking() -> bool:
@@ -29,20 +47,13 @@ def _tts_speaking() -> bool:
         return False
 
 
-def _write_expecting_flag():
-    try:
-        EXPECTING_FLAG.parent.mkdir(parents=True, exist_ok=True)
-        EXPECTING_FLAG.write_text(str(time.time()), encoding="utf-8")
-    except Exception:
-        pass
+def is_expecting() -> bool:
+    """Есть ли живое ожидание (флаг не протух).
 
-
-def _clear_expecting_flag():
-    try:
-        if EXPECTING_FLAG.exists():
-            EXPECTING_FLAG.unlink()
-    except Exception:
-        pass
+    Для brain-внутреннего использования. ASR читает напрямую через
+    rt.exists(FLAG_EXPECTING_INPUT) — без импорта brain в ASR.
+    """
+    return rt.exists(rt.FLAG_EXPECTING_INPUT)
 
 
 class Pending:
@@ -99,8 +110,8 @@ class Pending:
             try:
                 self.on_timeout(self.data)
             except Exception as e:
-                from shared.log import log
-                log(f"pending[{self.key}] on_timeout: {e}", tag="BRAIN", level="ERROR")
+                log(f"pending[{self.key}] on_timeout: {e}",
+                    tag="BRAIN", level="ERROR")
 
     def cancel(self) -> None:
         self._cancelled = True
@@ -124,7 +135,9 @@ class PendingManager:
             p = Pending(key, timeout, on_timeout, data, wait_tts)
             p.start()
             self._pending[key] = p
-            _write_expecting_flag()
+            # FIX (этап 0.1): TTL 60 сек. brain упал — флаг протухнет,
+            # ASR перестанет ждать ответ.
+            rt.set(rt.FLAG_EXPECTING_INPUT, True, ttl=rt.TTL_EXPECTING_INPUT)
 
     def get(self, key: str) -> Optional[Pending]:
         with self._lock:
@@ -136,7 +149,7 @@ class PendingManager:
             if p:
                 p.cancel()
             if not self._pending:
-                _clear_expecting_flag()
+                rt.clear(rt.FLAG_EXPECTING_INPUT)
             return p
 
     def cancel(self, key: str) -> bool:
@@ -148,7 +161,7 @@ class PendingManager:
             for p in self._pending.values():
                 p.cancel()
             self._pending.clear()
-            _clear_expecting_flag()
+            rt.clear(rt.FLAG_EXPECTING_INPUT)
 
 
 _manager = PendingManager()

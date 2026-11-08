@@ -4,21 +4,51 @@
 #
 # Music worker НЕ говорит. Brain скажет сам, до отправки в music_inbox.
 #
+# ── FIX (этап 0.5): queue_wave / start_genre / queue_liked ──────────
+#   Симптом: «включи музыку» → queue_wave → refill_one →
+#   get_next_source_track (Yandex API, feed() 10–12 сек) →
+#   play_index(0) → ▶. 10 секунд тишины после TTS.
+#
+#   Причина: queue_wave делал playlist.clear() (дублировал
+#   _reset_playback_state из _stop_old_track) и refill_one()
+#   (синхронный Yandex API: feed(), chart(), albums_with_tracks())
+#   ДО play_index(0).
+#
+#   Решение (архитектурное):
+#     - _stop_old_track (в _handle_play) → _reset_playback_state →
+#       playlist.clear() + warm_up_prefetch (СИНХРОННО, 0.21 сек).
+#       warm_up_prefetch кладёт ОДИН локальный трек в playlist[0].
+#     - queue_wave / start_genre / queue_liked — БЕЗ playlist.clear()
+#       (уже очищено) и БЕЗ refill_one() (это refill_to_target в фоне
+#       после play_index(0)). Только _reset_source_state() +
+#       playlist_mode = ... — 0.001 сек.
+#     - play_index(0) берёт warm_up-локальный из playlist[0] → ▶ 0.5 сек.
+#     - play_index(0) → threading.Thread(refill_to_target) → Yandex
+#       для playlist[1..N] (10–12 сек, в фоне, пользователь слушает).
+#
+#   Для start_artist_only / start_artist_track / start_single_track
+#   warm_up не нужен — они явно делают playlist = [track]
+#   (режим «только этот трек»). warm_up-трек будет затёрт — 0.21 сек
+#   впустую, не критично.
+#
 # DUCKING (день 29, вечер): ducking привязан к микрофону ASR.
-#   hold_duck/release_duck здесь — это «пока грузим данные, не восстанавливай
-#   громкость». С TTS-ducking они не пересекаются (см. player.py:
-#   restore() учитывает hold только при _ducked_by_tts=False,
-#   release_duck() при _ducked_by_tts=True не вызывает restore()).
-#   Прямых music.duck()/music.restore() тут нет и не должно быть —
-#   ducking включает/снимает только ASR через mic_off/mic_on.
+#   hold_duck/release_duck здесь — это «пока грузим данные, не
+#   восстанавливай громкость». С TTS-ducking они не пересекаются
+#   (см. player.py). Прямых music.duck()/music.restore() тут нет
+#   и не должно быть — ducking включает/снимает только ASR
+#   через mic_off/mic_on.
 #
 # FIX (2026-10-31): hold_duck/release_duck парны на ВСЕХ путях выхода
-#   (try/finally). Раньше успешный return True оставлял duck_hold висеть
-#   до mark_ready/watchdog. Теперь release_duck() вызывается в finally.
+#   (try/finally).
+#
+# ── FIX (этап 0.5): print → log(tag="MUSIC") ────────────────────
+#   Раньше все сообщения modes.py шли в stderr (print), в jarvis.log
+#   их не было. Отладка «почему режим не сработал» — только по консоли.
 
 import threading
 import time
 
+from shared.log import log
 from workers.music import state
 from workers.music.player import music
 from memory import memory
@@ -28,17 +58,20 @@ from workers.music.sources import (
 from workers.music.search import find_artist_track
 from workers.music.similar import fetch_similar_background
 from workers.music.reset import _reset_source_state
-from workers.music.playback import refill_one
+# refill_one больше НЕ импортируется: queue_wave / start_genre /
+# queue_liked не делают синхронный refill. refill_to_target в
+# playback.py (после play_index(0)) делает это в фоне.
 
 
 def start_artist_only(artist):
-    print(f"🎤 Режим: только {artist.name}")
+    log(f"режим artist_only: {artist.name}", tag="MUSIC", level="DEBUG")
     state.radio_artist_id = artist.id
     state.radio_artist_name = artist.name
     _reset_source_state()
     first_page = get_artist_tracks_page(artist.id, 0)
     first_track = get_next_unplayed_track_from_page(first_page)
     if not first_track:
+        log(f"artist_only: у «{artist.name}» нет треков", tag="MUSIC", level="WARN")
         return False
     with state.played_lock:
         state.played_track_ids.add(first_track.id)
@@ -47,12 +80,13 @@ def start_artist_only(artist):
         state.prefetched = {}
     state.playlist_index = 0
     state.playlist_mode = "artist_only"
-    print(f"▶ Первый трек: {first_track.title}")
+    log(f"artist_only: первый трек — {first_track.title}", tag="MUSIC")
     return True
 
 
 def start_artist_track(artist, track_query):
-    print(f"🎤 Режим: трек «{track_query}» у {artist.name}")
+    log(f"режим artist_track: «{track_query}» у {artist.name}",
+        tag="MUSIC", level="DEBUG")
     target_track = find_artist_track(artist, track_query)
     state.radio_artist_id = artist.id
     state.radio_artist_name = artist.name
@@ -75,7 +109,8 @@ def start_artist_track(artist, track_query):
         with state.playlist_lock:
             state.playlist = [t]
     state.playlist_index = 0
-    threading.Thread(target=fetch_similar_background, args=(artist.id,), daemon=True).start()
+    threading.Thread(target=fetch_similar_background,
+                     args=(artist.id,), daemon=True).start()
     waited = 0
     while not state.radio_similar_list and waited < 10:
         time.sleep(0.5)
@@ -92,7 +127,9 @@ def start_artist_track(artist, track_query):
 
 def get_next_source_track_for_artist_start():
     while True:
-        page_tracks = get_artist_tracks_page(state.radio_artist_id, state.radio_artist_page)
+        page_tracks = get_artist_tracks_page(
+            state.radio_artist_id, state.radio_artist_page
+        )
         if not page_tracks:
             return None
         t = get_next_unplayed_track_from_page(page_tracks)
@@ -102,7 +139,7 @@ def get_next_source_track_for_artist_start():
 
 
 def start_single_track(track):
-    print(f"🎤 Режим: одиночный трек")
+    log(f"режим single: {track.title}", tag="MUSIC", level="DEBUG")
     with state.played_lock:
         state.played_track_ids.add(track.id)
     with state.playlist_lock:
@@ -122,61 +159,68 @@ def start_single_track(track):
 
 
 def queue_liked_tracks():
+    """FIX (этап 0.5): без playlist.clear() и без refill_one().
+
+    playlist уже очищен в _reset_playback_state (из _stop_old_track).
+    warm_up_prefetch положил локальный в playlist[0] — не трогаем.
+    Yandex-лайки — в фоне через refill_to_target после play_index(0).
+    """
     music.hold_duck()
     try:
-        print("Загружаю 'Мне нравится'...")
-        memory.remember_search(query="мою музыку", found_artist="Мне нравится", success=True)
+        memory.remember_search(
+            query="мою музыку", found_artist="Мне нравится", success=True,
+        )
         if state.client is None:
+            log("queue_liked: нет клиента Яндекса", tag="MUSIC", level="WARN")
             return False
         try:
             liked = state.client.users_likes_tracks()
             if not liked or not liked.tracks:
+                log("queue_liked: лайков нет", tag="MUSIC", level="WARN")
                 return False
             state.liked_short_tracks = liked.tracks
             state.liked_offset = 0
             _reset_source_state()
-            with state.playlist_lock:
-                state.playlist = []
-                state.prefetched = {}
-            state.playlist_index = 0
             state.playlist_mode = "liked"
-            if not refill_one():
-                return False
+            log(f"режим liked: {len(liked.tracks)} треков в источнике",
+                tag="MUSIC")
             return True
         except Exception as e:
-            print(f"Ошибка: {e}")
+            log(f"queue_liked: {e}", tag="MUSIC", level="WARN")
             return False
     finally:
         music.release_duck()
 
 
 def queue_wave(language=None):
-    """Запустить «Мою волну». language=None — обычная, "russian" — русская."""
+    """FIX (этап 0.5): без playlist.clear() и без refill_one().
+
+    playlist уже очищен в _reset_playback_state (из _stop_old_track).
+    warm_up_prefetch положил локальный в playlist[0] — не трогаем.
+    Yandex-волна — в фоне через refill_to_target после play_index(0).
+    """
     music.hold_duck()
     try:
         if language == "russian":
-            print("Загружаю 'Русскую волну'...")
-            memory.remember_search(query="включи русское", found_artist="Русская волна", success=True)
+            memory.remember_search(
+                query="включи русское", found_artist="Русская волна", success=True,
+            )
         else:
-            print("Загружаю 'Мою волну'...")
-            memory.remember_search(query="включи музыку", found_artist="Моя волна", success=True)
+            memory.remember_search(
+                query="включи музыку", found_artist="Моя волна", success=True,
+            )
 
         _reset_source_state()
-        with state.playlist_lock:
-            state.playlist = []
-            state.prefetched = {}
-        state.playlist_index = 0
         state.playlist_mode = "wave"
         state.wave_language = language
-        if not refill_one():
-            return False
+        log(f"режим wave (language={language!r})", tag="MUSIC")
         return True
     finally:
         music.release_duck()
 
 
 def start_genre(station_id, genre_name):
-    print(f"🎸 Режим: жанр «{genre_name}» ({station_id})")
+    """FIX (этап 0.5): без playlist.clear() и без refill_one()."""
     music.hold_duck()
     try:
         memory.remember_search(
@@ -185,15 +229,10 @@ def start_genre(station_id, genre_name):
             success=True,
         )
         _reset_source_state()
-        with state.playlist_lock:
-            state.playlist = []
-            state.prefetched = {}
-        state.playlist_index = 0
         state.playlist_mode = "genre"
         state.genre_station_id = station_id
         state.genre_name = genre_name
-        if not refill_one():
-            return False
+        log(f"режим genre: «{genre_name}» ({station_id})", tag="MUSIC")
         return True
     finally:
         music.release_duck()

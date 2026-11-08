@@ -33,11 +33,33 @@ DUCKING (день 29, вечер): приглушение музыки прив�
   - При старте сбрасываем залипший duck.
 
 FIX (день 29, вечер): duck_off отправляется ПОСЛЕ mute-паузы, а не в
-  момент speaking=False. Раньше: duck_off уходил мгновенно после Ended,
-  музыка возвращалась на полную громкость, а микрофон ещё 1 сек
-  не слушал (mute-пауза) — звук «возвращался сразу после TTS».
-  Теперь: duck_off в момент, когда микрофон реально начинает слушать
-  (после POST_TTS_MUTE_SEC). Музыка возвращается через 1 сек после TTS.
+  момент speaking=False.
+
+── FIX (этап 0.1): флаги через runtime_state ─────────────────────
+  Раньше:
+    _flag_exists(name) → (cfg.DATA_DIR / name).exists() — БЕЗ TTL.
+    _is_music_playing → exists("music_playing.flag")
+    _is_expecting_input → exists("expecting_input.flag")
+    _session_open → float(read_text()) < DIALOG_SESSION_SEC
+  Проблемы:
+    - music_playing.flag: music упал с флагом → ASR навсегда считает,
+      что музыка играет, hot words идут в brain.
+    - expecting_input.flag: brain упал между set и pop → залип.
+    - session_open.flag: TTL 20 проверяется вручную в _session_open,
+      единственный флаг, который сделал всё правильно — и то руками.
+
+  Теперь:
+    rt.exists(rt.FLAG_MUSIC_PLAYING)    — TTL 30 внутри runtime_state
+    rt.exists(rt.FLAG_EXPECTING_INPUT)  — TTL 60 внутри runtime_state
+    rt.exists(rt.FLAG_SESSION_OPEN)     — TTL 20 внутри runtime_state
+  _flag_exists удалён. DIALOG_SESSION_SEC удалён (TTL в runtime_state).
+
+  Контракт «один писатель»:
+    music_playing    — пишет workers/music/playback.py (set/clear_music_playing)
+    expecting_input  — пишет brain/pending.py
+    session_open     — пишет brain/skills/llm/skill.py
+  ASR — только читает. Не пишет флаги (кроме duck_on/duck_off через IPC,
+  это не флаги).
 """
 
 import json
@@ -54,6 +76,7 @@ from vosk import Model, KaldiRecognizer
 from shared import ipc
 from shared import protocol
 from shared import config as cfg
+from shared import runtime_state as rt
 from shared.log import log
 from shared.sources import CommandSource
 from shared.beep import play_beep
@@ -65,7 +88,6 @@ HOT_WORD_COOLDOWN_SEC = 1.0
 ECHO_SIMILARITY_THRESHOLD = 0.85
 DEDUP_WINDOW_SEC = 1.0
 HOT_WORDS_RELOAD_SEC = 30.0
-DIALOG_SESSION_SEC = 20.0
 
 _COMMANDS_FILE = "commands.json"
 
@@ -86,20 +108,18 @@ _last_hot_word_at = 0.0
 _duck_sent = False
 
 
-# ── Флаги ──────────────────────────────────────────────────────
-def _flag_exists(name: str) -> bool:
-    try:
-        return (cfg.DATA_DIR / name).exists()
-    except Exception:
-        return False
-
-
+# ── Флаги (FIX этап 0.1: через runtime_state) ──────────────────
 def _is_music_playing() -> bool:
-    return _flag_exists("music_playing.flag")
+    return rt.exists(rt.FLAG_MUSIC_PLAYING)
 
 
 def _is_expecting_input() -> bool:
-    return _flag_exists("expecting_input.flag")
+    return rt.exists(rt.FLAG_EXPECTING_INPUT)
+
+
+def _session_open() -> bool:
+    """Диалог открыт после ответа LLM (TTL 20 в runtime_state)."""
+    return rt.exists(rt.FLAG_SESSION_OPEN)
 
 
 # ── Ducking (микрофон ⇄ музыка) ───────────────────────────────
@@ -189,18 +209,6 @@ def _is_echo(text: str) -> bool:
         log(f"asr: echo '{text}' ~ '{last}' ({ratio:.2f})", tag="ASR")
         return True
     return False
-
-
-# ── Диалоговый режим ───────────────────────────────────────────
-def _session_open() -> bool:
-    try:
-        flag = cfg.DATA_DIR / "session_open.flag"
-        if not flag.exists():
-            return False
-        ts = float(flag.read_text().strip())
-        return (time.time() - ts) < DIALOG_SESSION_SEC
-    except Exception:
-        return False
 
 
 # ── Фильтр диалога ─────────────────────────────────────────────

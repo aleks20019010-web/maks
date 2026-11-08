@@ -14,24 +14,24 @@
 #
 # C10 (день 29): ViolaWake — wake-детектор.
 # A2 (день 29): WAKE_WINDOW_SEC — окно после wake, Vosk слушает команду.
-#   music_playing.flag (music worker) — hot words при музыке.
-#   expecting_input.flag (brain pending) — hot words при ожидании ответа.
-#   session_open.flag (TTS worker) — окно после ответа LLM.
 #
-# FIX (день 29, вечер):
-#   - DUCK_LEVEL — целевая громкость музыки при ducking (%). music/player.py
-#     читает через getattr(cfg, "DUCK_LEVEL", 20), но теперь есть явный дефолт
-#     в конфиге, чтобы не расходиться при рефакторингах.
-#   - MUSIC_INBOX_TIMEOUT — таймаут ipc.get для music-воркера. 0.05 нужен,
-#     чтобы duck_on/duck_off применялись быстро (см. music/main.py).
-#   - TTS_START_TIMEOUT_SEC / TTS_PLAY_TIMEOUT_SEC — таймауты ожидания
-#     State.Playing / Ended в tts/player.py (были хардкодом 2.0/30.0).
-#   - TTS_DUCK_TAIL_SEC — хвост после конца фразы перед duck_off (был в
-#     коде как getattr-дефолт 0.1; теперь явный).
-#   - AEC_LOOPBACK_DEVICE_INDEX — был объявлен, но не используется; оставлен
-#     как есть (совместимость), помечен комментарием.
-#   - Убрано дублирование путей: TTS_TEMP_DIR = CACHE_DIR (одна папка для
-#     временных mp3), чтобы не плодить два каталога с одинаковым смыслом.
+# ── FIX (этап 0.2) ─────────────────────────────────────────────
+# MUSIC_DIR.mkdir на импорте падал, если внешний диск (E:\Music) отключён:
+# FileNotFoundError → import shared.config → падают ВСЕ воркеры, включая
+# brain/TTS/ASR. Теперь MUSIC_DIR.mkdir в try/except + флаг MUSIC_AVAILABLE.
+# music-воркер при старте проверяет cfg.MUSIC_AVAILABLE и, если False,
+# логирует и выходит — не пытается лезть в недоступную папку.
+#
+# ── FIX (этап 0.1) ─────────────────────────────────────────────
+# RUNTIME_DIR = DATA_DIR / "runtime" — для shared/runtime_state.py
+# (межпроцессные флаги с TTL). Создаётся при импорте.
+#
+# ── FIX (этап 0.3) ─────────────────────────────────────────────
+# LOG_FILE переехал в DATA_LOGS_DIR (data/logs), а не в LOGS_DIR
+# (BASE_DIR/logs). Причина: data/ — это данные, BASE_DIR/logs — это
+# тоже данные, но исторически в корне. Держим всё в data/.
+# LOGS_DIR оставлен (создаётся, пустой) — вдруг кто-то ещё читает.
+# Если grep покажет, что никто — удалим.
 
 import os
 import json
@@ -75,22 +75,23 @@ VLC_PATH = _ext("vlc_path", r"C:\Program Files\VideoLAN\VLC\vlc.exe")
 CONFIG_DIR = BASE_DIR / "config"
 MODELS_DIR = BASE_DIR / "models"
 RESPONSES_DIR = BASE_DIR / "responses"
-LOGS_DIR = BASE_DIR / "logs"
+LOGS_DIR = BASE_DIR / "logs"   # исторический; для логов теперь DATA_LOGS_DIR
 
 TOKEN_FILE = CONFIG_DIR / "token.txt"
 ALIASES_FILE = CONFIG_DIR / "aliases.json"
 VOSK_MODEL_PATH = str(MODELS_DIR / "vosk-model-small-ru-0.22")  # str — Vosk требует
-LOG_FILE = LOGS_DIR / "jarvis.log"
 
 # Данные — отдельно от кода
 DATA_DIR = BASE_DIR / "data"
 CACHE_DIR = DATA_DIR / "tts_cache"
 DATA_LOGS_DIR = DATA_DIR / "logs"
+RUNTIME_DIR = DATA_DIR / "runtime"   # FIX 0.1: флаги с TTL
 MEMORY_DB = DATA_DIR / "memory.db"
 
+# Логи: пишем в data/logs, а не в BASE_DIR/logs (см. шапку).
+LOG_FILE = DATA_LOGS_DIR / "jarvis.log"
+
 # Временные mp3 TTS — та же папка, что и кэш TTS.
-# Старый TTS_TEMP_DIR (BASE_DIR / "cache") удалён: смысл тот же, а два
-# каталога с одинаковым назначением только путают.
 TTS_TEMP_DIR = CACHE_DIR
 TTS_TEMP_FILE = TTS_TEMP_DIR / "_tts_temp.mp3"
 
@@ -134,13 +135,9 @@ PORTIONS_PER_SOURCE = 3
 WAVE_RESET_SEC = 300
 
 # --- DUCKING ---------------------------------------------------
-# Целевая громкость музыки при ducking, %. music/player.py берёт это
-# через getattr(cfg, "DUCK_LEVEL", 20). Явно здесь — чтобы не расходиться.
 DUCK_LEVEL = 30
 
 # --- MUSIC IPC -------------------------------------------------
-# Таймаут ipc.get для music-воркера. 0.05 сек нужен, чтобы duck_on/duck_off
-# применялись быстро (пока TTS говорит, задержка слышна).
 MUSIC_INBOX_TIMEOUT = 0.05
 
 
@@ -172,8 +169,6 @@ WAKE_COOLDOWN_S = 2.0
 # ============================================================
 # A2 (день 29): окна контекста для ASR
 # ============================================================
-# WAKE_WINDOW_SEC — сколько Vosk слушает команду после wake.
-# 5 сек — как у Алисы. Vosk просыпается на 5 сек, ловит команду.
 WAKE_WINDOW_SEC = 5.0
 
 # ============================================================
@@ -203,22 +198,31 @@ TTS_ECHO_GUARD_SEC = 0.8
 TTS_MUTE_DEFAULT_SEC = 300
 
 # --- TTS playback timeouts (tts/player.py) ---------------------
-# Ожидание реального старта (State.Playing). 2.0 сек — как было хардкодом.
 TTS_START_TIMEOUT_SEC = 3.0
-# Ожидание реального конца (Ended/Stopped). 30 сек — как было хардкодом.
 TTS_PLAY_TIMEOUT_SEC = 30.0
-# Хвост после конца фразы перед отправкой duck_off. Чтобы не обрывать
-# последние сэмплы из-за буферизации VLC.
 TTS_DUCK_TAIL_SEC = 0.1
 
 
 # ============================================================
 # СОЗДАНИЕ ПАПОК
 # ============================================================
+# FIX 0.2: MUSIC_DIR — отдельно, в try/except. Если внешний диск
+# отключён — brain/TTS/ASR должны работать (музыка отключена).
+# Остальные папки — внутренние, всегда доступны, mkdir безопасен.
 for _p in (CONFIG_DIR, MODELS_DIR, RESPONSES_DIR, LOGS_DIR,
-           DATA_DIR, CACHE_DIR, DATA_LOGS_DIR,
-           TTS_TEMP_DIR, MUSIC_DIR):
+           DATA_DIR, CACHE_DIR, DATA_LOGS_DIR, RUNTIME_DIR,
+           TTS_TEMP_DIR):
     _p.mkdir(parents=True, exist_ok=True)
+
+MUSIC_AVAILABLE = True
+try:
+    MUSIC_DIR.mkdir(parents=True, exist_ok=True)
+except OSError as e:
+    MUSIC_AVAILABLE = False
+    # print, а не log: log импортирует config, был бы цикл.
+    # Это одна строка на старте — не страшно.
+    print(f"⚠ config: MUSIC_DIR недоступен ({MUSIC_DIR}): {e}. "
+          f"Музыка отключена, остальные воркеры работают.")
 
 # ============================================================
 # AEC (Acoustic Echo Cancellation) — через echoff (WebRTC AEC3)
@@ -228,7 +232,4 @@ AEC_ENABLED = False
 ECHOFF_SAMPLE_RATE_HZ = 48000
 ECHOFF_STREAM_DELAY_MS = 100
 
-# AEC_LOOPBACK_DEVICE_INDEX сейчас не используется в коде (только
-# объявлен). Оставлен для обратной совместимости с конфигами,
-# которые на него ссылаются. При включении AEC — читать отсюда.
 AEC_LOOPBACK_DEVICE_INDEX = 10

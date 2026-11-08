@@ -4,93 +4,73 @@ workers/music/player.py — MusicManager, владелец VLC-плеера му
 Ducking = ПРИГЛУШЕНИЕ через audio_set_volume, не пауза.
 
 Семантика duck():
-  duck()            -> приглушить до cfg.DUCK_LEVEL (по умолчанию 20%)
+  duck()            -> приглушить до cfg.DUCK_LEVEL (по умолчанию 30%)
   duck(35)          -> приглушить до 35%
   duck(0)           -> полная тишина
-  duck(-1) / duck(150) -> ValueError
+  duck(-1) / duck(150) -> clamp в 0..100
 
 Семантика restore():
   Возвращает АКТУАЛЬНУЮ пользовательскую громкость self.volume.
 
-ПЛАВНОСТЬ (день 29):
+ПЛАВНОСТЬ:
   duck()/restore() вызывают _fade_to_async() — плавное изменение
   громкости через многократный audio_set_volume() с шагом ~30 мс.
-  VLC не имеет встроенного fade в python-vlc, поэтому шагаем вручную
-  в отдельном потоке (не блокируем lock).
-  - Отмена: новый fade отменяет предыдущий (Event _fade_cancel).
-  - При смене плеера (set_player) fade старого плеера отменяется.
-  - Если fade не удался (player=None, VLC ещё Opening) — fallback
-    на резкий audio_set_volume(target).
 
-  Разная длительность для duck и restore:
-    FADE_DUCK_SEC = 0.1     — быстро, чтобы TTS не начинал поверх
-                              громкой музыки.
-    FADE_RESTORE_SEC = 0.5  — плавно, спешить некуда (TTS закончил).
+  FADE_DUCK_SEC = 0.1     — быстро, чтобы TTS не начинал поверх
+                            громкой музыки.
+  FADE_RESTORE_SEC = 1.0  — плавно, спешить некуда (TTS закончил).
 
 duck_hold:
   Если True — restore() НЕ восстанавливает громкость (ждём новый трек).
   release_duck() сбрасывает hold и вызывает restore(), НО только если
   ducking не от TTS (_ducked_by_tts=False).
-  mark_ready() автоматически снимает hold после set_player, если
-  ducking не от TTS.
 
 _ready:
   Плеер считается готовым только после mark_ready().
   duck()/restore()/get_state() без _ready — no-op (намерение
   приглушить фиксируется, применяется в mark_ready).
 
-FIX (день 29, вечер):
-  - duck() ставит намерение приглушить ДО проверки player/_ready.
-  - mark_ready(): применяет _duck_level при ducked=True; снимает
-    залипший hold (если ducking не от TTS).
-  - restore(): hold учитывается только если _ducked_by_tts=False.
-  - release_duck(): при _ducked_by_tts=True НЕ вызывает restore().
-  - _wait_until_ready_to_apply(): таймаут 0.2 сек.
-  - check_duck_watchdog(max_sec): принудительный restore() при
-    залипшем ducking (TTS/ASR упал между duck_on и duck_off).
+── FIX (этап 0.5): _apply_duck_when_playing ──────────────────────
+  Симптом: после ускорения queue_wave (0.5 сек вместо 10) ducking
+  перестал работать. В логе:
+    20:14:53 [MUSIC] mark_ready                    ← плеер готов
+    20:14:53 asr: микрофон ВЫКЛ (TTS идёт)         ← _duck_on() ОТ ASR
+    20:14:53 [DUCK] volume 100 → 30 (intent) — state not ready
+    20:14:53 [DUCK] volume → 100 (pre-duck=100)   ← restore() при mic_on
+  Приглушения не было: duck(30) пришёл ПОСЛЕ mark_ready, но VLC ещё
+  Opening (0.5–2 сек до Playing). _wait_until_ready_to_apply() ждёт
+  0.2 сек, не дожидается → возвращает False → «применим при mark_ready».
+  Но mark_ready УЖЕ прошёл → duck не применится никогда.
 
-FIX (2026-10-31):
-  - check_duck_watchdog() теперь чистит и залипший duck_hold,
-    даже если ducked=False (hold без duck — как в modes.py).
-    Раньше такой hold висел вечно, если mark_ready() не вызывался.
-  - _hold_started_at — время первого hold_duck() (для watchdog).
+  Причина — тайминг, не привязка. Привязка правильная: ASR делает
+  duck_on когда микрофон выключается (TTS идёт), duck_off когда
+  включается. Раньше mark_ready был через 10 сек (Yandex), и
+  duck_on от ASR успевал до mark_ready → намерение фиксировалось,
+  mark_ready применял. Теперь mark_ready через 0.5 сек → duck_on
+  опаздывает.
 
-FIX (2026-11-07): PCR is called too late / ES_OUT_SET_(GROUP_)PCR.
-  Причина: vlc.MediaPlayer(file_path) в playback.py/radio.py использовал
-  ДЕФОЛТНЫЙ глобальный vlc.Instance(). Media (libvlc_media_t) создавалась
-  ВНУТРИ конструктора MediaPlayer и НЕ освобождалась (release() плеера
-  не освобождает media в python-vlc). Утечка libvlc_media_t → старый PCR
-  «просрочен» → VLC ругается, Opening затягивается.
-  Фикс:
-    1) ЯВНЫЙ media (set_player(player, media)) — MusicManager хранит
-       _media и освобождает её в _safe_release / clear_player.
-    2) _safe_release(player, media=None): stop() УБРАН — блокирует
-       1-2 сек (VLC flush); release() останавливает + освобождает
-       libvlc_media_player_t; media.release() освобождает
-       libvlc_media_t.
-    3) Создание vlc.Instance() — в playback.py (_get_music_instance),
-       radio.py импортирует оттуда. Один instance на music-процесс.
+  Решение: duck() при _ready=True, но state не Playing/Paused —
+  запускает фоновый поток _apply_duck_when_playing(target):
+  ждёт Playing (до 3 сек) и применяет _fade_to_async(target).
+  Выходит, если плеер заменён/очищен (player is not self.player).
+  Если за 3 сек не дождались — выходит (VLC сломался / terminal).
 
-FIX (2026-11-07, #2): segfault-риски в fade.
-  - _fade_to_async: проверка `player is self.player` перед
-    audio_get_volume() и на КАЖДОЙ итерации runner'а. Без этого:
-    set_player → _safe_release(player) → release() C-объекта, а runner
-    продолжает дёргать audio_set_volume на released player → SEGFAULT
-    (не Python exception, try/except не ловит).
-  - _cancel_fade: join с таймаутом (FADE_STEP_SEC * 2 = 60 мс) —
-    гарантирует, что runner завершился ДО release() старого плеера.
-    Раньше: _fade_cancel.set() + _fade_thread = None, но поток ещё
-    жив → segfault при release().
-  - duck(): "(intent)" в логе ТОЛЬКО для ветки «плеер не готов».
-    Раньше: "(intent)" и когда duck уже применён (fade) — путало
-    (в логе "volume 100 → 30 (intent)", а duck применён сразу).
+  Что НЕ трогаем:
+    - привязку к ASR (правильная);
+    - _duck_on/_duck_off в asr/main.py (работают);
+    - music.duck()/restore() в music/main.py (вызываются правильно);
+    - modes.queue_wave / playback.play_index (работают).
+
+── FIX (этап 0.5): print → log(tag="MUSIC") ────────────────────
+  Раньше player.py логировал в stderr (print), в jarvis.log его
+  не было. Отладка ducking — только по консоли.
+  Теперь: log(tag="MUSIC", level=...). [DUCK] — DEBUG (шумно,
+  но нужно для отладки), [VOL] — INFO (пользователь меняет),
+  watchdog — WARN.
 
 FIX (2026-11-08): clear_player и set_player не блокируют release().
-  Раньше: _safe_release(player) вызывал release() (VLC на Windows —
-  до 5 сек, если плеер Opening/Playing). Блокировал play_index →
-  «включи музыку» ждал 5+ сек.
-  Теперь: pause() + set_media(None) (0.1 сек) + release() в фоне
-  (daemon thread). play_index не ждёт release() старого плеера.
+FIX (2026-11-07): PCR, segfault-риски в fade, явный media.
+FIX (2026-10-31): check_duck_watchdog чистит и залипший duck_hold.
 """
 
 import threading
@@ -99,14 +79,19 @@ import time
 import vlc
 
 from shared import config as cfg
+from shared.log import log
 
 
 DUCK_WAIT_PLAYING_SEC = 0.2
 DUCK_WAIT_STEP = 0.05
 
-FADE_DUCK_SEC = 0.1        # приглушение перед TTS — быстро
-FADE_RESTORE_SEC = 1.0     # возврат после TTS — плавно
-FADE_STEP_SEC = 0.03       # шаг между audio_set_volume
+FADE_DUCK_SEC = 0.1
+FADE_RESTORE_SEC = 1.0
+FADE_STEP_SEC = 0.03
+
+# FIX (этап 0.5): сколько ждать Playing в фоне после duck() при
+# _ready=True, но state=Opening. VLC на Windows — 0.5–2 сек.
+DUCK_WAIT_PLAYING_BG_SEC = 3.0
 
 _STATE_TRANSITIONAL = (vlc.State.Opening, vlc.State.Buffering)
 _STATE_TERMINAL = (vlc.State.Error, vlc.State.Ended, vlc.State.Stopped)
@@ -115,7 +100,7 @@ _STATE_TERMINAL = (vlc.State.Error, vlc.State.Ended, vlc.State.Stopped)
 class MusicManager:
     def __init__(self):
         self.player = None
-        self._media = None          # FIX (2026-11-07): media текущего плеера
+        self._media = None
         self.volume = 100
 
         self.ducked = False
@@ -126,14 +111,12 @@ class MusicManager:
         self._duck_started_at = None
         self._hold_started_at = None
         self._duck_level = self._clamp_percent(
-            getattr(cfg, "DUCK_LEVEL", 20)
+            getattr(cfg, "DUCK_LEVEL", 30)
         )
 
         self._ready = False
         self.lock = threading.RLock()
 
-        # Fade-отмена: новый fade ставит _fade_cancel.set(),
-        # старый поток видит это и выходит.
         self._fade_cancel = threading.Event()
         self._fade_thread = None
 
@@ -141,16 +124,6 @@ class MusicManager:
     # ПЛЕЕР
     # ========================================================
     def set_player(self, new_player, new_media=None):
-        """Установить новый плеер (и опционально media).
-
-        FIX (2026-11-07): new_media — libvlc_media_t текущего трека.
-        MusicManager хранит _media и освобождает её в _safe_release /
-        clear_player. Раньше media создавалась ВНУТРИ vlc.MediaPlayer()
-        и не освобождалась → утечка C-объектов + PCR-конфликт.
-
-        FIX (2026-11-08): release() старого плеера — в фоне (daemon).
-        Блокировка release() (5 сек на Windows) не ждёт play_index.
-        """
         with self.lock:
             self._cancel_fade()
             old_player = self.player
@@ -167,10 +140,10 @@ class MusicManager:
                     pass
 
             pid = id(new_player) if new_player else None
-            print(f"   [MUSIC] set_player id={pid}, vol={self.volume}, "
-                  f"ducked={self.ducked}, hold={self.duck_hold}, ready=False")
+            log(f"set_player id={pid}, vol={self.volume}, "
+                f"ducked={self.ducked}, hold={self.duck_hold}, ready=False",
+                tag="MUSIC", level="DEBUG")
 
-        # FIX (2026-11-08): release() старого — в фоне (0 сек).
         if old_player is not None and old_player is not new_player:
             threading.Thread(
                 target=self._safe_release,
@@ -185,23 +158,18 @@ class MusicManager:
             if self.player and self.ducked:
                 try:
                     self.player.audio_set_volume(self._duck_level)
-                    print(f"   [MUSIC] mark_ready → apply duck vol={self._duck_level}")
+                    log(f"mark_ready → apply duck vol={self._duck_level}",
+                        tag="MUSIC", level="DEBUG")
                 except Exception:
                     pass
             if self.duck_hold and not self._ducked_by_tts:
                 self.duck_hold = False
                 self._hold_started_at = None
-                print("   [DUCK] hold OFF (auto on mark_ready)")
-            print(f"   [MUSIC] mark_ready id={pid}")
+                log("hold OFF (auto on mark_ready)",
+                    tag="MUSIC", level="DEBUG")
+            log(f"mark_ready id={pid}", tag="MUSIC", level="DEBUG")
 
     def clear_player(self):
-        """Очистить плеер. FIX (2026-11-08): release() в фоне (0 сек).
-
-        Раньше: _safe_release(player) вызывал release() (VLC на Windows —
-        до 5 сек, если плеер Opening/Playing). Блокировал play_index →
-        «включи музыку» ждал 5+ сек.
-        Теперь: pause() + set_media(None) (0.1 сек) + release() в фоне.
-        """
         with self.lock:
             self._cancel_fade()
             old_player = self.player
@@ -211,9 +179,6 @@ class MusicManager:
             self._ready = False
 
         if old_player is not None:
-            # FIX (2026-11-08): pause() + set_media(None) — быстро (0.1 сек),
-            # release() — в фоне. Без pause() release() может блокировать
-            # до 5 сек (VLC flush).
             try:
                 old_player.pause()
             except Exception:
@@ -234,14 +199,6 @@ class MusicManager:
 
     @staticmethod
     def _safe_release(player, media=None):
-        """Остановить и освободить плеер (и media, если есть).
-
-        FIX (2026-11-07): stop() УБРАН — блокирует 1-2 сек (VLC flush,
-        ждёт audio drain). release() сам останавливает воспроизведение
-        и освобождает libvlc_media_player_t.
-        media.release() освобождает libvlc_media_t (иначе утечка
-        C-объектов на каждый трек → PCR «too late»).
-        """
         try:
             player.release()
         except Exception:
@@ -256,30 +213,17 @@ class MusicManager:
     # FADE
     # ========================================================
     def _cancel_fade(self):
-        """Отменить текущий fade. Вызывать под self.lock.
-
-        FIX (2026-11-07, #2): join с таймаутом — гарантирует, что
-        runner завершился ДО release() старого плеера. Без join:
-        _fade_cancel.set() + _fade_thread = None, но поток ещё жив →
-        release() C-объекта → runner дёргает audio_set_volume на
-        released player → SEGFAULT.
-        """
         self._fade_cancel.set()
         t = self._fade_thread
         if t is not None and t.is_alive():
             try:
-                t.join(timeout=FADE_STEP_SEC * 2)   # 60 мс — с запасом
+                t.join(timeout=FADE_STEP_SEC * 2)
             except Exception:
                 pass
         self._fade_thread = None
 
     def _fade_to_async(self, target_percent: int,
                        duration_sec: float = FADE_RESTORE_SEC):
-        """Плавно изменить громкость в отдельном потоке.
-
-        Не блокирует lock. Новый fade отменяет предыдущий.
-        При player=None или VLC не готов — fallback на резкий set_volume.
-        """
         target_percent = self._clamp_percent(target_percent)
         with self.lock:
             self._cancel_fade()
@@ -288,10 +232,6 @@ class MusicManager:
             player = self.player
             if player is None:
                 return
-            # FIX (2026-11-07, #2): запоминаем, к какому плееру привязан
-            # fade. runner проверяет `player is self.player` — если плеер
-            # заменён (set_player) или очищен (clear_player) — выходим,
-            # НЕ дёргаем audio_set_volume на released C-объекте.
             try:
                 current = player.audio_get_volume()
             except Exception:
@@ -302,7 +242,6 @@ class MusicManager:
                     if cancel.is_set():
                         return
                     if current is None or current < 0:
-                        # FIX (#2): проверка перед set_volume
                         if player is not self.player:
                             return
                         try:
@@ -317,9 +256,6 @@ class MusicManager:
                     for i in range(steps):
                         if cancel.is_set():
                             return
-                        # FIX (#2): на КАЖДОЙ итерации — плеер мог быть
-                        # заменён/очищен. audio_set_volume на released
-                        # C-объекте = SEGFAULT (try/except не ловит).
                         if player is not self.player:
                             return
                         vol = int(round(current + delta * (i + 1)))
@@ -343,6 +279,55 @@ class MusicManager:
             self._fade_thread = threading.Thread(target=runner, daemon=True)
             self._fade_thread.start()
 
+    def _apply_duck_when_playing(self, target_percent: int):
+        """FIX (этап 0.5): фон, ждёт state=Playing и применяет duck.
+
+        Симптом: duck() пришёл после mark_ready, но VLC ещё Opening
+        (0.5–2 сек до Playing). _wait_until_ready_to_apply() (0.2 сек)
+        не дождался → «применим при mark_ready». Но mark_ready уже
+        прошёл → duck не применится никогда.
+
+        Этот поток ждёт Playing до DUCK_WAIT_PLAYING_BG_SEC (3 сек)
+        и применяет _fade_to_async(target). Выходит при:
+          - смене плеера (player is not self.player);
+          - terminal state (Error/Ended/Stopped);
+          - истечении 3 сек.
+
+        Не блокирует lock: _fade_to_async сам берёт lock на мгновение.
+        """
+        player = self.player
+        if player is None:
+            return
+
+        def runner():
+            deadline = time.monotonic() + DUCK_WAIT_PLAYING_BG_SEC
+            while time.monotonic() < deadline:
+                if player is not self.player:
+                    return
+                try:
+                    st = player.get_state()
+                except Exception:
+                    return
+                if st in (vlc.State.Playing, vlc.State.Paused):
+                    break
+                if st in _STATE_TERMINAL:
+                    log(f"apply_duck: terminal state={st}",
+                        tag="MUSIC", level="DEBUG")
+                    return
+                time.sleep(DUCK_WAIT_STEP)
+            else:
+                log(f"apply_duck: не дождались Playing за "
+                    f"{DUCK_WAIT_PLAYING_BG_SEC:.0f}с",
+                    tag="MUSIC", level="WARN")
+                return
+            if player is not self.player:
+                return
+            log(f"apply_duck: Playing → fade to {target_percent}",
+                tag="MUSIC", level="DEBUG")
+            self._fade_to_async(target_percent, duration_sec=FADE_DUCK_SEC)
+
+        threading.Thread(target=runner, daemon=True).start()
+
     # ========================================================
     # ГРОМКОСТЬ
     # ========================================================
@@ -351,13 +336,12 @@ class MusicManager:
         with self.lock:
             self.volume = vol
             if self.player and not self.ducked:
-                # Пользователь меняет громкость — резко, без fade
                 self._cancel_fade()
                 try:
                     self.player.audio_set_volume(vol)
                 except Exception:
                     pass
-        print(f"   [VOL] {vol}%")
+        log(f"VOL {vol}%", tag="MUSIC")
 
     def get_volume(self):
         with self.lock:
@@ -376,7 +360,7 @@ class MusicManager:
             if not self.duck_hold:
                 self.duck_hold = True
                 self._hold_started_at = time.monotonic()
-                print("   [DUCK] hold ON")
+                log("hold ON", tag="MUSIC", level="DEBUG")
 
     def release_duck(self):
         with self.lock:
@@ -384,7 +368,7 @@ class MusicManager:
                 return
             self.duck_hold = False
             self._hold_started_at = None
-            print("   [DUCK] hold OFF")
+            log("hold OFF", tag="MUSIC", level="DEBUG")
             if self.ducked and not self._ducked_by_tts:
                 self.restore()
 
@@ -397,7 +381,8 @@ class MusicManager:
             self._ducked_by_tts = False
             self._pre_duck_volume = None
             self._duck_started_at = None
-            print("   [DUCK] mark_user_paused (flags cleared)")
+            log("mark_user_paused (flags cleared)",
+                tag="MUSIC", level="DEBUG")
 
     # ========================================================
     # DUCK / RESTORE
@@ -405,21 +390,20 @@ class MusicManager:
     def duck(self, target_percent: int = None) -> bool:
         """Приглушить до target_percent (0..100). None → cfg.DUCK_LEVEL.
 
-        Намерение приглушить фиксируется сразу (ducked=True,
+        Намерение фиксируется сразу (ducked=True, _ducked_by_tts=True,
         _pre_duck_volume=self.volume), даже если плеера нет или он
-        ещё в Opening. Применить к плееру попробуем:
-          1. прямо сейчас (fade), если состояние Playing/Paused;
-          2. в mark_ready(), когда плеер станет готов.
-        Возвращает True, если намерение зафиксировано.
+        Opening. Применить пробуем:
+          1. прямо сейчас (fade), если state Playing/Paused;
+          2. _apply_duck_when_playing — фон, ждёт Playing до 3 сек
+             (FIX этап 0.5: раньше «применим при mark_ready», но
+             mark_ready мог уже пройти → duck не применялся);
+          3. в mark_ready() — если duck пришёл ДО mark_ready.
         """
         with self.lock:
             target = self._clamp_percent(
                 self._duck_level if target_percent is None else target_percent
             )
 
-            # FIX (2026-11-07, #2): "(intent)" — только для ветки
-            # «плеер не готов». Раньше "(intent)" был в prefix всегда,
-            # и лог "volume 100 → 30 (intent)" путал: duck уже применён.
             if not self.ducked:
                 self._pre_duck_volume = self.volume
                 self._ducked_by_tts = True
@@ -430,19 +414,20 @@ class MusicManager:
                 prefix = f"(already ducked) → {target}"
 
             if not self.player or not self._ready:
-                print(f"   [DUCK] volume {prefix} (intent) — "
-                      f"применим при mark_ready")
+                log(f"volume {prefix} (intent) — применим при mark_ready",
+                    tag="MUSIC", level="DEBUG")
                 return True
 
             if not self._wait_until_ready_to_apply():
-                print(f"   [DUCK] volume {prefix} (intent) — state not ready, "
-                      f"применим при mark_ready")
+                # FIX (этап 0.5): плеер _ready, но state Opening.
+                # Фон: ждать Playing и применить.
+                log(f"volume {prefix} (intent) — state not ready, "
+                    f"жду Playing в фоне", tag="MUSIC", level="DEBUG")
+                self._apply_duck_when_playing(target)
                 return True
 
-            # Применяем плавно (в отдельном потоке). Намерение уже
-            # зафиксировано, fade не блокирует lock.
             self._fade_to_async(target, duration_sec=FADE_DUCK_SEC)
-            print(f"   [DUCK] volume {prefix}")
+            log(f"volume {prefix}", tag="MUSIC", level="DEBUG")
             return True
 
     def restore(self):
@@ -450,7 +435,8 @@ class MusicManager:
             if not self.ducked:
                 return
             if self.duck_hold and not self._ducked_by_tts:
-                print("   [DUCK] hold ON — громкость сохраняется приглушённой")
+                log("hold ON — громкость сохраняется приглушённой",
+                    tag="MUSIC", level="DEBUG")
                 return
 
             self.ducked = False
@@ -461,45 +447,37 @@ class MusicManager:
             self._duck_started_at = None
 
             if not should_restore:
-                print("   [DUCK] restore (не мы приглушали, no-op)")
+                log("restore (не мы приглушали, no-op)",
+                    tag="MUSIC", level="DEBUG")
                 return
 
             target = self.volume
             if not self.player:
-                print("   [DUCK] restore (no player, флаг сброшен)")
+                log("restore (no player, флаг сброшен)",
+                    tag="MUSIC", level="DEBUG")
                 return
 
-            # Плавно возвращаем.
             self._fade_to_async(target, duration_sec=FADE_RESTORE_SEC)
-            print(f"   [DUCK] volume → {target} (pre-duck={pre})")
+            log(f"volume → {target} (pre-duck={pre})",
+                tag="MUSIC", level="DEBUG")
 
     def check_duck_watchdog(self, max_sec: float = 60.0) -> None:
-        """Снять залипший ducking или duck_hold, если он висит дольше max_sec.
-
-        Две независимые ветки:
-          1) ducked=True дольше max_sec — mic/TTS упал между on и off.
-          2) duck_hold=True дольше max_sec — loading упал, release_duck
-             не был вызван (например, из-за отсутствия try/finally).
-             Срабатывает, даже если ducked=False.
-        """
         with self.lock:
             now = time.monotonic()
 
-            # 1) залипший ducking
             if self.ducked and self._duck_started_at is not None:
                 elapsed = now - self._duck_started_at
                 if elapsed > max_sec:
-                    print(f"   [DUCK] watchdog: duck {elapsed:.0f}s > {max_sec:.0f}s, "
-                          f"принудительный restore")
+                    log(f"watchdog: duck {elapsed:.0f}s > {max_sec:.0f}s, "
+                        f"принудительный restore", tag="MUSIC", level="WARN")
                     self.restore()
                     return
 
-            # 2) залипший hold (даже без duck)
             if self.duck_hold and self._hold_started_at is not None:
                 elapsed = now - self._hold_started_at
                 if elapsed > max_sec:
-                    print(f"   [DUCK] watchdog: hold {elapsed:.0f}s > {max_sec:.0f}s, "
-                          f"принудительно снимаю")
+                    log(f"watchdog: hold {elapsed:.0f}s > {max_sec:.0f}s, "
+                        f"принудительно снимаю", tag="MUSIC", level="WARN")
                     self.duck_hold = False
                     self._hold_started_at = None
                     if self.ducked and not self._ducked_by_tts:
@@ -514,7 +492,7 @@ class MusicManager:
                 return
             try:
                 self.player.pause()
-                print("   [MUSIC] pause")
+                log("pause", tag="MUSIC", level="DEBUG")
             except Exception:
                 pass
 
@@ -527,7 +505,8 @@ class MusicManager:
                 self.player.play()
                 vol = self._duck_level if self.ducked else self.volume
                 self.player.audio_set_volume(vol)
-                print(f"   [MUSIC] resume (vol={vol}, ducked={self.ducked})")
+                log(f"resume (vol={vol}, ducked={self.ducked})",
+                    tag="MUSIC", level="DEBUG")
             except Exception:
                 pass
 
@@ -556,7 +535,7 @@ class MusicManager:
             if state in (vlc.State.Playing, vlc.State.Paused):
                 return True
             if state in _STATE_TERMINAL:
-                print(f"   [DUCK] terminal state={state}")
+                log(f"terminal state={state}", tag="MUSIC", level="DEBUG")
                 return False
             if state not in _STATE_TRANSITIONAL:
                 return True
