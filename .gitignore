@@ -56,3 +56,6 @@ config/aliases.json
 full_project_code_*.txt
 data/intent_router.json
 brain_all.txt
+
+# Local music index (генерируется автоматически)
+data/local_index.json

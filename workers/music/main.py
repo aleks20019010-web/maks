@@ -333,6 +333,15 @@ def main():
     log("music: старт", tag="MUSIC")
     ipc.init()
 
+    # FIX (2026-11-08): прогреть VLC instance — первый _get_music_instance
+    # создаёт vlc.Instance (2 сек). Иначе первый «включи музыку» ждёт 2 сек.
+    try:
+        from workers.music.playback import _get_music_instance
+        _get_music_instance()
+        log("music: VLC instance прогрет", tag="MUSIC")
+    except Exception as e:
+        log(f"music: VLC warmup: {e}", tag="MUSIC", level="WARN")
+
     try:
         if _MUSIC_PLAYING_FLAG.exists():
             _MUSIC_PLAYING_FLAG.unlink()
@@ -366,9 +375,6 @@ def main():
 
         try:
             if msg.type == "play":
-                # FIX: в отдельном потоке, чтобы music_inbox не блокировался
-                # на время загрузки трека (play_wave/start_genre/play_mood).
-                # duck_on/duck_off от ASR обрабатываются сразу.
                 threading.Thread(
                     target=_run_play_async,
                     args=(msg.name, msg.data),

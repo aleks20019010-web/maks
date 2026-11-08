@@ -20,6 +20,10 @@
 #   - не принимает решение EXECUTE/CLARIFY/FALLBACK (это decision/*)
 #   - не говорит (это router)
 #   Он только отвечает на вопрос «какой скил это обработает?».
+#
+# MUSIC_NOW_PLAYING (2026-11-08): «что играет» → controls.now_playing.
+#   controls._dispatch_action("now_playing") → protocol.music_now_playing_request
+#   → music → event_now_playing → brain → TTS. Быстро (0.5 сек), без LLM.
 
 from brain.nlu.types import Command, Intent
 from brain.skills import base as skills_base
@@ -37,6 +41,10 @@ _INTENT_TO_SKILL: dict[Intent, str | None] = {
     Intent.MUSIC_RESUME: "controls",
     Intent.MUSIC_NEXT: "controls",
     Intent.MUSIC_PREV: "controls",
+    # MUSIC_NOW_PLAYING (2026-11-08): «что играет» / «что за песня».
+    # controls.now_playing → protocol.music_now_playing_request → music →
+    # event_now_playing → brain → TTS. Быстро (0.5 сек), без LLM.
+    Intent.MUSIC_NOW_PLAYING: "controls",
     Intent.VOLUME_UP: "controls",
     Intent.VOLUME_DOWN: "controls",
     Intent.VOLUME_SET: "controls",

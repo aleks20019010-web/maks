@@ -63,15 +63,13 @@ _vlc_instance = None
 
 
 def _get_instance():
-    """Ленивый singleton vlc.Instance для TTS. Изоляция от music."""
     global _vlc_instance
     if _vlc_instance is None:
         _vlc_instance = vlc.Instance(
             "--no-video",
             "--no-osd",
             "--quiet",
-            # Если directsound тормозит на Windows — раскомментировать:
-            # "--aout=mmdevice",
+            "--aout=mmdevice",   # FIX (2026-11-08): Windows 10/11 — быстрее directsound
         )
         log("tts: vlc.Instance создан (TTS, изолирован от music)",
             tag="TTS", level="DEBUG")

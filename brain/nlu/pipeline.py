@@ -71,6 +71,8 @@ def _load_decisions() -> dict[Intent, object]:
     from brain.nlu.decision.music import get as get_music_decision
     from brain.nlu.decision.controls import get as get_controls_decision
     from brain.nlu.decision.weather import get as get_weather_decision
+    from brain.nlu.decision.system import get as get_system_decision
+
     return {
         Intent.MUSIC_PLAY: get_music_decision(),
         Intent.MUSIC_WAVE: get_music_decision(),
@@ -82,7 +84,12 @@ def _load_decisions() -> dict[Intent, object]:
         Intent.MUSIC_RESUME: get_controls_decision(),
         Intent.MUSIC_NEXT: get_controls_decision(),
         Intent.MUSIC_PREV: get_controls_decision(),
+        # MUSIC_NOW_PLAYING (2026-11-08): «что играет» / «что за песня».
+        # controls.now_playing → protocol.music_now_playing_request → music →
+        # event_now_playing → brain → TTS. Быстро (0.5 сек), без LLM.
+        Intent.MUSIC_NOW_PLAYING: get_controls_decision(),
         Intent.WEATHER_QUERY: get_weather_decision(),
+        Intent.SYSTEM_STATUS: get_system_decision(),
     }
 
 
@@ -273,14 +280,8 @@ def _try_fill_pending(
 
     Логика:
       - если текст — отмена («отмена», «не надо») → clear_pending, вернуть
-        Decision(EXECUTE, action="cancel")? Нет — просто None, пусть
-        pipeline пойдёт обычным путём и router скажет «отменил».
-        Хотя это странно. Лучше: вернуть Decision(FALLBACK, reason="cancelled")
-        и router скажет NOT_UNDERSTOOD. Но пользователь ждёт «отменил».
-        Пока: возвращаем None, pending сброшен, pipeline идёт обычным путём.
-        «Отмена» без intent'а → FALLBACK → router скажет NOT_UNDERSTOOD.
-        Не идеально, но не выдумываем.
-
+        None, пусть pipeline пойдёт обычным путём. «Отмена» без intent'а
+        → FALLBACK → router скажет NOT_UNDERSTOOD. Пока так.
       - иначе: пробуем extract_candidate + match для pending.intent.
         Если FOUND — EXECUTE с pending.intent + entity.
         Если UNRESOLVED/AMBIGUOUS — новый CLARIFY (pipeline его обработает).

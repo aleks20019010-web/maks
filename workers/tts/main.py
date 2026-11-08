@@ -23,6 +23,12 @@
 #   забота на ASR: как только set_speaking(True) записан, ASR на следующем
 #   тике (≤100 мс) выключит микрофон и отправит duck_on. Синтез занимает
 #   1–2 сек — за это время music гарантированно успевает приглушить.
+#
+# v6.2 (2026-11-05): rate НЕ передаётся в synth (mp3 всегда speed=1.0,
+#   кэш всегда попадает). rate из personality_core (prosody) передаётся
+#   в player.play_tts_file → VLC set_rate (тон сохраняется).
+#   _say_one: _synth(text, temp, None, pitch, emotion) — rate=None.
+#             play_tts_file(temp, rate=rate) — реальный rate в VLC.
 
 import os
 import sys
@@ -97,6 +103,9 @@ def _synth(text, out_path, rate=None, pitch=None, emotion=None, cache=True) -> b
 def _say_one(text, rate=None, pitch=None, emotion=None, cache=True) -> bool:
     """Синтезировать + проиграть.
 
+    v6.2: rate НЕ идёт в synth (mp3 всегда speed=1.0, кэш совпадает).
+    rate идёт в player.play_tts_file → VLC set_rate (тон сохраняется).
+
     Ducking музыки делает ASR: как только tts_state.set_speaking(True)
     записан, ASR на следующем тике выключит микрофон и отправит duck_on.
     Здесь про музыку ничего нет.
@@ -105,7 +114,8 @@ def _say_one(text, rate=None, pitch=None, emotion=None, cache=True) -> bool:
     spoke = False
 
     try:
-        ok = _synth(text, temp, rate, pitch, emotion, cache=cache)
+        # rate=None → synth всегда speed=1.0, кэш не зависит от rate.
+        ok = _synth(text, temp, None, pitch, emotion, cache=cache)
         if not ok:
             log("tts: синтез не удался, пропуск", tag="TTS", level="WARN")
             return False
@@ -113,7 +123,8 @@ def _say_one(text, rate=None, pitch=None, emotion=None, cache=True) -> bool:
         tts_state.set_speaking(True, text)
         spoke = True
 
-        tts_player.play_tts_file(temp)
+        # rate → VLC set_rate (быстрее/медленнее, тон сохраняется).
+        tts_player.play_tts_file(temp, rate=rate)
         return True
     except Exception as e:
         log(f"tts: play error: {e}", tag="TTS", level="ERROR")
@@ -159,13 +170,21 @@ def main():
     log("tts: старт", tag="TTS")
     ipc.init()
 
+    # FIX (2026-11-08): прогреть VLC instance — первый _get_instance
+    # создаёт vlc.Instance (2 сек). Иначе первая фраза ждёт 2 сек.
+    try:
+        from workers.tts.player import _get_instance
+        _get_instance()
+        log("tts: VLC instance прогрет", tag="TTS")
+    except Exception as e:
+        log(f"tts: VLC warmup: {e}", tag="TTS", level="WARN")
+
     try:
         _get_engine()
     except Exception as e:
         log(f"tts: не удалось загрузить движок: {e}", tag="TTS", level="ERROR")
         sys.exit(1)
 
-    # На старте — "не говорю"
     tts_state.set_speaking(False, "")
 
     log("tts: слушаю tts_inbox", tag="TTS")

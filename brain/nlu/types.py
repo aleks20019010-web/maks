@@ -23,6 +23,13 @@
 #   он возвращает phrase_set + kwargs, router подставляет.
 #   clarify_question оставлен как deprecated — на случай, если где-то есть
 #   потребитель, которого я не видел. Никто не должен его читать в новом коде.
+#
+# MUSIC_NOW_PLAYING (2026-11-08): «что играет» / «что за песня» → controls.now_playing.
+#   До NLU это работало через fast-path (classify). Fast-path убран (этап 9),
+#   а NLU не знал MUSIC_NOW_PLAYING — «что играет» улетало в MUSIC_RESUME (0.66)
+#   или LLM_QUESTION (0.67) → 4-15 сек. Теперь: MUSIC_NOW_PLAYING → controls.
+#   controls.now_playing → protocol.music_now_playing_request → music →
+#   event_now_playing → brain → TTS «Кукрыниксы — Страхи» (0.5 сек).
 
 from dataclasses import dataclass, field
 from enum import Enum
@@ -46,6 +53,10 @@ class Intent(str, Enum):
     MUSIC_RESUME = "MUSIC_RESUME"    # продолжи
     MUSIC_NEXT = "MUSIC_NEXT"        # дальше
     MUSIC_PREV = "MUSIC_PREV"        # назад
+    # MUSIC_NOW_PLAYING (2026-11-08): «что играет» / «что за песня».
+    # controls.now_playing → protocol.music_now_playing_request → music →
+    # event_now_playing → brain → TTS. Быстро (0.5 сек), без LLM.
+    MUSIC_NOW_PLAYING = "MUSIC_NOW_PLAYING"
 
     # Громкость
     VOLUME_UP = "VOLUME_UP"

@@ -10,6 +10,7 @@
 #   MUSIC_RESUME → EXECUTE(action="resume")
 #   MUSIC_NEXT   → EXECUTE(action="next")
 #   MUSIC_PREV   → EXECUTE(action="prev")
+#   MUSIC_NOW_PLAYING → EXECUTE(action="now_playing")   (2026-11-08)
 #
 # ПОЧЕМУ DecisionEngine, А НЕ ХАРДКОД В PIPELINE:
 #   У controls своя логика (intent → action). Без DecisionEngine pipeline
@@ -19,6 +20,13 @@
 # VOLUME_SET: entity НЕТ (числа не извлекаются в entity/music). controls.handle
 #   сам зовёт parse_volume(command.original_text) — «громкость 50» → 50.
 #   Это не дублирование: parse_volume уже есть, Command несёт original_text.
+#
+# MUSIC_NOW_PLAYING (2026-11-08): «что играет» / «что за песня».
+#   До NLU это работало через fast-path (classify). Fast-path убран (этап 9),
+#   NLU не знал MUSIC_NOW_PLAYING → FALLBACK → LLM (4 сек). Теперь:
+#   MUSIC_NOW_PLAYING → EXECUTE(now_playing) → controls.now_playing →
+#   protocol.music_now_playing_request → music → event_now_playing →
+#   brain → TTS «Кукрыниксы — Страхи» (0.5 сек), без LLM.
 #
 # ЧЕГО DecisionEngine НЕ ДЕЛАЕТ:
 #   - не извлекает entity (это entity/*)
@@ -42,11 +50,15 @@ _INTENT_TO_ACTION: dict[Intent, str] = {
     Intent.MUSIC_RESUME: "resume",
     Intent.MUSIC_NEXT: "next",
     Intent.MUSIC_PREV: "prev",
+    # MUSIC_NOW_PLAYING (2026-11-08): «что играет» / «что за песня».
+    # controls.now_playing → protocol.music_now_playing_request → music →
+    # event_now_playing → brain → TTS. Быстро (0.5 сек), без LLM.
+    Intent.MUSIC_NOW_PLAYING: "now_playing",
 }
 
 
 class ControlsDecisionEngine:
-    """DecisionEngine для controls (громкость, пауза, стоп, next/prev)."""
+    """DecisionEngine для controls (громкость, пауза, стоп, next/prev, now_playing)."""
 
     supported_intents: tuple[Intent, ...] = tuple(_INTENT_TO_ACTION.keys())
 

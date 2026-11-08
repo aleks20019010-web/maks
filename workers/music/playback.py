@@ -88,6 +88,14 @@
 #   playback.py, а playback.py импортирует radio.py — циклический импорт.
 #   Проверено: playback.py НЕ импортирует radio.py. radio.py импортирует
 #   playback.py (только _get_music_instance) — цикла НЕТ.
+#
+# FIX (2026-11-08): убран _tts_speaking() цикл в play_index.
+#   Раньше: если TTS говорит, play_index ждал КОНЦА TTS (6+ сек) до
+#   player.play(). Музыка стартовала ПОСЛЕ TTS — 15 сек задержки между
+#   «включи музыку» и реальным звуком.
+#   Теперь: музыка стартует сразу (ducking 30%, TTS-hold от modes.py),
+#   TTS говорит поверх. ASR уже выключил микрофон (mic_off на TTS) —
+#   эхо не проблема. Первый трек — сразу (0–1 сек вместо 6–15).
 
 import os
 import time
@@ -128,19 +136,13 @@ _music_instance = None
 
 
 def _get_music_instance():
-    """Ленивый singleton vlc.Instance для music-процесса.
-
-    Изоляция от TTS (у TTS свой instance). Один instance на процесс —
-    radio.py и playback.py делят его (через импорт).
-    """
     global _music_instance
     if _music_instance is None:
         _music_instance = vlc.Instance(
             "--no-video",
             "--no-osd",
             "--quiet",
-            # Если directsound тормозит на Windows — раскомментировать:
-            # "--aout=mmdevice",
+            "--aout=mmdevice",   # FIX (2026-11-08): Windows 10/11 — быстрее directsound
         )
         print("   [MUSIC] vlc.Instance создан (music, изолирован от TTS)")
     return _music_instance
@@ -366,15 +368,17 @@ def play_index(idx, announce=False):
                     print(f"   ⚠ discovery: TTS не начал за "
                           f"{DISCOVERY_WAIT_SEC:.0f}с (сеть/API?) — играю без фразы")
 
-            # TTS перед треком: если TTS говорит — ждём КОНЦА TTS.
-            # v6.1: time.sleep(2.0) и else: time.sleep(1.0) УБРАНЫ.
-            # ASR даёт 1.0 сек на «хвост VLC» (микрофон ВКЛ через 1.0s),
-            # эхо не услышит. player.play() сам стартует.
-            if _tts_speaking():
-                waited = 0.0
-                while _tts_speaking() and waited < 30:
-                    time.sleep(0.1)
-                    waited += 0.1
+            # FIX (2026-11-08): НЕ ждём TTS. Музыка стартует сразу (ducking 30%),
+            # TTS говорит поверх. ASR уже выключил микрофон (mic_off на TTS) —
+            # эхо не проблема. _tts_speaking() цикл давал 6+ сек задержки.
+            # TTS-hold (modes.py) уже приглушает музыку до mark_ready.
+            #
+            # Было:
+            #   if _tts_speaking():
+            #       waited = 0.0
+            #       while _tts_speaking() and waited < 30:
+            #           time.sleep(0.1)
+            #           waited += 0.1
 
             try:
                 player.play()

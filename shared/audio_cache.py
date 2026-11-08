@@ -5,6 +5,11 @@ shared/audio_cache.py — кэш списка аудиофайлов и поис
 Brain и workers/music используют этот модуль — оба.
 
 Поиск: basename + родительские папки (папка артиста тоже участвует).
+
+FIX (2026-11-08): all_audio_files → из local_index.json (0.05 сек) вместо
+  glob (8 сек на 3000 файлов). local.py строит JSON при первом запуске
+  (8 сек) или обновляет в фоне (8 сек, не блокирует). Повторный запуск —
+  JSON (0.05 сек). Первый «включи музыку» — 0.05 сек (не 8).
 """
 
 import os
@@ -20,10 +25,27 @@ _cache_lock = threading.Lock()
 
 
 def all_audio_files(force_refresh=False):
+    """Список аудиофайлов.
+
+    FIX (2026-11-08): из local_index.json (0.05 сек) вместо glob (8 сек).
+    Fallback: glob (если local.py не импортируется — циклический импорт?).
+    """
     global _cache
     with _cache_lock:
         if _cache is not None and not force_refresh:
             return _cache
+
+        # FIX (2026-11-08): из индекса (0.05 сек)
+        try:
+            from workers.music.local import _load_index
+            idx = _load_index(force_refresh=force_refresh)
+            files = [t["path"] for t in idx.get("tracks", [])]
+            _cache = files
+            return files
+        except Exception as e:
+            print(f"⚠ audio_cache: индекс недоступен ({e}) — fallback glob")
+
+        # Fallback: glob (если local.py не импортируется)
         files = []
         for ext in ('*.mp3', '*.flac', '*.m4a', '*.aac', '*.ogg'):
             files += glob.glob(os.path.join(cfg.MUSIC_DIR, '**', ext), recursive=True)
