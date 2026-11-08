@@ -15,17 +15,18 @@ Engine сам ничего не решает — он склеивает сло�
 v6.3 (2026-11-05): emotion из prosody НЕ применяется (кэш = warmup).
 
 v6.4 (2026-11-06): respond_event → event.type="event".
-  SELF-реакции (behavior_*) срабатывают только на command (st.on_command).
-  На event SELF не трогается, mind_stream.on_command не зовётся.
-  Это нужно, чтобы discovery/wake/now_playing не перехватывались
-  behavior_energy_low — composer собирает фразу напрямую.
-  В _process: if event.type == "command" — SELF, elif "tick" — SELF tick,
-  иначе (event) — SELF не трогаем.
+
+── FIX (этап 0.5): print → log(tag="PC") ────────────────────────
+  Раньше engine.py шёл в stderr (print), в jarvis.log его не было.
+  Теперь: log(tag="PC", level=...).
+    [SELF] / [MIND] — DEBUG (на каждую команду, шумно в INFO).
+    ⚠ engine (ошибки) — WARN.
 """
 
 import os
 from typing import Optional
 
+from shared.log import log
 from personality_core.types import Event, Context, JarvisResponse
 from personality_core.context import ContextBuilder
 from personality_core.policy import PolicyEngine
@@ -73,11 +74,7 @@ class PersonalityEngine:
         explicit_detail: bool = False,
         context: Optional[Context] = None,
     ) -> JarvisResponse:
-        """Собрать ответ LLM через composer + prosody.
-
-        LLM даёт смысл (text). Composer оборачивает в личность Макса:
-        OPENING_LLM + LLM_CORE({answer}) + CLOSING_LLM.
-        """
+        """Собрать ответ LLM через composer + prosody."""
         from personality_core import self_state as _self_state
         from personality_core import prosody as _prosody
         from personality_core import style as _style
@@ -123,7 +120,8 @@ class PersonalityEngine:
             )
             composed = self._composer.compose(policy, ctx)
         except Exception as e:
-            print(f"⚠ engine: composer llm_answer: {e}")
+            log(f"engine: composer llm_answer: {e}",
+                tag="PC", level="WARN")
             composed = None
 
         if composed is not None and composed.text:
@@ -134,7 +132,6 @@ class PersonalityEngine:
                 composed.rate = rpe["rate"]
             if composed.pitch is None and rpe.get("pitch"):
                 composed.pitch = rpe["pitch"]
-            # v6.3: emotion из prosody НЕ применяем (кэш = warmup).
             composed.explain = f"llm_answer style={current_style} (composer+prosody)"
             return composed
 
@@ -172,29 +169,27 @@ class PersonalityEngine:
         try:
             from personality_core import self_state as _self_state
             st = _self_state.get()
-            # v6.4: SELF обновляется ТОЛЬКО на command и tick.
-            # На event (discovery, wake, now_playing) SELF не трогаем —
-            # иначе behavior_energy_low перехватит событие.
             if event.type == "command":
                 st.on_command(intent=event.name, **event.data)
             elif event.type == "tick":
                 st.on_tick(**event.data)
-            print(f"   [SELF] {st.summary()}")
+            log(f"[SELF] {st.summary()}", tag="PC", level="DEBUG")
         except Exception as e:
-            print(f"⚠ engine: self_state update: {e}")
+            log(f"engine: self_state update: {e}",
+                tag="PC", level="WARN")
 
         try:
             from personality_core import mind_stream as _mind
             ms = _mind.get()
-            # v6.4: mind_stream.on_command — только на command.
             if event.type == "command":
                 ms.on_command(intent=event.name, **event.data)
             elif event.type == "tick":
                 mood = st.mood if st is not None else ""
                 ms.on_tick(mood=mood)
-            print(f"   [MIND] {ms.summary()}")
+            log(f"[MIND] {ms.summary()}", tag="PC", level="DEBUG")
         except Exception as e:
-            print(f"⚠ engine: mind_stream update: {e}")
+            log(f"engine: mind_stream update: {e}",
+                tag="PC", level="WARN")
 
         ctx = self._context_builder.build(event)
         ctx._payload = event.data or {}
@@ -206,7 +201,8 @@ class PersonalityEngine:
                 from personality_core import state as pstate
                 pstate.mark_rule_fired(policy_result.rule_name)
             except Exception as e:
-                print(f"⚠ engine: mark_rule_fired: {e}")
+                log(f"engine: mark_rule_fired: {e}",
+                    tag="PC", level="WARN")
 
         response = self._composer.compose(policy_result, ctx)
         if response is None:
@@ -222,9 +218,9 @@ class PersonalityEngine:
                     response.rate = rpe["rate"]
                 if response.pitch is None and rpe.get("pitch"):
                     response.pitch = rpe["pitch"]
-                # v6.3: emotion из prosody НЕ применяем (кэш = warmup).
             except Exception as e:
-                print(f"⚠ engine: prosody для обычной фразы: {e}")
+                log(f"engine: prosody для обычной фразы: {e}",
+                    tag="PC", level="WARN")
 
         try:
             from personality_core import self_state as _self_state

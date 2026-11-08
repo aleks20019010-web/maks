@@ -11,12 +11,19 @@ personality_core/policy.py — PolicyEngine.
 Wildcard: intent "*" матчится на любой intent.
 
 Расширение: field "payload.X" читается из payload (kw из respond()).
+
+── FIX (этап 0.5): print → log(tag="PC") ────────────────────────
+  Раньше policy.py шёл в stderr (print), в jarvis.log его не было.
+  Теперь: log(tag="PC", level=...).
+    ⚠ policy (ошибки загрузки) — WARN.
+    ♻ policy (reload) — DEBUG.
 """
 
 import os
 import json
 from typing import Optional, List
 
+from shared.log import log
 from personality_core.types import Context
 from personality_core import state as pstate
 
@@ -56,7 +63,8 @@ class PolicyEngine:
                 with open(path, "r", encoding="utf-8-sig") as f:
                     data = json.load(f)
             except Exception as e:
-                print(f"⚠ policy: ошибка чтения {fname}: {e}")
+                log(f"policy: ошибка чтения {fname}: {e}",
+                    tag="PC", level="WARN")
                 continue
             if isinstance(data, list):
                 self._rules.extend(data)
@@ -66,7 +74,8 @@ class PolicyEngine:
     def reload(self):
         """Горячая перезагрузка правил."""
         self.load_rules()
-        print(f"♻ policy: загружено {len(self._rules)} правил")
+        log(f"policy: загружено {len(self._rules)} правил",
+            tag="PC", level="DEBUG")
 
     # --------------------------------------------------------
     # ВЫБОР ПРАВИЛА
@@ -105,7 +114,6 @@ class PolicyEngine:
         if payload is None:
             payload = {}
 
-        # Wildcard: "*" — правило матчится на любой intent
         rule_intent = rule.get("intent")
         if rule_intent and rule_intent != "*" and rule_intent != ctx.query_intent:
             return False
@@ -139,7 +147,6 @@ class PolicyEngine:
         op = cond.get("op", "==")
         value = cond.get("value")
 
-        # КЛЮЧЕВОЕ: подставляем плейсхолдеры прямо в путь
         field_sub = self._substitute(field, ctx, payload)
         actual = self._get_field(ctx, field_sub, payload)
 
@@ -181,7 +188,6 @@ class PolicyEngine:
             payload = {}
         parts = path.split(".")
 
-        # Особый случай: "payload.X" — читаем из payload, не из ctx
         if parts[0] == "payload":
             obj = payload
             parts = parts[1:]
@@ -202,12 +208,10 @@ class PolicyEngine:
                 arg = self._substitute(arg_str, ctx, payload)
                 call = name
 
-            # dict — берём значение по ключу
             if isinstance(obj, dict):
                 obj = obj.get(call)
                 continue
 
-            # атрибут / метод
             attr = getattr(obj, call, None)
             if attr is None:
                 return None
@@ -233,10 +237,8 @@ class PolicyEngine:
             payload = {}
         if "{" not in s:
             return s.strip().strip('"\'')
-        # Сначала payload
         for k, v in payload.items():
             s = s.replace("{" + k + "}", str(v) if v is not None else "")
-        # Затем встроенные
         s = s.replace("{artist}", ctx.current_artist or "")
         s = s.replace("{query}", ctx.query or "")
         s = s.replace("{intent}", ctx.query_intent or "")

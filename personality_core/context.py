@@ -16,11 +16,17 @@ current_track / current_artist / current_mode:
     Заполняются из event.data (если пришли в payload),
     иначе — пустые. Music worker — отдельный процесс,
     brain не имеет прямого доступа к его state.
+
+── FIX (этап 0.5): print → log(tag="PC") ────────────────────────
+  Раньше context.py шёл в stderr (print), в jarvis.log его не было.
+  Теперь: log(tag="PC", level="WARN") для ⚠ context (ошибки
+  загрузки memory/self_state/character/identity).
 """
 
 import os
 from datetime import datetime
 
+from shared.log import log
 from personality_core.types import Event, Context
 
 
@@ -67,7 +73,8 @@ class ContextBuilder:
             from memory import memory
             ctx._prefs = memory.preferences
         except Exception as e:
-            print(f"⚠ context: memory.preferences недоступна: {e}")
+            log(f"context: memory.preferences недоступна: {e}",
+                tag="PC", level="WARN")
             ctx._prefs = None
 
         # --- Self-state (mood, energy, valence, arousal) ---
@@ -75,7 +82,8 @@ class ContextBuilder:
             from personality_core import self_state as _self_state
             ctx.self_state = _self_state.get()
         except Exception as e:
-            print(f"⚠ context: self_state недоступна: {e}")
+            log(f"context: self_state недоступна: {e}",
+                tag="PC", level="WARN")
             ctx.self_state = None
 
         # --- Character (формальность, юмор, стиль) ---
@@ -86,7 +94,8 @@ class ContextBuilder:
             )
             ctx.character = _character.get(base_dir=base_dir)
         except Exception as e:
-            print(f"⚠ context: character недоступна: {e}")
+            log(f"context: character недоступна: {e}",
+                tag="PC", level="WARN")
             ctx.character = None
 
         # --- Identity (манифест «кто я») ---
@@ -97,12 +106,11 @@ class ContextBuilder:
             )
             ctx.identity = _identity.get(base_dir=base_dir)
         except Exception as e:
-            print(f"⚠ context: identity недоступна: {e}")
+            log(f"context: identity недоступна: {e}",
+                tag="PC", level="WARN")
             ctx.identity = None
 
         # --- Текущий трек / режим ---
-        # Music worker — отдельный процесс, brain не имеет прямого доступа
-        # к его state. Если payload содержит track/artist/mode — берём оттуда.
         payload = event.data or {}
         ctx.current_track = payload.get("track", "") or ""
         ctx.current_artist = payload.get("artist", "") or ""

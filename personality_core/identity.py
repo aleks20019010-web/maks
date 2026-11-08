@@ -2,12 +2,14 @@
 # Манифест Макса: «кто я», «зачем», «что важно», «чего не делаю».
 # Загружается из config/identity.json. Недостающие поля — дефолты.
 #
-# Живёт ОТДЕЛЬНО от Context — статичен.
-# Context получает ссылку — правила читают через ctx.identity.
+# ── FIX (этап 0.5): print → log(tag="PC") ────────────────────────
+#   🎭 identity (на импорте) — DEBUG. ⚠ identity — WARN.
 
 import os
 import json
 from dataclasses import dataclass, field
+
+from shared.log import log
 
 
 # ============================================================
@@ -36,18 +38,13 @@ class Identity:
     values: list = field(default_factory=list)
     limits: list = field(default_factory=list)
 
-    # ========================================================
-    # ЧТЕНИЕ
-    # ========================================================
     def is_jarvis(self) -> bool:
         return self.name == "Макс"
 
     def summary(self) -> str:
-        """Короткая строка для логов."""
         return f"{self.name} ({self.role})"
 
     def about(self) -> str:
-        """Полный манифест — для WHO_ARE_YOU."""
         parts = [f"Я — {self.name}. {self.role.capitalize()}."]
         if self.purpose:
             parts.append(self.purpose)
@@ -56,13 +53,11 @@ class Identity:
         return " ".join(parts)
 
     def can(self) -> str:
-        """Что умею — для WHAT_CAN_YOU_DO."""
         if not self.values:
             return "Умею слушать. И действовать."
         return "Умею: " + ", ".join(self.values).lower() + "."
 
     def wont(self) -> str:
-        """Чего не делаю — для объяснений."""
         if not self.limits:
             return ""
         return "Не буду: " + ", ".join(self.limits).lower() + "."
@@ -74,17 +69,20 @@ class Identity:
 def _load_from_json(base_dir: str) -> dict:
     path = os.path.join(base_dir, "config", "identity.json")
     if not os.path.exists(path):
-        print(f"⚠ identity: не найден {path}, использую дефолты")
+        log(f"identity: не найден {path}, использую дефолты",
+            tag="PC", level="DEBUG")
         return {}
     try:
         with open(path, "r", encoding="utf-8-sig") as f:
             data = json.load(f)
         if not isinstance(data, dict):
-            print(f"⚠ identity: {path} — не dict, использую дефолты")
+            log(f"identity: {path} — не dict, использую дефолты",
+                tag="PC", level="WARN")
             return {}
         return data
     except Exception as e:
-        print(f"⚠ identity: ошибка чтения {path}: {e}")
+        log(f"identity: ошибка чтения {path}: {e}",
+            tag="PC", level="WARN")
         return {}
 
 
@@ -95,7 +93,6 @@ _identity: Identity | None = None
 
 
 def get(base_dir: str | None = None) -> Identity:
-    """Вернуть синглтон Identity."""
     global _identity
     if _identity is None:
         data = {}
@@ -105,12 +102,11 @@ def get(base_dir: str | None = None) -> Identity:
         for key, default in DEFAULT_IDENTITY.items():
             merged[key] = data.get(key, default)
         _identity = Identity(**merged)
-        print(f"🎭 identity: {_identity.summary()}")
+        log(f"identity: {_identity.summary()}", tag="PC", level="DEBUG")
     return _identity
 
 
 def reset(base_dir: str | None = None):
-    """Сброс (для тестов)."""
     global _identity
     _identity = None
     if base_dir:

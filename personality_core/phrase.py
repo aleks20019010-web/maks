@@ -18,6 +18,13 @@ personality_core/phrase.py — PhrasePicker.
 
 Temperature + weighted sampling:
     p_i ∝ weight_i ^ (1 / T)
+
+── FIX (этап 0.5): print → log(tag="PC") ────────────────────────
+  Раньше phrase.py шёл в stderr (print), в jarvis.log его не было.
+  Теперь: log(tag="PC", level=...).
+    ⚠ phrase (ошибки загрузки) — WARN.
+    ♻ phrase (reload) — DEBUG.
+    [phrase] pick (DEBUG_PHRASE_PICK) — DEBUG.
 """
 
 import os
@@ -27,6 +34,7 @@ import random
 from typing import Optional
 from datetime import datetime
 
+from shared.log import log
 from personality_core import state as pstate
 
 
@@ -74,13 +82,14 @@ class PhrasePicker:
             if not fname.endswith(".json"):
                 continue
             if fname == "composer.json":
-                continue  # правила composer — не фразы
+                continue
             path = os.path.join(self.responses_dir, fname)
             try:
                 with open(path, "r", encoding="utf-8-sig") as f:
                     data = json.load(f)
             except Exception as e:
-                print(f"⚠ phrase: ошибка чтения {fname}: {e}")
+                log(f"phrase: ошибка чтения {fname}: {e}",
+                    tag="PC", level="WARN")
                 continue
             if isinstance(data, dict):
                 for event, items in data.items():
@@ -90,7 +99,8 @@ class PhrasePicker:
     def reload(self):
         self._phrases = {}
         self._load()
-        print(f"♻ phrase: загружено {len(self._phrases)} наборов фраз")
+        log(f"phrase: загружено {len(self._phrases)} наборов фраз",
+            tag="PC", level="DEBUG")
 
     def pick(self, phrase_set: str, temperature: Optional[float] = None,
              anti_repeat: bool = True, slot: Optional[str] = None, **kw) -> Optional[dict]:
@@ -134,7 +144,7 @@ class PhrasePicker:
                 return True
             fslot = v.get("slot")
             if not fslot:
-                return True  # универсальная — подходит для любого слота
+                return True
             return fslot == slot
 
         # 1. Строгий фильтр: night + drowsy + style + slot
@@ -206,9 +216,10 @@ class PhrasePicker:
 
         if DEBUG_PHRASE_PICK:
             w_chosen = choice.get("weight", DEFAULT_WEIGHT)
-            print(f"[phrase] set={phrase_set!r} T={temp:.2f} "
-                  f"mood={current_mood!r} style={current_style!r} slot={slot!r} "
-                  f"pool={len(filtered)} picked={text!r} w={w_chosen}")
+            log(f"[phrase] set={phrase_set!r} T={temp:.2f} "
+                f"mood={current_mood!r} style={current_style!r} slot={slot!r} "
+                f"pool={len(filtered)} picked={text!r} w={w_chosen}",
+                tag="PC", level="DEBUG")
 
         result = dict(choice)
         result["text"] = text

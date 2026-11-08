@@ -6,11 +6,18 @@
 # Context получает ссылку — правила читают через ctx.character.
 #
 # FIX: DEFAULT_CHARACTER["name"] = "Макс" (было "Jarvis").
-# В логах при отсутствии config/personality.json было «Jarvis».
+#
+# ── FIX (этап 0.5): print → log(tag="PC") ────────────────────────
+#   Раньше character.py шёл в stderr (print), в jarvis.log его не было.
+#   Теперь: log(tag="PC", level=...).
+#     🎭 character (на импорте) — DEBUG (шумно, но нужно для отладки).
+#     ⚠ character (ошибки загрузки) — WARN.
 
 import os
 import json
 from dataclasses import dataclass
+
+from shared.log import log
 
 
 # ============================================================
@@ -44,23 +51,18 @@ class Character:
         0.7 — «живой» Макс, узнаваемый, но не дословный (по умолчанию)
         1.5 — непредсказуемый, редкие фразы выпадают часто
     """
-    # --- Из personality.json ---
     name: str = "Макс"
-    style: str = "calm_confident"   # глобальный тон (не то же, что style фразы)
+    style: str = "calm_confident"
     humor: float = 0.35
     sarcasm: float = 0.15
-    verbosity: float = 0.25         # 0=короткие, 1=длинные
+    verbosity: float = 0.25
     politeness: float = 0.9
     allow_teasing: bool = True
 
-    # --- Дополнительные (дефолты, могут быть в JSON) ---
-    formality: float = 0.7          # 0=друг, 1=дворецкий
-    initiative: float = 0.5         # 0=молчит, 1=говорит часто
-    temperature: float = 0.7        # 0.3=детерминизм, 0.7=живой, 1.5=хаос
+    formality: float = 0.7
+    initiative: float = 0.5
+    temperature: float = 0.7
 
-    # ========================================================
-    # ЧТЕНИЕ — для правил и логов
-    # ========================================================
     def is_formal(self) -> bool:
         return self.formality >= 0.6
 
@@ -89,20 +91,22 @@ class Character:
 # ЗАГРУЗКА ИЗ JSON
 # ============================================================
 def _load_from_json(base_dir: str) -> dict:
-    """Прочитать config/personality.json. Вернуть dict (пустой при ошибке)."""
     path = os.path.join(base_dir, "config", "personality.json")
     if not os.path.exists(path):
-        print(f"⚠ character: не найден {path}, использую дефолты")
+        log(f"character: не найден {path}, использую дефолты",
+            tag="PC", level="DEBUG")
         return {}
     try:
         with open(path, "r", encoding="utf-8-sig") as f:
             data = json.load(f)
         if not isinstance(data, dict):
-            print(f"⚠ character: {path} — не dict, использую дефолты")
+            log(f"character: {path} — не dict, использую дефолты",
+                tag="PC", level="WARN")
             return {}
         return data
     except Exception as e:
-        print(f"⚠ character: ошибка чтения {path}: {e}")
+        log(f"character: ошибка чтения {path}: {e}",
+            tag="PC", level="WARN")
         return {}
 
 
@@ -113,27 +117,20 @@ _character: Character | None = None
 
 
 def get(base_dir: str | None = None) -> Character:
-    """Вернуть синглтон Character.
-
-    При первом вызове — загружает из config/personality.json.
-    base_dir — путь к D:\\Maks (если первый вызов).
-    """
     global _character
     if _character is None:
         data = {}
         if base_dir:
             data = _load_from_json(base_dir)
-        # Мержим: дефолты + данные из JSON. Лишние поля игнорируем.
         merged = {}
         for key, default in DEFAULT_CHARACTER.items():
             merged[key] = data.get(key, default)
         _character = Character(**merged)
-        print(f"🎭 character: {_character.summary()}")
+        log(f"character: {_character.summary()}", tag="PC", level="DEBUG")
     return _character
 
 
 def reset(base_dir: str | None = None):
-    """Сбросить (для тестов)."""
     global _character
     _character = None
     if base_dir:
