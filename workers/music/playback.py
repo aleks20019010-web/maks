@@ -5,37 +5,39 @@
 # VLC реальный. Music worker играет.
 #
 # ── A2 (день 29): music_playing — живёт в shared/runtime_state ──
-#   FIX (этап 0.1): раньше флаг music_playing.flag писали ЗДЕСЬ и в
-#   music/main.py (дублирование), формат — write_text(str(time.time())),
-#   проверка в ASR — exists() БЕЗ TTL. Если music-воркер падал с флагом,
-#   ASR навсегда считал, что музыка играет.
-#   Теперь: set_music_playing() / clear_music_playing() — единственный
-#   источник правды (main.py импортирует отсюда), через runtime_state.
 #
 # ── FIX (этап 0.5): warm_up_prefetch ─────────────────────────────
-#   Симптом: «включи музыку» → queue_wave → refill_one →
-#   get_next_source_track (Yandex API: feed() 10–12 сек) →
-#   play_index(0) → ▶. 10 секунд тишины после TTS.
-#   Решение: warm_up_prefetch при старте music (и после
-#   _reset_playback_state) кладёт один локальный трек в playlist[0]
-#   ЗАРАНЕЕ. К моменту «включи музыку» play_index(0) берёт готовый —
-#   0 секунд. Yandex-загрузка уходит в фон для следующих.
-#
-#   Ограничение: warm_up не решает «включи арию» (search_artist —
-#   Yandex API, не локальная папка) и случай «локальных нет».
-#
-# Защита от гонки: state.play_lock на всё переключение.
-# Флаг state.switching: monitor_player не дёргает play_next,
-# пока идёт переключение из main.
-#
-# События в brain:
-#   music_started  — после mark_ready() в play_index
-#   track_finished — в monitor_player на Ended
-#   discovery      — v6: перед discovery-треком, brain скажет фразу
+#   При старте music (и после _reset_playback_state) кладёт локальный
+#   трек в playlist[0] заранее — play_index(0) не ищет 10 сек.
 #
 # ── FIX (этап 0.5): print → log(tag="MUSIC") ────────────────────
-#   Раньше музыка логировалась ТОЛЬКО в stderr (print), в jarvis.log
-#   её не было. Отладка музыки — только по консоли.
+#
+# ── FIX (этап 2.6): music_playing — heartbeat, один писатель ────
+#   Симптом: hot words («дальше», «стоп») без wake работали первые
+#   30 сек трека, потом — только с wake. Причина: TTL_MUSIC_PLAYING
+#   = 30 сек, а set_music_playing() вызывался только в play_index
+#   (старт трека). Трек 3 мин → флаг протухал через 30 сек → ASR
+#   _is_music_playing() = False → hot words не шли в brain.
+#
+#   Архитектурно правильно: music_playing — heartbeat.
+#   Писатели (только в этом файле):
+#     - play_index — ИНИЦИАЛИЗАЦИЯ: set_music_playing() после
+#       mark_ready (первый heartbeat, hot words в первую секунду).
+#     - monitor_player — ПОДДЕРЖАНИЕ: пока state == Playing, раз в
+#       MUSIC_HEARTBEAT_SEC продлевает TTL. При != Playing
+#       (Paused/Stopped/Ended/Opening/Buffering/Error/None) —
+#       clear_music_playing() (если флаг был).
+#   Music упал → monitor_player умер → TTL протухнет за
+#   TTL_MUSIC_PLAYING (= 3 × heartbeat). Music играет → heartbeat →
+#   флаг жив → ASR hot words без wake.
+#
+#   main.py / _reset_playback_state / play_next / play_prev — флаг НЕ
+#   трогают. Только управляют плеером (pause/stop/resume/next/prev).
+#   monitor_player видит результат и обновляет флаг. Единственный
+#   источник правды по поддержанию — monitor_player.
+#
+#   TTL выводится из heartbeat: runtime_state.TTL_MUSIC_PLAYING =
+#   MUSIC_HEARTBEAT_SEC * 3. Не магическое число.
 
 import os
 import time
@@ -62,8 +64,12 @@ from workers.music.sources import get_next_source_track
 PREFETCH_WAIT_SEC = 10.0
 MAX_PLAY_ATTEMPTS = 3
 
-# v6: сколько ждать, пока TTS начнёт discovery-фразу.
 DISCOVERY_WAIT_SEC = 3.0
+
+# FIX (этап 2.6): heartbeat music_playing. Единый источник — runtime_state.
+# monitor_player продлевает флаг раз в MUSIC_HEARTBEAT_SEC, пока Playing.
+# TTL = 3 × heartbeat (30 сек), с запасом на 2 пропущенных тика.
+MUSIC_HEARTBEAT_SEC = rt.MUSIC_HEARTBEAT_SEC
 
 
 # ── FIX (2026-11-07): явный vlc.Instance для music ────────────────
@@ -85,18 +91,17 @@ def _get_music_instance():
 
 
 # ── FIX (этап 0.1): music_playing через runtime_state ─────────────
+# Единственные вызывающие — play_index (инициализация) и
+# monitor_player (поддержание/снятие). См. шапку модуля.
 def set_music_playing():
-    """Музыка реально играет. TTL — 30 сек."""
     rt.set(rt.FLAG_MUSIC_PLAYING, True, ttl=rt.TTL_MUSIC_PLAYING)
 
 
 def clear_music_playing():
-    """Музыка остановлена / на паузе / очередь кончилась."""
     rt.clear(rt.FLAG_MUSIC_PLAYING)
 
 
 def _mind():
-    """Ленивая ссылка на mind_stream."""
     try:
         from personality_core import mind_stream as _ms
         return _ms.get()
@@ -105,12 +110,6 @@ def _mind():
 
 
 def _tts_speaking() -> bool:
-    """TTS говорит? Через state_file (speaking + last_text + ts).
-
-    Не через runtime_state: tts_state.json — структурированный файл,
-    runtime_state — про bool-флаги. ASR тоже читает tts_state.json
-    (для echo-фильтра), так что формат общий.
-    """
     try:
         from workers.tts.state_file import get_state
         return bool(get_state().get("speaking", False))
@@ -119,7 +118,6 @@ def _tts_speaking() -> bool:
 
 
 def _wait_discovery_tts(timeout: float = DISCOVERY_WAIT_SEC) -> bool:
-    """v6: дождаться, пока TTS начнёт discovery-фразу."""
     waited = 0.0
     while waited < timeout:
         if _tts_speaking():
@@ -131,33 +129,17 @@ def _wait_discovery_tts(timeout: float = DISCOVERY_WAIT_SEC) -> bool:
 
 # ── FIX (этап 0.5): warm_up_prefetch ────────────────────────
 def warm_up_prefetch():
-    """Подготовить первый локальный трек в playlist[0] заранее.
-
-    При старте music-воркера (и после _reset_playback_state) кладёт
-    один локальный трек в state.playlist[0]. Тогда play_index(0) не
-    ищет — берёт готовый. 0 секунд до старта музыки.
-
-    Идемпотентно: если playlist уже не пуст — ничего не делает.
-    В фоне, никого не блокирует. Ошибки — WARN, не падаем.
-
-    Почему вызывается вне playlist_lock для _append_and_prefetch:
-    внутри _append_and_prefetch → start_prefetch → новый поток, но
-    сам _append_and_prefetch берёт playlist_lock на append. Если
-    держать лок снаружи — блокируем refill_one/play_index на время
-    сканирования. Поэтому: double-check под локом, вызов вне.
-    """
     if not cfg.MUSIC_AVAILABLE:
         return
     try:
         with state.playlist_lock:
             if state.playlist:
-                return  # уже есть — кто-то положил (prefetch, refill)
+                return
         local_path = get_local_random_track()
         if not local_path:
             log("warm_up: локальных треков нет", tag="MUSIC", level="DEBUG")
             return
         with state.playlist_lock:
-            # double-check: пока сканировали (0.21 сек), мог положить кто-то ещё
             if state.playlist:
                 return
         _append_and_prefetch(LocalTrack(local_path))
@@ -205,6 +187,10 @@ def play_index(idx, announce=False):
     """Воспроизвести трек по индексу. Под state.play_lock.
 
     Возвращает True, если трек реально начал играть, False — если не удалось.
+
+    FIX (этап 2.6): флаг music_playing ставит ТОЛЬКО этот метод (после
+    mark_ready) и monitor_player (heartbeat). При неудаче — НЕ сбрасываем
+    здесь: monitor_player увидит != Playing (Ended/None) и сбросит.
     """
     with state.play_lock:
         attempts = 0
@@ -213,7 +199,6 @@ def play_index(idx, announce=False):
                 plen = len(state.playlist)
             if idx >= plen:
                 log("Очередь закончилась.", tag="MUSIC")
-                clear_music_playing()
                 return False
             with state.playlist_lock:
                 track = state.playlist[idx]
@@ -302,34 +287,35 @@ def play_index(idx, announce=False):
                 attempts += 1
                 continue
 
-            # FIX (2026-11-07): явный media через singleton instance.
             inst = _get_music_instance()
             media = inst.media_new(file_path)
             player = inst.media_player_new()
             player.set_media(media)
             music.set_player(player, media)
 
-            # v6: DISCOVERY через brain.
             if _is_discovery:
                 try:
                     ipc.put(protocol.BRAIN_INBOX,
-                            protocol.event_music_started(
-                                artist=_artist_for_mind,
-                                title=_title_for_mind,
-                                mode=state.playlist_mode or "",
-                            ))
+                            protocol.event_discovery(artist=_artist_for_mind,
+                                                     title=_title_for_mind))
                 except Exception as e:
-                    log(f"event_music_started: {e}", tag="MUSIC", level="WARN")
+                    log(f"event_discovery: {e}", tag="MUSIC", level="WARN")
 
-            # FIX (2026-11-08): НЕ ждём TTS. Музыка стартует сразу.
+                if not _wait_discovery_tts():
+                    log(f"discovery: TTS не начал за {DISCOVERY_WAIT_SEC:.0f}с "
+                        f"(сеть/API?) — играю без фразы",
+                        tag="MUSIC", level="WARN")
+
             try:
                 player.play()
             except Exception as e:
                 log(f"player.play() упал: {e}", tag="MUSIC", level="WARN")
-                clear_music_playing()
                 return False
 
             music.mark_ready()
+            # FIX (этап 2.6): ИНИЦИАЛИЗАЦИЯ флага. Первый heartbeat —
+            # hot words в первую секунду. Дальше monitor_player раз в
+            # MUSIC_HEARTBEAT_SEC продлевает TTL (пока Playing).
             set_music_playing()
 
             state.current_track_title = title
@@ -340,8 +326,11 @@ def play_index(idx, announce=False):
 
             try:
                 ipc.put(protocol.BRAIN_INBOX,
-                        protocol.event_music_started(artist=_artist_for_mind,
-                                                     title=_title_for_mind))
+                        protocol.event_music_started(
+                            artist=_artist_for_mind,
+                            title=_title_for_mind,
+                            mode=state.playlist_mode or "",
+                        ))
             except Exception as e:
                 log(f"event_music_started: {e}", tag="MUSIC", level="WARN")
 
@@ -351,15 +340,14 @@ def play_index(idx, announce=False):
 
         log(f"play_index: сдался после {MAX_PLAY_ATTEMPTS} попыток",
             tag="MUSIC", level="WARN")
-        clear_music_playing()
         return False
 
 
 def play_next(from_finish=False):
     """Перейти к следующему треку.
 
-    Возвращает True, если удалось переключиться, False — если нет,
-    None — если debounce.
+    FIX (этап 2.6): флаг music_playing НЕ трогаем — monitor_player увидит
+    результат (Playing → set, Ended/None → clear).
     """
     now = time.time()
     if now - state.last_next_time < cfg.NEXT_DEBOUNCE_SEC:
@@ -408,26 +396,14 @@ def play_next(from_finish=False):
     with state.playlist_lock:
         plen = len(state.playlist)
     if next_idx < plen:
-        ok = play_index(next_idx)
-        if not ok:
-            log(f"play_next: play_index({next_idx}) вернул False",
-                tag="MUSIC", level="WARN")
-            clear_music_playing()
-        return ok
+        return play_index(next_idx)
     if refill_one():
         with state.playlist_lock:
             plen = len(state.playlist)
         if state.playlist_index < plen:
-            ok = play_index(state.playlist_index)
-        else:
-            ok = play_index(state.playlist_index + 1)
-        if not ok:
-            log("play_next: play_index(refill) вернул False",
-                tag="MUSIC", level="WARN")
-            clear_music_playing()
-        return ok
+            return play_index(state.playlist_index)
+        return play_index(state.playlist_index + 1)
     log("Очередь закончилась.", tag="MUSIC")
-    clear_music_playing()
     return False
 
 
@@ -460,7 +436,20 @@ def play_prev():
 
 
 def monitor_player():
+    """Мониторинг плеера + heartbeat music_playing.
+
+    FIX (этап 2.6): единственный писатель music_playing по поддержанию.
+    - state == Playing: раз в MUSIC_HEARTBEAT_SEC → set_music_playing()
+      (продление TTL). Первый раз — сразу, если флага не было.
+    - state != Playing (Paused/Stopped/Ended/Opening/Buffering/Error):
+      clear_music_playing() (если флаг был).
+    - st is None (плеера нет): clear_music_playing() (если был).
+    - Ended (переход): play_next — как раньше.
+    """
     last_state = None
+    last_playing_refresh = 0.0
+    last_flag_alive = False
+
     while True:
         time.sleep(1)
 
@@ -470,9 +459,28 @@ def monitor_player():
 
         st = music.get_state()
         if st is None:
+            if last_flag_alive:
+                clear_music_playing()
+                last_flag_alive = False
             last_state = None
             continue
 
+        now = time.time()
+
+        # ── Heartbeat: Playing → продлевать TTL ──
+        if st == vlc.State.Playing:
+            if (not last_flag_alive) or ((now - last_playing_refresh) >= MUSIC_HEARTBEAT_SEC):
+                set_music_playing()
+                last_playing_refresh = now
+                last_flag_alive = True
+        else:
+            # Paused / Stopped / Ended / Opening / Buffering / Error —
+            # музыка не играет. clear (если флаг был).
+            if last_flag_alive:
+                clear_music_playing()
+                last_flag_alive = False
+
+        # ── Ended: переход к следующему треку ──
         if st == vlc.State.Ended and last_state != vlc.State.Ended:
             log("⏭ Трек закончился...", tag="MUSIC")
 
@@ -523,9 +531,7 @@ def monitor_player():
 
             state.switching = True
             try:
-                ok = play_next(from_finish=True)
-                if not ok:
-                    clear_music_playing()
+                play_next(from_finish=True)
             finally:
                 state.switching = False
 

@@ -237,11 +237,16 @@ FLAG_SESSION_OPEN = "session_open"        # пишет: brain/skills/llm/skill.p
                                           #        (+ возможно tts — проверить)
 
 # TTL — константы для вызывающих. Значения выбраны так:
-#   music_playing: 30 сек. Переживёт короткий лаг (prefetch, download),
-#     но не переживёт падение music-воркера (supervisor перезапустит
-#     за ~3 сек, флаг протухнет за 30).
+#
+#   music_playing: heartbeat-семантика (этап 2.6). Music-воркер
+#     (playback.monitor_player) продлевает флаг раз в MUSIC_HEARTBEAT_SEC,
+#     пока state == Playing. TTL = 3 × heartbeat = 30 сек — запас на
+#     2 пропущенных тика. Music упал → monitor_player умер → флаг
+#     протухнет за 30 сек. Music играет → heartbeat → флаг жив →
+#     ASR hot words без wake. TTL выводится из heartbeat, не магическое.
 #   expecting_input: 60 сек. С запасом на «пользователь думает».
 #   session_open: 20 сек — как было в _in_dialog, не меняем поведение.
-TTL_MUSIC_PLAYING = 30.0
+MUSIC_HEARTBEAT_SEC = 10.0
+TTL_MUSIC_PLAYING = MUSIC_HEARTBEAT_SEC * 3   # 30 сек
 TTL_EXPECTING_INPUT = 60.0
 TTL_SESSION_OPEN = 20.0
