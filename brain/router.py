@@ -10,29 +10,20 @@
 #   Router обрабатывает только smalltalk. Всё остальное — LLM.
 #
 # FIX (NLU v2): NLU-блок заменён на brain/nlu/pipeline.process().
-#   Раньше router звал nlu_intent.resolve() и _INTENT_TO_SKILL.get() →
-#   skills_base.find_by_name(). Это была «половинчатая» интеграция:
-#   intent был, entity/decision — нет. Теперь:
-#     decision = pipeline.process(command, context=nlu_context)
-#   router исполняет decision.action:
-#     EXECUTE  → skills_base.find_by_name(command.skill_name).handle(...)
-#     CLARIFY  → respond_and_say(decision.clarify.phrase_set, **kwargs)
-#     FALLBACK → LLM (как раньше) → NOT_UNDERSTOOD
-#
-#   _INTENT_TO_SKILL переехал в brain/nlu/skill_resolver.py (этап 4).
-#   router больше не знает соответствие intent → skill_name.
+#   router зовёт pipeline.process(), исполняет decision.action.
 #
 # FIX (этап 9): скилы получают Command.
-#   Раньше: skill.handle(command) — ВСЕГДА текст. MusicSkill.handle ждёт
-#   Command (isinstance(Command) → диспатч по action). Получал текст →
-#   isinstance False → classify(text) → None → музыка НЕ играла.
-#   Теперь: router передаёт Command скилам, у которых handle(Command).
-#   Переходный период: cleanup/smalltalk — пока на str.
-#   Когда все скилы будут на Command — убрать if и оставить skill.handle(Command).
 #
-# FIX: CommandSource enum вместо magic strings "voice"/"voice_dialog".
-# FIX (день 28, 5.15): _fmt_due/_strip_reminder_trigger/_REMINDER_TRIGGERS
-# переехали в brain/reminders.py.
+# FIX: CommandSource enum вместо magic strings.
+#
+# ── FIX (этап 1.1): YES/NO для pending от скилов (cleanup) ───────
+#   Раньше: router знал только PENDING_ASK / PENDING_OFFER (music).
+#   «Да» на «Очистить безопасное?» (cleanup ставит pending с ключом
+#   "cleanup" в brain.pending) → router видел «YES/NO без pending →
+#   игнор» → cleanup pending висел 120 сек, потом timeout.
+#   Теперь: перед игнором — _handle_pending_confirm(cmd_lower),
+#   который проверяет cleanup / cleanup_recycle и вызывает
+#   cleanup_confirm / cleanup_recycle_confirm. Скил сам делает pop.
 
 import re
 import threading
@@ -111,6 +102,11 @@ def process_command(command: str, source: CommandSource = CommandSource.VOICE):
     # ── A2: router-страховка. YES/NO без pending → игнор ──
     if cmd_lower in YES_WORDS or cmd_lower in NO_WORDS:
         if pending.get(PENDING_ASK) is None and pending.get(PENDING_OFFER) is None:
+            # FIX (этап 1.1): YES/NO может быть ответом на cleanup/cleanup_recycle
+            # (brain.pending, ключи "cleanup"/"cleanup_recycle"). Раньше —
+            # безусловный игнор, «да» на «Очистить безопасное?» терялось.
+            if _handle_pending_confirm(cmd_lower):
+                return None
             log(f"router: YES/NO без pending → игнор «{command}»", tag="BRAIN")
             return None
 
@@ -160,10 +156,6 @@ def process_command(command: str, source: CommandSource = CommandSource.VOICE):
         return None
 
     # ── NLU PIPELINE ──
-    # find_handler вернул None. Зовём pipeline.process.
-    # pipeline: normalizer → context? → intent → skill_resolver →
-    #           entity → decision → Decision
-    # router исполняет decision.action.
     try:
         nlu_ctx = nlu_context_mod.get()
         decision = nlu_pipeline.process(command, context=nlu_ctx)
@@ -194,8 +186,8 @@ def process_command(command: str, source: CommandSource = CommandSource.VOICE):
 def _execute_decision(decision, command: str, source: CommandSource) -> bool:
     """Исполнить Decision из pipeline. True — обработали, False — нет.
 
-    EXECUTE  → music/controls/weather/system: skill.handle(decision.command)  (Command)
-               остальные: skill.handle(command)                             (текст, переходный период)
+    EXECUTE  → music/controls/weather/system: skill.handle(decision.command)
+               остальные: skill.handle(command)
     CLARIFY  → respond_and_say(clarify.phrase_set, **clarify.kwargs)
     FALLBACK → False (router пойдёт в LLM / NOT_UNDERSTOOD)
     """
@@ -215,8 +207,6 @@ def _execute_decision(decision, command: str, source: CommandSource) -> bool:
             f"{skill_name}.{decision.command.action or 'handle'} "
             f"(conf={decision.confidence:.2f})", tag="BRAIN")
         try:
-            # ЭТАП 9: music/controls/weather/system получают Command.
-            # cleanup/smalltalk — пока на str (переходный период).
             if skill.name in ("music", "controls", "weather", "system"):
                 skill.handle(decision.command)
             else:
@@ -240,7 +230,6 @@ def _execute_decision(decision, command: str, source: CommandSource) -> bool:
             _respond_and_say("NOT_UNDERSTOOD")
         return True
 
-    # FALLBACK — router сам решит (LLM / NOT_UNDERSTOOD).
     return False
 
 
@@ -422,6 +411,34 @@ def _handle_pending_music(cmd_lower: str) -> bool:
 
     pending.pop(key)
     log(f"router: pending {key} сброшен (другая команда)", tag="BRAIN")
+    return False
+
+
+# ── FIX (этап 1.1): pending для скилов (cleanup, cleanup_recycle) ──
+_CONFIRM_PENDING_KEYS = (
+    "cleanup", "cleanup_recycle",
+)
+
+
+def _handle_pending_confirm(cmd_lower: str) -> bool:
+    """YES/NO для pending от скилов (cleanup, cleanup_recycle).
+
+    Скил сам делает pending.pop(key) в handle().
+    """
+    for key in _CONFIRM_PENDING_KEYS:
+        if pending.get(key) is None:
+            continue
+        skill = skills_base.find_by_name(f"{key}_confirm")
+        if skill is None:
+            log(f"router: pending {key} — нет скила {key}_confirm",
+                tag="BRAIN", level="WARN")
+            continue
+        try:
+            skill.handle(cmd_lower)
+        except Exception as e:
+            from brain.errors import handle_error
+            handle_error(e, context=f"skill:{key}_confirm", speak=True)
+        return True
     return False
 
 
