@@ -7,12 +7,23 @@
 #   Счётчик state.tracks_since_discovery, порог state.DISCOVERY_NEXT
 #   (рандомно 10–20, перезаписывается после каждого discovery).
 #   Проверка ДО playlist_mode — discovery работает в любом режиме.
+#
+# ── FIX (этап 0.5): print → log(tag="MUSIC") ────────────────────
+#   Раньше sources.py шёл в stderr (print), в jarvis.log его не было.
+#   Отладка «почему источник пуст» — только по консоли.
+#   Теперь: log(tag="MUSIC", level=...).
+#     📊/📰 (загрузка источника) — DEBUG (шумно).
+#     ✗ (ошибки Yandex API) — WARN.
+#     📻 (переходы режимов: артист кончился → mixed) — INFO.
+#     ⛔/⏭/♻ (blacklist, дубли, автосброс) — DEBUG.
+#     🔄 DISCOVERY — INFO.
 
 import time
 import random
 import threading
 
 from shared import config as cfg
+from shared.log import log
 from workers.music import state
 from workers.music.local import (
     LocalTrack, get_local_by_genre, get_local_random_track,
@@ -66,7 +77,7 @@ def _try_discovery():
                 lt._discovery_kind = "rotation"
                 return lt
         except Exception as e:
-            print(f"   ⚠ discovery local: {e}")
+            log(f"discovery local: {e}", tag="MUSIC", level="DEBUG")
 
         # 2. Яндекс — tracks([int(id)]), только цифровые
         tid_str = str(track_id)
@@ -79,9 +90,9 @@ def _try_discovery():
                     track._discovery_kind = "rotation"
                     return track
             except Exception as e:
-                print(f"   ⚠ discovery fetch: {e}")
+                log(f"discovery fetch: {e}", tag="MUSIC", level="DEBUG")
     except Exception as e:
-        print(f"   ⚠ discovery: {e}")
+        log(f"discovery: {e}", tag="MUSIC", level="WARN")
     return None
 
 
@@ -102,7 +113,7 @@ def get_artist_tracks_page(artist_id, page, page_size=cfg.ARTIST_PAGE_SIZE):
         result = state.client.artists_tracks(artist_id, page=page, page_size=page_size)
         tracks = list(result.tracks) if (result and result.tracks) else []
     except Exception as e:
-        print(f"   Ошибка artists_tracks: {e}")
+        log(f"artists_tracks: {e}", tag="MUSIC", level="WARN")
         tracks = []
     state.artist_tracks_cache[cache_key] = tracks
     if len(tracks) == 0:
@@ -118,7 +129,7 @@ def get_next_unplayed_track_from_page(tracks):
             if t.id in state.queued_track_ids:
                 continue
             if _is_blacklisted(t.id):
-                print(f"   ⛔ blacklist: {t.title}")
+                log(f"blacklist: {t.title}", tag="MUSIC", level="DEBUG")
                 continue
             return t
     return None
@@ -148,9 +159,10 @@ def _try_chart():
                         except Exception:
                             pass
                 state._source_cache['chart'] = tracks
-                print(f"   📊 Chart: {len(tracks)} треков загружено")
+                log(f"Chart: {len(tracks)} треков загружено",
+                    tag="MUSIC", level="DEBUG")
             except Exception as e:
-                print(f"   ✗ Chart: {e}")
+                log(f"Chart: {e}", tag="MUSIC", level="WARN")
                 state._source_cache['chart'] = []
 
         chart_tracks = state._source_cache.get('chart', [])
@@ -182,9 +194,10 @@ def _try_feed_tracks():
                                     except Exception:
                                         pass
                 state._source_cache['feed_tracks'] = tracks
-                print(f"   📰 Feed tracks: {len(tracks)} треков загружено")
+                log(f"Feed tracks: {len(tracks)} треков загружено",
+                    tag="MUSIC", level="DEBUG")
             except Exception as e:
-                print(f"   ✗ Feed tracks: {e}")
+                log(f"Feed tracks: {e}", tag="MUSIC", level="WARN")
                 state._source_cache['feed_tracks'] = []
 
         feed_tracks = state._source_cache.get('feed_tracks', [])
@@ -223,9 +236,10 @@ def _try_feed_albums():
                                     except Exception:
                                         pass
                 state._source_cache['feed_albums'] = tracks
-                print(f"   📰 Feed albums: {len(tracks)} треков загружено")
+                log(f"Feed albums: {len(tracks)} треков загружено",
+                    tag="MUSIC", level="DEBUG")
             except Exception as e:
-                print(f"   ✗ Feed albums: {e}")
+                log(f"Feed albums: {e}", tag="MUSIC", level="WARN")
                 state._source_cache['feed_albums'] = []
 
         feed_albums = state._source_cache.get('feed_albums', [])
@@ -240,7 +254,7 @@ def _try_rotor(source_id):
 
     if state.wave_exhausted:
         if (time.time() - state.wave_exhausted_time) > cfg.WAVE_RESET_SEC:
-            print(f"  ♻ Автосброс wave_exhausted")
+            log("Автосброс wave_exhausted", tag="MUSIC", level="DEBUG")
             state.wave_exhausted = False
             state.wave_exhausted_time = 0.0
             state._consecutive_empty = 0
@@ -256,11 +270,11 @@ def _try_rotor(source_id):
     try:
         tracks_result = state.client.rotor_station_tracks(source_id)
     except Exception as e:
-        print(f"   ✗ Rotor ({source_name}): {e}")
+        log(f"Rotor ({source_name}): {e}", tag="MUSIC", level="WARN")
         return None
 
     if not tracks_result or not tracks_result.sequence:
-        print(f"   ✗ Пусто ({source_name})")
+        log(f"Пусто ({source_name})", tag="MUSIC", level="DEBUG")
         return None
 
     with state.source_buffer_lock:
@@ -279,7 +293,7 @@ def _try_rotor(source_id):
                 pass
 
     if added == 0:
-        print(f"   ⏭ Все дубли ({source_name})")
+        log(f"Все дубли ({source_name})", tag="MUSIC", level="DEBUG")
         return None
 
     with state.source_buffer_lock:
@@ -297,15 +311,15 @@ def _try_rotor_session(seeds, label="Rotor session"):
     try:
         session = state.client.rotor_session_new(seeds=seeds)
         if not session or not session.radio_session_id:
-            print(f"   ✗ {label}: сессия не создалась")
+            log(f"{label}: сессия не создалась", tag="MUSIC", level="WARN")
             return None
         tracks_result = state.client.rotor_session_tracks(session.radio_session_id)
     except Exception as e:
-        print(f"   ✗ {label}: {e}")
+        log(f"{label}: {e}", tag="MUSIC", level="WARN")
         return None
 
     if not tracks_result or not tracks_result.sequence:
-        print(f"   ✗ {label}: пусто")
+        log(f"{label}: пусто", tag="MUSIC", level="DEBUG")
         return None
 
     with state.source_buffer_lock:
@@ -324,7 +338,7 @@ def _try_rotor_session(seeds, label="Rotor session"):
                 pass
 
     if added == 0:
-        print(f"   ⏭ {label}: все дубли")
+        log(f"{label}: все дубли", tag="MUSIC", level="DEBUG")
         return None
 
     with state.source_buffer_lock:
@@ -367,7 +381,6 @@ def get_next_source_track():
     playlist_mode = state.playlist_mode
 
     # ── DISCOVERY (v5): рандомно каждые 10–20 треков — мин. weight > 0 ──
-    # Проверка ДО playlist_mode — работает в любом режиме.
     state.tracks_since_discovery += 1
     if state.tracks_since_discovery >= state.DISCOVERY_NEXT:
         state.tracks_since_discovery = 0
@@ -376,12 +389,13 @@ def get_next_source_track():
         )
         disc_track = _try_discovery()
         if disc_track:
-            print(f"   🔄 DISCOVERY ROTATION (next in {state.DISCOVERY_NEXT}): "
-                  f"{getattr(disc_track, 'title', '?')}")
+            log(f"DISCOVERY ROTATION (next in {state.DISCOVERY_NEXT}): "
+                f"{getattr(disc_track, 'title', '?')}",
+                tag="MUSIC", level="INFO")
             return disc_track
 
     if playlist_mode == "single":
-        print("📻 Одиночный трек закончился...")
+        log("Одиночный трек закончился...", tag="MUSIC", level="INFO")
         if state.single_artist_id and not state.radio_similar_list:
             threading.Thread(target=fetch_similar_background,
                              args=(state.single_artist_id,), daemon=True).start()
@@ -401,7 +415,8 @@ def get_next_source_track():
         return get_next_source_track()
 
     if playlist_mode == "artist_track":
-        print("📻 Трек артиста закончился, перехожу к похожим...")
+        log("Трек артиста закончился, перехожу к похожим...",
+            tag="MUSIC", level="INFO")
         if not state.radio_similar_list and state.radio_artist_id:
             threading.Thread(target=fetch_similar_background,
                              args=(state.radio_artist_id,), daemon=True).start()
@@ -420,7 +435,7 @@ def get_next_source_track():
             with state.source_buffer_lock:
                 if state.source_buffer:
                     return state.source_buffer.pop(0)
-            print("📻 'Мне нравится' закончилось → mixed")
+            log("'Мне нравится' закончилось → mixed", tag="MUSIC", level="INFO")
             state.playlist_mode = "mixed"
             state.local_played_count = 0
             return get_next_source_track()
@@ -458,7 +473,8 @@ def get_next_source_track():
                 return track
             state.radio_artist_page += 1
 
-        print("📻 Артист закончился → mixed (волна + локальные)")
+        log("Артист закончился → mixed (волна + локальные)",
+            tag="MUSIC", level="INFO")
         state.playlist_mode = "mixed"
         state.local_played_count = 0
         state.local_wait_until = 0.0
@@ -468,7 +484,7 @@ def get_next_source_track():
         track = _try_similar()
         if track:
             return track
-        print("📻 Похожие закончились → mixed")
+        log("Похожие закончились → mixed", tag="MUSIC", level="INFO")
         state.playlist_mode = "mixed"
         state.local_played_count = 0
         return get_next_source_track()
@@ -476,7 +492,7 @@ def get_next_source_track():
     if playlist_mode == "genre":
         station = getattr(state, "genre_station_id", None)
         if not station:
-            print("📻 Жанр не задан → mixed")
+            log("Жанр не задан → mixed", tag="MUSIC", level="INFO")
             state.playlist_mode = "mixed"
             return get_next_source_track()
 
@@ -488,7 +504,8 @@ def get_next_source_track():
         if local_path:
             return LocalTrack(local_path)
 
-        print(f"📻 Жанр «{state.genre_name}» кончился → mixed")
+        log(f"Жанр «{state.genre_name}» кончился → mixed",
+            tag="MUSIC", level="INFO")
         state.playlist_mode = "mixed"
         state.local_played_count = 0
         state.local_wait_until = 0.0
@@ -502,7 +519,7 @@ def get_next_source_track():
             )
             if track:
                 return track
-            print("📻 Русская волна пуста → mixed")
+            log("Русская волна пуста → mixed", tag="MUSIC", level="INFO")
             state.playlist_mode = "mixed"
             state.local_played_count = 0
             state.local_wait_until = 0.0
@@ -512,7 +529,7 @@ def get_next_source_track():
             track = _try_yandex_source(source_id)
             if track:
                 return track
-        print("📻 Все источники пусты → mixed")
+        log("Все источники пусты → mixed", tag="MUSIC", level="INFO")
         state.playlist_mode = "mixed"
         state.local_played_count = 0
         state.local_wait_until = 0.0
@@ -534,7 +551,8 @@ def get_next_source_track():
         local_path = get_local_random_track()
         if local_path:
             state.local_played_count += 1
-            print(f"📻 Локальный ({state.local_played_count}/{limit})")
+            log(f"Локальный ({state.local_played_count}/{limit})",
+                tag="MUSIC", level="DEBUG")
             return LocalTrack(local_path)
 
         state.local_played_count = 0
