@@ -261,29 +261,31 @@ def _handle_event(msg: protocol.Message):
         elif msg.name == "music_started":
             artist = msg.data.get("artist", "")
             title = msg.data.get("title", "")
+            mode = msg.data.get("mode", "") or ""
             if artist or title:
                 state.set_current(artist, title)
 
-            if artist:
+            _HABIT_MODES = ("artist_only", "single", "genre")
+            if artist and mode in _HABIT_MODES:
                 try:
                     from brain import relationship
                     bucket = time_bucket()
                     relationship.record_play_habit(bucket, artist)
-                    log(f"brain: habit {bucket} → {artist}", tag="BRAIN")
+                    log(f"brain: habit {bucket} → {artist} (mode={mode})",
+                        tag="BRAIN")
                 except Exception as e:
-                    log(f"brain: record_play_habit: {e}", tag="BRAIN", level="WARN")
+                    log(f"brain: record_play_habit: {e}",
+                        tag="BRAIN", level="WARN")
+            elif artist:
+                log(f"brain: habit skip (mode={mode or '?'}, "
+                    f"не явная команда)", tag="BRAIN", level="DEBUG")
 
             try:
                 from brain.skills.music.skill import on_music_started
                 on_music_started(artist, title)
             except Exception as e:
-                log(f"brain: on_music_started: {e}", tag="BRAIN", level="WARN")
-
-        elif msg.name == "track_finished":
-            state.clear_current()
-
-        else:
-            log(f"brain: неизвестное событие {msg.name}", tag="BRAIN", level="WARN")
+                log(f"brain: on_music_started: {e}",
+                    tag="BRAIN", level="WARN")
 
     except Exception as e:
         handle_error(e, context=f"brain._handle_event({msg.name})", speak=False)

@@ -313,15 +313,13 @@ def play_index(idx, announce=False):
             if _is_discovery:
                 try:
                     ipc.put(protocol.BRAIN_INBOX,
-                            protocol.event_discovery(artist=_artist_for_mind,
-                                                     title=_title_for_mind))
+                            protocol.event_music_started(
+                                artist=_artist_for_mind,
+                                title=_title_for_mind,
+                                mode=state.playlist_mode or "",
+                            ))
                 except Exception as e:
-                    log(f"event_discovery: {e}", tag="MUSIC", level="WARN")
-
-                if not _wait_discovery_tts():
-                    log(f"discovery: TTS не начал за {DISCOVERY_WAIT_SEC:.0f}с "
-                        f"(сеть/API?) — играю без фразы",
-                        tag="MUSIC", level="WARN")
+                    log(f"event_music_started: {e}", tag="MUSIC", level="WARN")
 
             # FIX (2026-11-08): НЕ ждём TTS. Музыка стартует сразу.
             try:

@@ -15,9 +15,13 @@ brain/relationship.py — модель привычек пользователя
 }
 
 A2-фикс (день 30): get_weather_music больше не сбрасывает mood через 7 дней.
-  Раньше: asked_at старше 7 дней → None → снова спрашивал. Теперь:
-  mood помнится, пока не перезапишется. Спрашивать раз в день — через
-  was_asked_today("weather_<precip>") в music/skill.py.
+
+── FIX (этап 0.5): print → log(tag="BRAIN") ────────────────────
+  Раньше relationship.py шёл в stderr (print), в jarvis.log его не было.
+  Теперь: log(tag="BRAIN", level=...).
+    ⚠ _save (ошибка записи) — WARN.
+    ⚠ get_* / record_* (memory упала) — DEBUG (шумно, если memory
+    недоступна, но не критично для работы).
 """
 
 import json
@@ -26,6 +30,7 @@ import random
 from datetime import datetime, date
 
 from shared import config as cfg
+from shared.log import log
 
 
 RELATIONSHIP_FILE = os.path.join(cfg.DATA_DIR, 'relationship.json')
@@ -56,7 +61,8 @@ def _save():
         with open(RELATIONSHIP_FILE, 'w', encoding='utf-8') as f:
             json.dump(_cache, f, ensure_ascii=False, indent=2)
     except Exception as e:
-        print(f"⚠ relationship: ошибка сохранения: {e}")
+        log(f"relationship: ошибка сохранения: {e}",
+            tag="BRAIN", level="WARN")
 
 
 def _now_iso() -> str:
@@ -78,7 +84,6 @@ def get_weather_music(condition: str) -> str | None:
     entry = wm.get(condition)
     if not entry:
         return None
-    # A2-фикс: TTL убран. mood помнится, пока не перезапишется.
     return entry.get("mood")
 
 
@@ -108,7 +113,8 @@ def get_recent_prompt(exclude_asked: bool = True) -> dict | None:
         from memory import memory
         top = memory.top_artists(limit=20, days=1)
     except Exception as e:
-        print(f"⚠ relationship: memory.top_artists: {e}")
+        log(f"relationship: memory.top_artists: {e}",
+            tag="BRAIN", level="DEBUG")
         return None
 
     if not top:
@@ -250,7 +256,7 @@ def get_habit(time_bucket: str) -> dict | None:
         if top[1] >= 3:
             return {"artist": top[0], "count": top[1]}
     except Exception as e:
-        print(f"⚠ relationship.get_habit: {e}")
+        log(f"relationship.get_habit: {e}", tag="BRAIN", level="DEBUG")
     return None
 
 
@@ -264,7 +270,7 @@ def get_pattern(condition: str) -> dict | None:
         if top[1] >= 3:
             return {"artist": top[0], "count": top[1]}
     except Exception as e:
-        print(f"⚠ relationship.get_pattern: {e}")
+        log(f"relationship.get_pattern: {e}", tag="BRAIN", level="DEBUG")
     return None
 
 
@@ -285,7 +291,8 @@ def record_play_habit(time_bucket: str, artist: str):
         from memory import memory
         memory.set_habit(time_bucket, artist, count=1)
     except Exception as e:
-        print(f"⚠ relationship.record_play_habit: {e}")
+        log(f"relationship.record_play_habit: {e}",
+            tag="BRAIN", level="DEBUG")
 
 
 def record_play_pattern(condition: str, artist: str):
@@ -293,4 +300,5 @@ def record_play_pattern(condition: str, artist: str):
         from memory import memory
         memory.set_pattern(condition, artist, count=1)
     except Exception as e:
-        print(f"⚠ relationship.record_play_pattern: {e}")
+        log(f"relationship.record_play_pattern: {e}",
+            tag="BRAIN", level="DEBUG")
