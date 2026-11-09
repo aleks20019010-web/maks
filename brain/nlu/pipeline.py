@@ -32,6 +32,16 @@
 #   - не знает про responses/*.json (это router/clarify)
 #   Он только: текст → Decision.
 #
+# ── FIX (этап 1.1): EXECUTE для intent без decision_engine ───────
+#   Раньше: SMALLTALK / CLEANUP_DISK / CLEANUP_RECYCLE — в _INTENT_TO_SKILL
+#   есть, decision_engine нет → FALLBACK → router → LLM (6 сек на «привет»).
+#   Теперь: если skill_resolver вернул скил (command.skill_name), а
+#   decision_engine для intent нет — Decision(EXECUTE) с reason
+#   «no decision engine → delegate to skill». Router вызовет
+#   skill.handle(command) напрямую. Мгновенно (0.5 сек), без LLM.
+#   Скилы smalltalk / cleanup / jellyfin умеют handle(str), им не нужен
+#   entity/decision — они разбираются по тексту сами.
+#
 # РАСШИРЯЕМОСТЬ:
 #   Регистрация экстракторов/движков — через _EXTRACTORS / _DECISIONS.
 #   MusicEntityExtractor + MusicDecisionEngine — единственные сейчас.
@@ -228,8 +238,20 @@ def process(text: str, context: Optional[NLUContext] = None) -> Decision:
         except Exception as e:
             nlu_log.error("decision", f"exception: {e}", intent=intent.value)
             return _fallback_command(command, f"decision: {e}")
+    elif command.skill_name:
+        # FIX (этап 1.1): скил есть, но decision_engine нет (SMALLTALK,
+        # CLEANUP_DISK, CLEANUP_RECYCLE). Раньше — FALLBACK → LLM (6 сек
+        # на «привет»). Теперь — EXECUTE с action="handle": router вызовет
+        # skill.handle(command) (для smalltalk/cleanup — текст, они умеют).
+        # decision_engine не нужен: entity нет, скил сам разберётся.
+        decision = Decision(
+            command=command,
+            action=DecisionAction.EXECUTE,
+            reason=f"no decision engine → delegate to {command.skill_name}",
+            confidence=command.confidence,
+        )
     else:
-        # Нет decision engine для intent — FALLBACK (router отдаст в LLM).
+        # Нет ни decision engine, ни skill — FALLBACK (router отдаст в LLM).
         decision = _fallback_command(
             command, f"no decision engine for {intent.value}",
         )
