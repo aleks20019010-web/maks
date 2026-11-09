@@ -46,6 +46,13 @@ WARMUP (новое): NLU warmup в фоне при старте.
   intent_router.json + FastEmbedEncoder/ONNX). Теперь _start_nlu_warmup()
   запускает brain.nlu.intent.warmup() в daemon-thread при старте.
   Router греется параллельно, brain слушает brain_inbox сразу.
+
+── FIX (этап 2.3): memory.start() явно ────────────────────────────
+  MemoryEngine.__init__(start_writer=False) по умолчанию (см. memory/engine.py).
+  _init_memory() вызывает memory.start() — иначе writer не запущен,
+  события копятся в очереди, ничего не пишется.
+  Вызывается после _init_engine(), до _init_skills() — скилы импортируют
+  memory, но writer уже запущен.
 """
 
 import sys
@@ -128,6 +135,16 @@ def _init_engine():
     _helpers.set_engine(engine)
     log("brain: PersonalityEngine готов", tag="BRAIN")
     return engine
+
+
+def _init_memory():
+    """FIX (этап 2.3): явный memory.start() — writer не стартует в __init__."""
+    try:
+        from memory import memory
+        memory.start()
+        log("brain: memory writer запущен", tag="BRAIN")
+    except Exception as e:
+        log(f"brain: memory start: {e}", tag="BRAIN", level="WARN")
 
 
 def _init_skills():
@@ -287,6 +304,12 @@ def _handle_event(msg: protocol.Message):
                 log(f"brain: on_music_started: {e}",
                     tag="BRAIN", level="WARN")
 
+        elif msg.name == "track_finished":
+            state.clear_current()
+
+        else:
+            log(f"brain: неизвестное событие {msg.name}", tag="BRAIN", level="WARN")
+
     except Exception as e:
         handle_error(e, context=f"brain._handle_event({msg.name})", speak=False)
 
@@ -302,6 +325,7 @@ def main():
         handle_error(e, context="brain._init_engine", speak=False)
         sys.exit(1)
 
+    _init_memory()   # FIX (этап 2.3): memory.start() явно
     _init_skills()
     _init_appraisal()
     _init_reminders()

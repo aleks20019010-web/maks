@@ -7,10 +7,22 @@
 #                            volume_change, silence
 #   + context передаётся в _insert_*
 #   + stop() добивает очередь перед финальным recalc
+#
+# ── FIX (этап 2.1): print → log(tag="MEMORY") ───────────────────
+#   Раньше writer шёл в stderr (print). Два процесса (brain + music)
+#   импортируют memory → два Writer → два print("🧠 memory: writer
+#   запущен") в stderr. Шум. Теперь: log(tag="MEMORY", level=DEBUG).
+#   В проде (INFO) не видно. В DEBUG — с тегом MEMORY, не голый print.
+#
+# ── FIX (этап 2.3): Writer.start() больше не в MemoryEngine.__init__
+#   (start_writer=False по умолчанию). Явный memory.start() из
+#   brain.main / music.main. См. engine.py.
 
 import time
 import queue
 import threading
+
+from shared.log import log
 
 
 class Writer:
@@ -40,7 +52,7 @@ class Writer:
         self._stop.clear()
         self._thread = threading.Thread(target=self._loop, daemon=True, name="MemoryWriter")
         self._thread.start()
-        print("🧠 memory: writer запущен")
+        log("writer запущен", tag="MEMORY", level="DEBUG")
 
     def stop(self, timeout=5.0):
         """Останавливает поток, дожидается flush.
@@ -49,11 +61,12 @@ class Writer:
         """
         if self._thread is None:
             return
-        print("🧠 memory: writer останавливается...")
+        log("writer останавливается...", tag="MEMORY", level="DEBUG")
         self._stop.set()
         self._thread.join(timeout=timeout)
         self._thread = None
-        print(f"🧠 memory: writer остановлен (processed={self._processed})")
+        log(f"writer остановлен (processed={self._processed})",
+            tag="MEMORY", level="DEBUG")
 
     def put(self, event_type, data):
         """Кладёт событие в очередь. Мгновенно."""
@@ -82,7 +95,8 @@ class Writer:
                     self._events_since_recalc += 1
                     self._processed += 1
                 except Exception as e:
-                    print(f"⚠ memory writer: {event_type} error: {e}")
+                    log(f"writer: {event_type} error: {e}",
+                        tag="MEMORY", level="WARN")
 
                 # Если накопилось много — flush
                 if self._events_since_recalc >= self.BATCH_SIZE:
@@ -90,7 +104,7 @@ class Writer:
                     last_flush = time.time()
 
             except Exception as e:
-                print(f"⚠ memory writer loop: {e}")
+                log(f"writer loop: {e}", tag="MEMORY", level="WARN")
                 time.sleep(0.5)
 
         # === ДОБИВАЕМ ОЧЕРЕДЬ ПЕРЕД ВЫХОДОМ ===
@@ -107,17 +121,19 @@ class Writer:
                 self._processed += 1
                 drained += 1
             except Exception as e:
-                print(f"⚠ memory writer drain: {event_type} error: {e}")
+                log(f"writer drain: {event_type} error: {e}",
+                    tag="MEMORY", level="WARN")
 
         if drained:
-            print(f"🧠 memory: writer добрал {drained} событий из очереди")
+            log(f"writer добрал {drained} событий из очереди",
+                tag="MEMORY", level="DEBUG")
 
         # Финальный recalc
         try:
             if self._events_since_recalc > 0:
                 self._maybe_recalc()
         except Exception as e:
-            print(f"⚠ memory final flush: {e}")
+            log(f"final flush: {e}", tag="MEMORY", level="WARN")
 
     # --------------------------------------------------------
     # ОБРАБОТКА СОБЫТИЙ
@@ -205,7 +221,8 @@ class Writer:
             )
 
         else:
-            print(f"⚠ memory writer: unknown event '{event_type}'")
+            log(f"writer: unknown event '{event_type}'",
+                tag="MEMORY", level="WARN")
 
     def _maybe_recalc(self):
         """Пересчитать веса, если накопилось."""
@@ -213,6 +230,6 @@ class Writer:
             self._events_since_recalc = 0
             try:
                 result = self.aggregates.recalc_all()
-                print(f"🔄 memory: веса пересчитаны ({result})")
+                log(f"веса пересчитаны ({result})", tag="MEMORY", level="DEBUG")
             except Exception as e:
-                print(f"⚠ memory recalc: {e}")
+                log(f"recalc: {e}", tag="MEMORY", level="WARN")

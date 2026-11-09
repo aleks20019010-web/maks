@@ -20,13 +20,31 @@
 #
 # v5 (2026-11-04):
 #   + get_discovery_track — трек с минимальным weight > 0 (ротация снизу вверх).
-#     Не играл последние 2 часа (защита от повтора).
-#     weight + небольшой шум — random среди близких weight (ротация, не зацикливание).
+#
+# ── FIX (этап 2.1): print → log(tag="MEMORY") ───────────────────
+#   penalize_artist / reward_artist / set_habit / set_pattern /
+#   get_discovery_track / shutdown — print → log(tag="MEMORY", level=WARN).
+#
+# ── FIX (этап 2.3): writer стартует явно через start() ─────────
+#   Раньше: MemoryEngine.__init__(start_writer=True) → Writer.start()
+#   в конструкторе. memory = MemoryEngine() на импорте → writer
+#   запускался в каждом процессе, который импортировал memory (brain,
+#   music). Два writer'а → два "🧠 memory: writer запущен" в stderr.
+#   start() был no-op — сбивало с толку.
+#
+#   Теперь: __init__(start_writer=False) по умолчанию. Writer создаётся,
+#   но НЕ запускается. Явный memory.start() из brain.main / music.main.
+#   start() реально запускает writer (идемпотентно — повторный вызов
+#   ничего не делает, Writer.start() проверяет self._thread).
+#
+#   Совместимость: старый код, который делал MemoryEngine(start_writer=True),
+#   продолжает работать (writer запустится в __init__). memory.start()
+#   после этого — no-op.
 
-import os
 import json
 
 from shared import config as cfg
+from shared.log import log
 
 from memory.storage import Storage
 from memory.events import Events
@@ -37,7 +55,7 @@ from memory.writer import Writer
 
 
 class MemoryEngine:
-    def __init__(self, base_dir=None, start_writer=True):
+    def __init__(self, base_dir=None, start_writer=False):
         # Путь к БД — из cfg.MEMORY_DB (D:\Maks\data\memory.db)
         db_path = cfg.MEMORY_DB
 
@@ -48,10 +66,47 @@ class MemoryEngine:
         self.reader = Reader(self.storage)
         self.preferences.set_reader(self.reader)
 
-        # Фоновый writer
+        # Фоновый writer (создан, но не запущен — см. start())
         self.writer = Writer(self.events, self.aggregates)
         if start_writer:
+            # Совместимость: старый код мог передать start_writer=True.
+            # В новом коде — memory.start() явно из brain.main / music.main.
             self.writer.start()
+
+    # ========================================================
+    # СТАРТ / СТОП WRITER
+    # ========================================================
+    def start(self):
+        """Запустить фоновый writer. Идемпотентно.
+
+        Вызывать явно из brain.main / workers.music.main — до первого
+        remember_*. Если start_writer=True был в __init__, повторный
+        вызов — no-op (Writer.start() проверяет self._thread).
+        """
+        try:
+            self.writer.start()
+        except Exception as e:
+            log(f"memory start: {e}", tag="MEMORY", level="WARN")
+
+    def shutdown(self):
+        """Останавливает writer. Вызывать при завершении процесса."""
+        try:
+            self.writer.stop()
+        except Exception as e:
+            log(f"memory shutdown: {e}", tag="MEMORY", level="WARN")
+        try:
+            self.storage.close()
+        except Exception:
+            pass
+
+    def flush(self):
+        """Дождаться обработки очереди (для тестов/диагностики)."""
+        import time
+        for _ in range(50):
+            if self.writer.queue.empty():
+                time.sleep(0.1)
+                break
+            time.sleep(0.1)
 
     # ========================================================
     # ЗАПИСЬ — МГНОВЕННАЯ (кладёт в очередь)
@@ -167,7 +222,7 @@ class MemoryEngine:
                 WHERE artist = ?
             """, (float(delta), artist))
         except Exception as e:
-            print(f"⚠ penalize_artist: {e}")
+            log(f"penalize_artist: {e}", tag="MEMORY", level="WARN")
 
     def reward_artist(self, artist, delta=2.0):
         """Повысить вес артиста на delta."""
@@ -179,7 +234,7 @@ class MemoryEngine:
                 WHERE artist = ?
             """, (float(delta), artist))
         except Exception as e:
-            print(f"⚠ reward_artist: {e}")
+            log(f"reward_artist: {e}", tag="MEMORY", level="WARN")
 
     def get_habit(self, time_bucket):
         """Привычка для time_bucket ('morning' / 'day' / 'evening' / 'night')."""
@@ -203,7 +258,7 @@ class MemoryEngine:
                 VALUES (?, ?, datetime('now'))
             """, (f"habit:{time_bucket}", json.dumps(existing, ensure_ascii=False)))
         except Exception as e:
-            print(f"⚠ set_habit: {e}")
+            log(f"set_habit: {e}", tag="MEMORY", level="WARN")
 
     def get_pattern(self, condition):
         """Паттерн для condition ('weather:rain' / 'weather:snow' / ...)."""
@@ -227,7 +282,7 @@ class MemoryEngine:
                 VALUES (?, ?, datetime('now'))
             """, (f"pattern:{condition}", json.dumps(existing, ensure_ascii=False)))
         except Exception as e:
-            print(f"⚠ set_pattern: {e}")
+            log(f"set_pattern: {e}", tag="MEMORY", level="WARN")
 
     # ========================================================
     # BLACKLIST (v3)
@@ -268,7 +323,7 @@ class MemoryEngine:
             if rows:
                 return dict(random.choice(rows))
         except Exception as e:
-            print(f"⚠ get_discovery_track: {e}")
+            log(f"get_discovery_track: {e}", tag="MEMORY", level="WARN")
         return None
 
     # ========================================================
@@ -336,33 +391,3 @@ class MemoryEngine:
 
     def reader_summary(self):
         return self.reader.summary()
-
-    # ========================================================
-    # СОВМЕСТИМОСТЬ
-    # ========================================================
-    def start(self):
-        """Совместимость: writer стартует в __init__. No-op."""
-        pass
-
-    # ========================================================
-    # ОСТАНОВКА
-    # ========================================================
-    def shutdown(self):
-        """Останавливает writer. Вызывать при завершении процесса."""
-        try:
-            self.writer.stop()
-        except Exception as e:
-            print(f"⚠ memory shutdown: {e}")
-        try:
-            self.storage.close()
-        except Exception:
-            pass
-
-    def flush(self):
-        """Дождаться обработки очереди (для тестов/диагностики)."""
-        import time
-        for _ in range(50):
-            if self.writer.queue.empty():
-                time.sleep(0.1)
-                break
-            time.sleep(0.1)

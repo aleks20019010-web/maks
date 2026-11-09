@@ -4,27 +4,23 @@ workers/music/main.py — Music worker.
 Принимает команды из music_inbox, выполняет.
 
 ── FIX (этап 0.1): music_playing через runtime_state ──────────────
-  Раньше _set_music_playing / _clear_music_playing были СКОПИРОВАНЫ
-  здесь и в playback.py — два места писали один флаг по-разному.
-  Теперь: set_music_playing / clear_music_playing импортируются
-  из playback.py (единственный источник правды).
+  set_music_playing / clear_music_playing импортируются из playback.py
+  (единственный источник правды).
 
 ── FIX (этап 0.2): MUSIC_AVAILABLE ────────────────────────────────
   Если внешний диск (E:\\Music) отключён, cfg.MUSIC_AVAILABLE = False.
-  Music-воркер при старте это видит, логирует WARN и продолжает
-  работать «вхолостую»: команды принимает, но на play отвечает в лог
-  «музыка недоступна». Не выходим через sys.exit(1) — иначе supervisor
-  увидит returncode != 0 и будет рестартить в цикле, забивая лог.
+  Music-воркер работает вхолостую: команды принимает, play — отказ.
 
-── FIX (этап 0.5): warm_up_prefetch — первый трек готов заранее ──
-  _reset_playback_state (из _stop_old_track, _handle_control("stop"))
-  вызывает warm_up_prefetch СИНХРОННО (0.21 сек): get_local_random_track
-  + _append_and_prefetch → playlist[0] = локальный. Дальше queue_wave
-  (modes.py) НЕ чистит playlist и НЕ делает refill_one — play_index(0)
-  берёт готовый локальный → ▶ за 0.5 сек.
-  Синхронно, не в потоке: если в потоке, play_index(0) может успеть
-  раньше, чем warm_up положит трек → «Очередь закончилась». 0.21 сек
-  в _reset_playback_state — приемлемо (не 10 секунд).
+── FIX (этап 0.5): warm_up_prefetch ───────────────────────────────
+  _reset_playback_state вызывает warm_up_prefetch СИНХРОННО (0.21 сек):
+  get_local_random_track + _append_and_prefetch → playlist[0] = локальный.
+  Дальше queue_wave (modes.py) НЕ чистит playlist и НЕ делает refill_one —
+  play_index(0) берёт готовый локальный → ▶ за 0.5 сек.
+
+── FIX (этап 2.3): memory.start() явно ────────────────────────────
+  MemoryEngine.__init__(start_writer=False) по умолчанию (см. memory/engine.py).
+  memory.start() вызывается после ipc.init() — до первого remember_play
+  в playback.py. Иначе события копятся в очереди, ничего не пишется.
 
 A2 (день 29):
   - music_playing — пишем при start (play_index), удаляем при
@@ -34,10 +30,7 @@ A2 (день 29):
     TTS. Старый трек не возобновляется.
 
 MOOD:
-  - _handle_play(name="mood") → client.metatag(mood_tag) → station_id
-    (mood:energetic) → modes.start_genre(station_id, mood_tag).
-  - НЕ используем client.station() — такого метода нет в yandex-music.
-  - НЕ используем radio.start_radio() — он для живых потоков.
+  - _handle_play(name="mood") → client.metatag(mood_tag) → station_id.
 
 DUCKING (день 29, вечер):
   - duck_on/duck_off → music.duck()/music.restore().
@@ -46,14 +39,6 @@ DUCKING (день 29, вечер):
   - check_duck_watchdog() при пустой очереди — снимает залипший ducking.
 
 FIX (день 29, вечер, #2): _handle_play в отдельном потоке.
-  Раньше: play_wave/start_genre/play_mood грузят трек 5–10 сек
-  синхронно в главном цикле — music_inbox НЕ читается. duck_on от ASR
-  лежит в очереди до конца загрузки.
-  Теперь: _handle_play в threading.Thread(daemon=True).
-  music_inbox читается сразу.
-
-── FIX (этап 0.5): print → log(tag="MUSIC") ────────────────────
-  Раньше main.py уже использовал log, но проверил — да, всё ок.
 """
 
 import sys
@@ -81,9 +66,6 @@ def _reset_playback_state():
     (0.21 сек): get_local_random_track + _append_and_prefetch →
     playlist[0] = локальный. Дальше queue_wave (modes.py) НЕ чистит
     playlist — play_index(0) берёт готовый.
-
-    Синхронно, не в потоке: если в потоке, play_index(0) может успеть
-    раньше, чем warm_up положит трек → «Очередь закончилась».
 
     Общий блок для _stop_old_track() и _handle_control("stop").
     Ducking-флаги НЕ трогает.
@@ -336,6 +318,16 @@ def _handle_control(name: str, data: dict):
 def main():
     log("music: старт", tag="MUSIC")
     ipc.init()
+
+    # FIX (этап 2.3): memory.start() явно — writer не стартует в __init__.
+    # До первого remember_play в playback.py. Иначе события копятся в
+    # очереди, ничего не пишется.
+    try:
+        from memory import memory
+        memory.start()
+        log("music: memory writer запущен", tag="MUSIC")
+    except Exception as e:
+        log(f"music: memory start: {e}", tag="MUSIC", level="WARN")
 
     # FIX (этап 0.2): MUSIC_DIR мог быть недоступен при импорте config.py.
     if not cfg.MUSIC_AVAILABLE:
