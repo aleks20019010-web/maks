@@ -1,4 +1,4 @@
-﻿# personality_core/self_state.py
+# personality_core/self_state.py
 # Внутреннее состояние Макса: mood, energy, valence, arousal.
 #
 # valence — это ОТКЛОНЕНИЕ от базового настроения. База зависит от энергии:
@@ -17,6 +17,11 @@
 #      команды не должны истощать. 0.0003 × 100 команд = 0.03 (мягко).
 # FIX: ENERGY_PER_TICK_NIGHT увеличен, чтобы за ночь (9 часов, 1080 тиков)
 #      восстанавливаться с 0 до 1.0. 1.0 / 1080 = 0.000926, округлено до 0.00093.
+#
+# P1: on_event(kind) — valence/arousal реально меняются от событий.
+#     user_praise, user_insult, music_liked, music_skipped, music_disliked,
+#     silence, morning, night. Границы [-1, +1] из констант, мягкие сдвиги.
+#     Затухание (_decay) возвращает к базе — «спасибо» приятно на пару минут.
 
 from dataclasses import dataclass, field, asdict
 import json
@@ -100,6 +105,7 @@ class SelfState:
     last_command_ts: float = 0.0
     last_tick_ts: float = 0.0
     last_hello_ts: float = 0.0
+    last_silence_ts: float = 0.0
     session_start_ts: float = 0.0
 
     def __post_init__(self):
@@ -169,6 +175,50 @@ class SelfState:
             self.energy = max(MIN_ENERGY, self.energy - ENERGY_PER_SKIP)
 
         self._decay()
+        self._recompute_mood()
+        self._recompute_drowsy()
+        self.save()
+
+    # ========================================================
+    # ОБНОВЛЕНИЕ — событие (P1: valence/arousal реально меняются)
+    # ========================================================
+    def on_event(self, kind: str, **kw):
+        """Мягкие сдвиги отклонения. Затухание (_decay) вернёт к базе.
+
+        valence — ОТКЛОНЕНИЕ от базы (см. _base_valence), не абсолют.
+        Поэтому числа маленькие: +0.08 = «чуть приятнее», не телепорт.
+        """
+        if kind == "user_praise":
+            self.valence = min(MAX_VALENCE, self.valence + 0.08)
+            self.arousal = min(MAX_AROUSAL, self.arousal + 0.04)
+
+        elif kind == "user_insult":
+            self.valence = max(MIN_VALENCE, self.valence - 0.12)
+            self.arousal = min(MAX_AROUSAL, self.arousal + 0.06)
+
+        elif kind == "music_liked":
+            self.valence = min(MAX_VALENCE, self.valence + 0.05)
+
+        elif kind == "music_skipped":
+            self.valence = max(MIN_VALENCE, self.valence - 0.03)
+
+        elif kind == "music_disliked":
+            self.valence = max(MIN_VALENCE, self.valence - 0.05)
+
+        elif kind == "silence":
+            self.valence = 0.0
+            self.arousal = 0.4
+
+        elif kind == "morning":
+            self.arousal = min(MAX_AROUSAL, self.arousal + 0.08)
+
+        elif kind == "night":
+            self.valence = max(MIN_VALENCE, self.valence - 0.04)
+            self.arousal = max(MIN_AROUSAL, self.arousal - 0.06)
+
+        else:
+            return
+
         self._recompute_mood()
         self._recompute_drowsy()
         self.save()

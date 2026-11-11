@@ -24,6 +24,8 @@
 #   Причина: «сделай потише» → NLU → VOLUME_DOWN → controls.handle(Command) →
 #   volume_down → ipc.put. Раньше: controls.handle("сделай потише") (текст) →
 #   SIMPLE.get("сделай потише") → None → молчание.
+#
+# P1: next → self_state.on_event("music_skipped") (valence чуть вниз, «не то»).
 
 import random
 import re
@@ -272,6 +274,13 @@ class ControlsSkill(Skill):
             log(f"controls: appraisal publish ошибка: {e}", tag="BRAIN", level="WARN")
 
         ipc.put(protocol.MUSIC_INBOX, protocol.music_next())
+
+        # P1: скип → valence чуть вниз («не то»)
+        try:
+            from personality_core import self_state as _ss
+            _ss.get().on_event("music_skipped")
+        except Exception:
+            pass
 
         now = time.time()
         if now - self._next_window_start > cfg.NEXT_SPAM_WINDOW_SEC:
