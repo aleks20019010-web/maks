@@ -22,6 +22,11 @@ music_release_duck(), music_duck_on(), music_duck_off().
 NEW (v6): event_discovery — music сообщает brain «будет discovery-трек,
 скажи фразу». Music сам не говорит: brain решает «когда» → зовёт
 personality_core («что и как») → TTS.
+
+── PLAY_SEARCH (v6.5) ─────────────────────────────────────────────
+  play_search(query) — «включи что-нибудь необычное», «поставь ту песню
+  про…». Music worker (name="search") ищет локально (search_local:
+  точный → phon → fuzzy) → Яндекс (search_track).
 """
 
 import json
@@ -204,3 +209,26 @@ def event_discovery(artist: str = "", title: str = "", **kw) -> Message:
 def asr_control(name: str, **kw) -> Message:
     """Управление ASR: wake_mode, command_mode, pause, resume."""
     return Message(type="control", name=name, data=kw)
+
+
+# ── Music: локальный плейлист лайков (P2) ─────────────────────
+
+def play_local_liked(**kw) -> Message:
+    """Включить ЛОКАЛЬНЫЙ плейлист лайков (data/liked_tracks.json).
+
+    Не путать с play_liked — это Яндекс «Мне нравится».
+    """
+    return Message(type="play", name="local_liked", data=kw)
+
+
+# ── Music: поиск (brain → music) ──────────────────────────────
+
+def play_search(query: str, **kw) -> Message:
+    """Включить результат поиска: локально (search_local) → Яндекс (search_track).
+
+    Music worker (name="search") делает:
+      1. search_local(query) — точный → phon → fuzzy по local_index.json;
+      2. search.search_track(query) — Яндекс;
+      3. не найдено — WARN-лог.
+    """
+    return Message(type="play", name="search", data={"query": query, **kw})

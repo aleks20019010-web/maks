@@ -53,6 +53,21 @@
 #   музыку до mark_ready, ASR mic_off → duck_on (30%). Музыка 30% пока
 #   TTS говорит, 100% после. Пользователь слышит TTS сразу, музыка
 #   стартует параллельно (0 сек тишины после TTS).
+#
+# P1: play_liked → on_event("music_liked"), dislike → on_event("music_disliked").
+#
+# ── LOCAL_LIKED / LIKE_CURRENT (v6.5) ──────────────────────────────
+#   play_local_liked — локальный плейлист лайков (data/liked_tracks.json)
+#     через protocol.play_local_liked() → workers/music/main.py.
+#   like_current / dislike_current — голосовые «нравится»/«не нравится»
+#     текущий трек: _lt.add_like / _lt.add_dislike + TTS + SELF-событие.
+#     dislike_current дополнительно шлёт music_next (переключить трек).
+#
+# ── PLAY_SEARCH (v6.5) ──────────────────────────────────────────────
+#   play_search — сырой запрос без явных hints (классификатор/entity
+#   не угадали artist/track). Шлёт protocol.play_search(query) →
+#   workers/music/main.py::_handle_play("search") — локально
+#   (search_local: точный → phon → fuzzy) → Яндекс (search_track).
 
 import json
 import random
@@ -216,6 +231,26 @@ class MusicSkill(Skill):
             result["station"] = station
             return result
 
+        if action == "play_local_liked":
+            return result
+
+        if action in ("like_current", "dislike_current"):
+            from shared import state as _st
+            cur = _st.get_current() or {}
+            artist = cur.get("artist", "")
+            title = cur.get("title", "")
+            if not (artist or title):
+                return None
+            result["artist"] = artist
+            result["title"] = title
+            return result
+
+        if action == "play_search":
+            if ent is None or not ent.value:
+                return None
+            result["query"] = ent.value
+            return result
+
         if ent is None or not ent.value:
             return None
 
@@ -337,6 +372,57 @@ class MusicSkill(Skill):
         elif action == "play_liked":
             ipc.put(protocol.MUSIC_INBOX, protocol.play_liked())
             _respond_and_say("PLAY_PLAYLIST", name="твою музыку")
+            # P1: «включи мою музыку» — сигнал «люблю то, что там»
+            try:
+                from personality_core import self_state as _ss
+                _ss.get().on_event("music_liked")
+            except Exception:
+                pass
+
+        elif action == "play_local_liked":
+            ipc.put(protocol.MUSIC_INBOX, protocol.play_local_liked())
+            from brain import liked_tracks as _lt
+            n = len(_lt.get_liked())
+            if n == 0:
+                _respond_and_say("PLAY_LOCAL_LIKED_EMPTY")
+            else:
+                _respond_and_say("PLAY_LOCAL_LIKED")
+
+        elif action == "play_search":
+            query = result["query"]
+            ipc.put(protocol.MUSIC_INBOX, protocol.play_search(query))
+            _respond_and_say("PLAY_SEARCH", query=query)
+
+        elif action == "like_current":
+            from brain import liked_tracks as _lt
+            artist = result.get("artist", "")
+            title = result.get("title", "")
+            added = _lt.add_like(artist, title, source="voice")
+            try:
+                from personality_core import self_state as _ss
+                _ss.get().on_event("music_liked")
+            except Exception:
+                pass
+            if added:
+                _respond_and_say("LIKE_ADDED", artist=artist, title=title)
+            else:
+                _respond_and_say("LIKE_ALREADY", artist=artist, title=title)
+
+        elif action == "dislike_current":
+            from brain import liked_tracks as _lt
+            artist = result.get("artist", "")
+            title = result.get("title", "")
+            added = _lt.add_dislike(artist, title, source="voice")
+            try:
+                from personality_core import self_state as _ss
+                _ss.get().on_event("music_disliked")
+            except Exception:
+                pass
+            if added:
+                _respond_and_say("DISLIKE_ADDED", artist=artist, title=title)
+                ipc.put(protocol.MUSIC_INBOX, protocol.music_next())
+            else:
+                _respond_and_say("DISLIKE_ALREADY", artist=artist, title=title)
 
         elif action == "play_radio":
             # RADIO (2026-11-07): station гарантированно непустой
@@ -351,6 +437,12 @@ class MusicSkill(Skill):
         elif action == "dislike":
             ipc.put(protocol.MUSIC_INBOX, protocol.music_dislike())
             _respond_and_say("MUSIC_DISLIKE")
+            # P1: «не нравится» — valence чуть вниз
+            try:
+                from personality_core import self_state as _ss
+                _ss.get().on_event("music_disliked")
+            except Exception:
+                pass
 
 
 def on_music_started(artist: str, title: str) -> None:

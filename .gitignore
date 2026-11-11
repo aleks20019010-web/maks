@@ -58,4 +58,10 @@ data/intent_router.json
 brain_all.txt
 
 # Local music index (генерируется автоматически)
-data/local_index.json
+data/local_index.json 
+
+
+# ===== Скрипты обогащения (генерируются, не в git) =====
+py_files.zip
+cv_setfit.py
+_tts_*.mp3

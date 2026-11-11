@@ -67,6 +67,29 @@
 #   Порог 0.8 — безопасно: «юра» → «ваню» 0.3 (не FOUND), «включи арию»
 #   → «ария» 0.2 (не radio). Fuzzy только для радио (artist/genre/mood —
 #   отдельно, ниже, в 5a/5b/5c).
+#
+# ── PLAY_SEARCH (v6.5) ──────────────────────────────────────────────
+#   v1: если fuzzy не нашёл ни mood/artist/genre (scored пуст) И кандидат
+#   состоит из 2+ слов — это потенциально «артист + трек» или сырой
+#   запрос. Отдаём Entity.found("search", candidate, 0.9, "play_search").
+#   Одно слово («Орион») — UNRESOLVED, как раньше.
+#   Дальше decision (music.py, _TYPE_TO_ACTION["search"]) → play_search
+#   → workers/music/main.py::_handle_play("search") — локально → Яндекс.
+#
+#   v2: если fuzzy нашёл АРТИСТА, но кандидат содержит лишние слова
+#   (потенциально трек) — тоже search, а не play_artist.
+#   Пример: «король и шут лесник» → fuzzy top=artist «Король и Шут»
+#   (2 слова), candidate=4 слова → cand_words > artist_words →
+#   Entity.found("search", candidate, 0.9, "play_search_artist_track").
+#   Иначе «включи король и шут лесник» включало бы play_artist
+#   («Король и Шут»), теряя «лесник» (название трека).
+#
+# ── LOCAL_LIKED (v6.5) ──────────────────────────────────────────────
+#   «мою музыку» / «мои лайки» / «мне нравится» → Entity.found("local_liked",
+#   "local_liked", 1.0, "phrase"). Проверка ДО radio и fuzzy по артистам,
+#   иначе «включи мою музыку» улетало в fuzzy (artist «Моя Музыка»?) или
+#   radio. Дальше decision (music.py, _TYPE_TO_ACTION["local_liked"]) →
+#   play_local_liked → workers/music/main.py::_handle_play("local_liked").
 
 import os
 import re
@@ -392,6 +415,11 @@ class MusicEntityExtractor:
 
             cand_lower = candidate.lower().strip()
 
+            # NEW (local_liked): «мою музыку» / «мои лайки» / «мне нравится» →
+            # локальный плейлист лайков (data/liked_tracks.json).
+            if any(phrase in cand_lower for phrase in ("мою музыку", "мои лайки", "мне нравится")):
+                return Entity.found("local_liked", "local_liked", 1.0, "phrase")
+
             # 0. RADIO (2026-11-07): до mood/artist/genre.
             #    FIX (2026-11-07, #2): безусловная radio-проверка.
             #    FIX (2026-11-07, #3): fuzzy по radio_aliases — ASR может
@@ -484,7 +512,27 @@ class MusicEntityExtractor:
                         match_confidence=score, source="fuzzy_genre",
                     ))
 
+            # NEW (play_search v2): если fuzzy нашёл артиста, но кандидат
+            # содержит лишние слова (потенциально трек) — отдаём в search,
+            # а не play_artist. Пример: «король и шут лесник» → artist
+            # «Король и Шут» + лишнее «лесник» → play_search.
+            if scored:
+                top = scored[0]
+                if top.type == "artist":
+                    artist_words = len(top.value.split())
+                    cand_words = len(candidate.split())
+                    if cand_words > artist_words:
+                        return Entity.found(
+                            "search", candidate, 0.9,
+                            "play_search_artist_track",
+                        )
+
             if not scored:
+                # NEW (play_search): если кандидат — 2+ слова (потенциально
+                # «артист + трек»), отдаём в поиск (локально → Яндекс), а не CLARIFY.
+                # Одно слово («Орион») — UNRESOLVED, как раньше.
+                if len(candidate.split()) >= 2:
+                    return Entity.found("search", candidate, 0.9, "play_search")
                 return Entity.unresolved(candidate, match_confidence=0.0)
 
             scored.sort(key=lambda c: c.match_confidence, reverse=True)

@@ -1,23 +1,48 @@
 # brain/nlu/intent.py
-# IntentResolver: IndexedRouter (FastEmbed) → Intent + confidence.
+# IntentResolver: SetFit → Intent + confidence.
 #
-# UNKNOWN обязателен. Если confidence < threshold — UNKNOWN.
-# Порог 0.5 — начальный. Подберём на реальных фразах (HIGH/MEDIUM/LOW).
+# Приоритет:
+#   1. Exact-match с фразой из config/intent_routes.json → (intent, 1.0).
+#   2. SetFit (models/setfit_intents/) → (intent, confidence).
+#   3. Пост-правила (VOLUME_UP/DOWN, CLEANUP_DISK/RECYCLE,
+#      SMALLTALK/SYSTEM_STATUS, LLM_QUESTION/MUSIC_NOW_PLAYING) —
+#      чинят известные слабые места tiny-энкодера.
+#   4. Fuzzy fallback (difflib, порог 0.8) — если SetFit не уверен.
 #
-# Калибровка (fit) — только при первом создании.
-# Дальше — load_router из data/intent_router.json (без fit).
+# UNKNOWN — если всё ниже порога.
+# warmup() — прогреть SetFit в фоне при старте brain.
 #
-# FIX (routes → JSON): _ROUTES вынесен в config/intent_routes.json.
-# FIX (exact-first): resolve() сначала проверяет ТОЧНОЕ совпадение.
-# WARMUP (новое): warmup() — прогреть router при старте brain (в фоне).
+# Заменяет semantic_router (IndexedRouter + FastEmbedEncoder).
 #
-# FUZZY FALLBACK (2026-11-07, #4): если эмбеддинги дали confidence < 0.5
-#   (UNKNOWN или «на грани»), пробуем fuzzy по ВСЕМ фразам ВСЕХ интентов
-#   (difflib.SequenceMatcher, порог 0.8). Пример: «включи радio» (0.45)
-#   → fuzzy «включи радио» (0.92) → MUSIC_PLAY (1.00). Дёшево (difflib
-#   быстрый), точно (по фразам), без LLM. Не срабатывает, если
-#   эмбеддинги уже дали confidence >= 0.5 (тогда это не «ошибка ASR»,
-#   а нормальный распознанный intent).
+# ── MEM-OPT (2026-11-11): ужимаем PyTorch ──────────────────────
+#   Модель уже маленькая (113 МБ на диске), но torch на CPU ест
+#   600+ МБ на рантайм, пулы потоков и кэши аллокатора.
+#
+#   ВАЖНО: import torch и настройка потоков идут ДО from setfit.
+#   set_num_interop_threads работает ТОЛЬКО до первой параллельной
+#   работы torch. setfit при импорте её запускает — поэтому порядок
+#   критичен.
+#
+#   Патчи:
+#     1. env OMP/MKL/TORCH_NUM_THREADS=2 + TOKENIZERS_PARALLELISM=false
+#        в самом начале файла — до любого импорта torch.
+#     2. import torch → set_num_threads(2) → set_num_interop_threads(1)
+#        → set_flush_denormal(True) — ДО from setfit.
+#     3. model.model.eval() + torch.inference_mode() при predict.
+#   Логика resolve/warmup/пост-правил НЕ изменена.
+
+import os
+
+# ── MEM-OPT (патч 1): env ДО любого импорта torch/setfit ──────
+# Каждый поток = стек + буферы. По умолчанию torch создаёт пул
+# по числу ядер (у 6 ГБ RAM обычно 4–8 ядер). 2 потока достаточно
+# для инференса tiny-энкодера, а память падает на 100–200 МБ.
+os.environ["OMP_NUM_THREADS"] = "2"
+os.environ["MKL_NUM_THREADS"] = "2"
+os.environ["TORCH_NUM_THREADS"] = "2"
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+os.environ["TRANSFORMERS_NO_ADVISORY_WARNINGS"] = "1"
+os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
 
 import json
 import threading
@@ -28,24 +53,20 @@ from shared.log import log
 from brain.nlu.types import Intent
 
 
-_router = None
+_setfit_model = None
 _lock = threading.Lock()
-_ROUTER_FILE = cfg.DATA_DIR / "intent_router.json"
-_FIT_FILE = cfg.CONFIG_DIR / "intent_fit.json"
 _ROUTES_FILE = cfg.CONFIG_DIR / "intent_routes.json"
+_MODEL_DIR = cfg.DATA_DIR.parent / "models" / "setfit_intents"
 
-# Порог: ниже — UNKNOWN.
+# Порог уверенности SetFit: ниже — пробуем fuzzy, потом UNKNOWN.
+# 0.5 — стартовое значение; на CV модель уверена (>0.8) на большинстве
+# правильных предсказаний, а на ошибочных — часто ниже.
 _THRESHOLD = 0.5
-# Fuzzy fallback порог (2026-11-07, #4): fuzzy по фразам всех интентов,
-# если эмбеддинги < 0.5. 0.8 — безопасно («включи радio» → «включи радио»
-# 0.92 → MUSIC_PLAY; «привет» → «привет» 1.0 → SMALLTALK; «абракадабра»
-# → «включи арию» 0.3 → не FOUND).
 _FUZZY_FALLBACK_THRESHOLD = 0.80
 
 
-# ── Загрузка routes из config/intent_routes.json ────────────
+# ── Загрузка routes ────────────────────────────────────────
 def _load_routes() -> dict[Intent, list[str]]:
-    """Загрузить config/intent_routes.json → {Intent: [фразы]}."""
     if not _ROUTES_FILE.exists():
         log(f"intent: {_ROUTES_FILE} не найден — routes пустые",
             tag="BRAIN", level="ERROR")
@@ -72,8 +93,6 @@ def _load_routes() -> dict[Intent, list[str]]:
                 tag="BRAIN", level="WARN")
             continue
         if not isinstance(phrases, list):
-            log(f"intent: routes[{intent_name}] — не list — пропуск",
-                tag="BRAIN", level="WARN")
             continue
         cleaned = [p.strip() for p in phrases if isinstance(p, str) and p.strip()]
         if cleaned:
@@ -86,9 +105,8 @@ def _load_routes() -> dict[Intent, list[str]]:
 _ROUTES: dict[Intent, list[str]] = _load_routes()
 
 
-# ── Exact-match (приоритет над эмбеддингами) ────────────────
+# ── Exact-match ────────────────────────────────────────────
 def _exact_match(text: str) -> tuple[Intent, float] | None:
-    """Точное совпадение с фразой из _ROUTES (case-insensitive, strip)."""
     if not text:
         return None
     text_norm = text.lower().strip()
@@ -101,12 +119,11 @@ def _exact_match(text: str) -> tuple[Intent, float] | None:
     return None
 
 
-# ── FUZZY FALLBACK (2026-11-07, #4) ─────────────────────────
+# ── Fuzzy fallback ─────────────────────────────────────────
 _fuzzy_index: list[tuple[str, Intent]] | None = None
 
 
 def _build_fuzzy_index() -> list[tuple[str, Intent]]:
-    """Плоский список (фраза, intent) из _ROUTES. Лениво, 1 раз."""
     index: list[tuple[str, Intent]] = []
     for intent, phrases in _ROUTES.items():
         for phrase in phrases:
@@ -117,11 +134,6 @@ def _build_fuzzy_index() -> list[tuple[str, Intent]]:
 
 
 def _fuzzy_fallback(text: str) -> tuple[Intent, float] | None:
-    """Fuzzy по всем фразам всех интентов (difflib, порог 0.8).
-
-    «включи радio» → «включи радио» (0.92) → MUSIC_PLAY.
-    «абракадабра» → «включи арию» (0.3) → None.
-    """
     global _fuzzy_index
     if not text:
         return None
@@ -145,136 +157,182 @@ def _fuzzy_fallback(text: str) -> tuple[Intent, float] | None:
     return None
 
 
-# ── Загрузка held-out фраз из config/intent_fit.json ─────────
-def _load_fit() -> tuple[list[str], list[Intent]]:
-    """Загрузить config/intent_fit.json → (X, Y)."""
-    if not _FIT_FILE.exists():
-        log(f"intent: {_FIT_FILE} не найден, fit пропущен", tag="BRAIN", level="WARN")
-        return [], []
+# ── Пост-правила (чинят известные слабости tiny-энкодера) ──
+_VOLUME_DOWN_WORDS = ("уменьши", "убавь", "тише", "потише", "прикрути", "минимум")
+_VOLUME_UP_WORDS = ("увеличь", "прибавь", "громче", "погромче", "максимум")
+_RECYCLE_WORDS = ("корзин", "мусорк")
+_DISK_WORDS = ("диск",)
+_SMALLTALK_AS_SYSTEM = ("как дела", "как жизнь", "как настроение", "как ты")
+_LLM_QUESTION_WORDS = ("что такое", "что значит", "объясни", "почему")
+
+
+def _apply_post_rules(text: str, intent: Intent) -> Intent:
+    """Чинит известные пары, где tiny-энкодер стабильно путается.
+
+    Применяется ТОЛЬКО если SetFit предсказал один из конфликтующих
+    классов — не перебивает всё подряд.
+    """
+    t = text.lower()
+
+    # VOLUME_UP ↔ VOLUME_DOWN: антонимы, tiny не различает.
+    if intent in (Intent.VOLUME_UP, Intent.VOLUME_DOWN):
+        if any(w in t for w in _VOLUME_DOWN_WORDS):
+            return Intent.VOLUME_DOWN
+        if any(w in t for w in _VOLUME_UP_WORDS):
+            return Intent.VOLUME_UP
+
+    # CLEANUP_DISK ↔ CLEANUP_RECYCLE: «мусор» / «мусорка».
+    if intent in (Intent.CLEANUP_DISK, Intent.CLEANUP_RECYCLE):
+        if any(w in t for w in _RECYCLE_WORDS):
+            return Intent.CLEANUP_RECYCLE
+        if any(w in t for w in _DISK_WORDS):
+            return Intent.CLEANUP_DISK
+
+    # SMALLTALK → SYSTEM_STATUS: «как дела/жизнь/настроение».
+    if intent == Intent.SYSTEM_STATUS:
+        if any(w in t for w in _SMALLTALK_AS_SYSTEM):
+            return Intent.SMALLTALK
+
+    # LLM_QUESTION ↔ MUSIC_NOW_PLAYING: «что такое/что значит».
+    if intent == Intent.MUSIC_NOW_PLAYING:
+        if any(w in t for w in _LLM_QUESTION_WORDS):
+            return Intent.LLM_QUESTION
+
+    return intent
+
+
+# ── SetFit ─────────────────────────────────────────────────
+_torch_tuned = False
+
+
+def _tune_torch():
+    """MEM-OPT (патч 2): настроить пулы потоков torch.
+
+    ВАЖНО: вызывать ДО from setfit. set_num_interop_threads работает
+    только до первой параллельной работы torch, а setfit её запускает
+    при импорте. Разбито на отдельные try, чтобы падение
+    set_num_interop_threads не отменяло set_num_threads и
+    set_flush_denormal.
+    """
+    global _torch_tuned
+    if _torch_tuned:
+        return
+    _torch_tuned = True
+
     try:
-        with open(_FIT_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
+        import torch
     except Exception as e:
-        log(f"intent: ошибка чтения {_FIT_FILE}: {e}", tag="BRAIN", level="WARN")
-        return [], []
+        log(f"intent: torch import: {e}", tag="BRAIN", level="WARN")
+        return
 
-    if not isinstance(data, dict):
-        log(f"intent: {_FIT_FILE} — не dict, fit пропущен", tag="BRAIN", level="WARN")
-        return [], []
+    try:
+        torch.set_num_threads(2)
+        log("intent: torch.set_num_threads(2) — ok",
+            tag="BRAIN", level="DEBUG")
+    except Exception as e:
+        log(f"intent: torch.set_num_threads: {e}", tag="BRAIN", level="WARN")
 
-    X, Y = [], []
-    for intent_name, phrases in data.items():
-        try:
-            intent = Intent(intent_name)
-        except ValueError:
-            log(f"intent: неизвестный intent в fit: {intent_name}", tag="BRAIN", level="WARN")
-            continue
-        if not isinstance(phrases, list):
-            continue
-        for phrase in phrases:
-            if isinstance(phrase, str) and phrase.strip():
-                X.append(phrase.strip())
-                Y.append(intent)
-    return X, Y
+    try:
+        torch.set_num_interop_threads(1)
+        log("intent: torch.set_num_interop_threads(1) — ok",
+            tag="BRAIN", level="DEBUG")
+    except Exception as e:
+        log(f"intent: torch.set_num_interop_threads: {e}",
+            tag="BRAIN", level="WARN")
 
-
-def _check_overlap(X: list[str]) -> list[str]:
-    """Проверить пересечения fit-фраз с _ROUTES (utterances)."""
-    routes_set = {u.strip() for utts in _ROUTES.values() for u in utts}
-    return [p for p in X if p.strip() in routes_set]
+    try:
+        torch.set_flush_denormal(True)
+        log("intent: torch.set_flush_denormal(True) — ok",
+            tag="BRAIN", level="DEBUG")
+    except Exception as e:
+        log(f"intent: torch.set_flush_denormal: {e}",
+            tag="BRAIN", level="WARN")
 
 
-def _init_router():
-    global _router
-    if _router is not None:
-        return _router
+def _init_setfit():
+    global _setfit_model
+    if _setfit_model is not None:
+        return _setfit_model
 
     with _lock:
-        if _router is not None:
-            return _router
+        if _setfit_model is not None:
+            return _setfit_model
 
-        try:
-            from semantic_router import IndexedRouter, Route, load_router
-            from semantic_router.encoders import FastEmbedEncoder
-        except ImportError as e:
-            log(f"intent: semantic_router не установлен: {e}", tag="BRAIN", level="ERROR")
+        if not _MODEL_DIR.exists():
+            log(f"intent: SetFit модель не найдена в {_MODEL_DIR} — "
+                f"работаем только на exact+fuzzy", tag="BRAIN", level="ERROR")
             return None
 
-        if not _ROUTES:
-            log("intent: _ROUTES пуст — router не создастся", tag="BRAIN", level="ERROR")
-            return None
-
-        if _ROUTER_FILE.exists():
-            try:
-                router = load_router(path=str(_ROUTER_FILE))
-                log(f"intent: router загружен из {_ROUTER_FILE} (без fit)", tag="BRAIN")
-                _router = router
-                return _router
-            except Exception as e:
-                log(f"intent: load_router error: {e} — пересоздаю", tag="BRAIN", level="WARN")
-                try:
-                    _ROUTER_FILE.unlink()
-                except Exception:
-                    pass
+        # ── MEM-OPT (патч 2): настроить torch ДО setfit ──
+        _tune_torch()
 
         try:
-            routes = [
-                Route(name=intent.value, utterances=utterances)
-                for intent, utterances in _ROUTES.items()
-            ]
-            encoder = FastEmbedEncoder(
-                name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
-            )
-            router = IndexedRouter(encoder=encoder, routes=routes)
-            router.confidence_threshold = _THRESHOLD
+            from setfit import SetFitModel
+            model = SetFitModel.from_pretrained(str(_MODEL_DIR))
 
-            X, Y = _load_fit()
-            if X:
-                overlap = _check_overlap(X)
-                if overlap:
-                    log(f"intent: WARN {len(overlap)}/{len(X)} fit-фраз "
-                        f"пересекаются с _ROUTES: {overlap[:5]}",
-                        tag="BRAIN", level="WARN")
-                try:
-                    report = router.fit(X=X, y=Y, method="platt")
-                    log(f"intent: router создан, fit accuracy={report.accuracy:.2f}, "
-                        f"ece={report.ece:.3f}", tag="BRAIN")
-                except Exception as e:
-                    log(f"intent: fit error: {e} — без калибровки",
-                        tag="BRAIN", level="WARN")
-            else:
-                log("intent: fit-фраз нет — без калибровки (confidence_threshold)",
-                    tag="BRAIN", level="WARN")
-
+            # ── MEM-OPT (патч 3): eval-режим ──
+            # Отключает dropout/batchnorm-тренинг и градиентные
+            # буферы. SetFit обычно делает это сам, но проверить
+            # стоит — если модель осталась в train, память течёт.
             try:
-                _ROUTER_FILE.parent.mkdir(parents=True, exist_ok=True)
-                router.to_json(path=str(_ROUTER_FILE))
-                log(f"intent: router сохранён в {_ROUTER_FILE}", tag="BRAIN")
+                if hasattr(model, "model") and model.model is not None:
+                    model.model.eval()
+                    log("intent: model.eval() — ok",
+                        tag="BRAIN", level="DEBUG")
             except Exception as e:
-                log(f"intent: to_json error: {e}", tag="BRAIN", level="WARN")
+                log(f"intent: model.eval: {e}", tag="BRAIN", level="WARN")
 
-            _router = router
+            _setfit_model = model
+            log(f"intent: SetFit загружен из {_MODEL_DIR}", tag="BRAIN")
         except Exception as e:
-            log(f"intent: router не создался: {e}", tag="BRAIN", level="ERROR")
+            log(f"intent: SetFit не загрузился: {e}", tag="BRAIN", level="ERROR")
             return None
 
-    return _router
+    return _setfit_model
 
 
+def _setfit_predict(text: str) -> tuple[Intent, float] | None:
+    """Предсказание SetFit + уверенность (max вероятность)."""
+    model = _init_setfit()
+    if model is None:
+        return None
+    try:
+        # ── MEM-OPT (патч 3): inference_mode ──
+        # Убирает градиентные буферы во время predict.
+        import torch
+        with torch.inference_mode():
+            proba = model.predict_proba([text])
+        if hasattr(proba, "numpy"):
+            proba = proba.numpy()
+        # proba shape: (1, n_classes)
+        row = proba[0]
+        # индекс максимума
+        best_idx = int(max(range(len(row)), key=lambda i: row[i]))
+        best_conf = float(row[best_idx])
+        label = str(model.labels[best_idx])
+        try:
+            intent = Intent(label)
+        except ValueError:
+            return None
+        return intent, best_conf
+    except Exception as e:
+        log(f"intent: SetFit predict error: {e}", tag="BRAIN", level="WARN")
+        return None
+
+
+# ── resolve ────────────────────────────────────────────────
 def resolve(text: str) -> tuple[Intent, float]:
     """Вернуть (Intent, confidence). UNKNOWN — если не уверен.
 
     Приоритет:
-      1. Exact match с фразой из _ROUTES → (intent, 1.0). Без эмбеддингов.
-      2. Эмбеддинги (IndexedRouter) → (intent, confidence) или UNKNOWN.
-      3. FUZZY FALLBACK (2026-11-07, #4): если эмбеддинги < 0.5 → fuzzy
-         по всем фразам всех интентов (difflib, порог 0.8). «включи радio»
-         (0.45) → «включи радио» (0.92) → MUSIC_PLAY (1.00). Без LLM.
+      1. Exact-match → (intent, 1.0).
+      2. SetFit → (intent, confidence) + пост-правила.
+      3. Fuzzy fallback, если SetFit < порога.
     """
     if not text:
         return Intent.UNKNOWN, 0.0
 
-    # 1. Exact-first: точное совпадение с routes.
+    # 1. Exact-first.
     exact = _exact_match(text)
     if exact is not None:
         intent, conf = exact
@@ -282,56 +340,52 @@ def resolve(text: str) -> tuple[Intent, float]:
             tag="BRAIN")
         return intent, conf
 
-    # 2. Эмбеддинги — как раньше.
-    router = _init_router()
-    if router is None:
-        # Router не создался — сразу fuzzy fallback (без эмбеддингов).
+    # 2. SetFit.
+    setfit = _setfit_predict(text)
+    if setfit is not None:
+        intent, conf = setfit
+        # 3. Пост-правила.
+        intent_fixed = _apply_post_rules(text, intent)
+        if intent_fixed != intent:
+            log(f"intent: «{text}» → {intent.value} → {intent_fixed.value} "
+                f"(post-rule, setfit_conf={conf:.2f})", tag="BRAIN")
+            return intent_fixed, conf
+        if conf >= _THRESHOLD:
+            log(f"intent: «{text}» → {intent.value} "
+                f"(setfit, conf={conf:.2f})", tag="BRAIN")
+            return intent, conf
+        # 4. Fuzzy fallback, если SetFit не уверен.
         fuzzy = _fuzzy_fallback(text)
         if fuzzy is not None:
-            intent, conf = fuzzy
-            log(f"intent: «{text}» → {intent.value} "
-                f"(fuzzy, conf={conf:.2f}, router=None)", tag="BRAIN")
-            return intent, conf
-        return Intent.UNKNOWN, 0.0
-    try:
-        choice = router(text)
-        emb_conf = float(choice.confidence or 0.0)
-        if not choice.name or emb_conf < _THRESHOLD:
-            # 3. FUZZY FALLBACK (2026-11-07, #4): эмбеддинги < 0.5 → fuzzy.
-            fuzzy = _fuzzy_fallback(text)
-            if fuzzy is not None:
-                intent, conf = fuzzy
-                log(f"intent: «{text}» → {intent.value} "
-                    f"(fuzzy, conf={conf:.2f}, emb={emb_conf:.2f})", tag="BRAIN")
-                return intent, conf
-            return Intent.UNKNOWN, emb_conf
-        try:
-            intent = Intent(choice.name)
-        except ValueError:
-            return Intent.UNKNOWN, emb_conf
-        log(f"intent: «{text}» → {intent.value} "
-            f"(confidence={emb_conf:.2f})", tag="BRAIN")
-        return intent, emb_conf
-    except Exception as e:
-        log(f"intent: resolve error: {e}", tag="BRAIN", level="WARN")
-        # Даже при ошибке эмбеддингов — fuzzy fallback.
-        fuzzy = _fuzzy_fallback(text)
-        if fuzzy is not None:
-            intent, conf = fuzzy
-            log(f"intent: «{text}» → {intent.value} "
-                f"(fuzzy, conf={conf:.2f}, emb_error)", tag="BRAIN")
-            return intent, conf
-        return Intent.UNKNOWN, 0.0
+            fi, fc = fuzzy
+            log(f"intent: «{text}» → {fi.value} "
+                f"(fuzzy, conf={fc:.2f}, setfit={conf:.2f})", tag="BRAIN")
+            return fi, fc
+        return Intent.UNKNOWN, conf
+
+    # SetFit недоступен — сразу fuzzy.
+    fuzzy = _fuzzy_fallback(text)
+    if fuzzy is not None:
+        fi, fc = fuzzy
+        log(f"intent: «{text}» → {fi.value} "
+            f"(fuzzy, conf={fc:.2f}, setfit=None)", tag="BRAIN")
+        return fi, fc
+    return Intent.UNKNOWN, 0.0
 
 
 def warmup() -> bool:
-    """Прогреть router (загрузить intent_router.json + encoder)."""
+    """Прогреть SetFit (загрузить модель + первый predict)."""
     try:
-        router = _init_router()
-        if router is None:
-            log("intent: warmup — router не создался", tag="BRAIN", level="WARN")
+        model = _init_setfit()
+        if model is None:
+            log("intent: warmup — SetFit не загрузился", tag="BRAIN", level="WARN")
             return False
-        log("intent: warmup — router готов", tag="BRAIN")
+        # первый predict — прогрев токенизатора/энкодера
+        # ── MEM-OPT: inference_mode и здесь ──
+        import torch
+        with torch.inference_mode():
+            _ = model.predict(["прогрев"])
+        log("intent: warmup — SetFit готов", tag="BRAIN")
         return True
     except Exception as e:
         log(f"intent: warmup error: {e}", tag="BRAIN", level="WARN")

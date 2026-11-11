@@ -49,6 +49,8 @@ _TYPE_TO_ACTION: dict[str, str] = {
     "track": "play_track",
     "radio": "play_radio",
     "mood": "play_mood",
+    "search": "play_search",
+    "local_liked": "play_local_liked",
 }
 
 

@@ -22,6 +22,15 @@
 #   («сделай потише») → Яндекс: артист «сделай потише» → «100 из 10».
 #   Теперь: «сделай» — в NOISE_WORDS (вычитается), остаётся «потише» →
 #   STOP_WORDS → None → NLU → VOLUME_DOWN → controls → тише.
+#
+# ── PLAY_SEARCH (v6.5) ──────────────────────────────────────────────
+#   Убрана эвристика _is_short_query (короткое → play_artist, длинное →
+#   play_track). Без явных ARTIST_HINTS/TRACK_HINTS классификатор отдаёт
+#   {"action": "play_search", "query": q2} — сырую строку.
+#   Дальше: workers/music/main.py::_handle_play("search") ищет
+#   локально (search_local: точный → phon → fuzzy) → Яндекс (search_track).
+#   Это чинит «включи что-нибудь необычное», «поставь ту песню про…»,
+#   где эвристика «artist/track» угадывала неверно.
 
 from brain.skills.music._shared import (
     STOP_WORDS, PLAY_TRIGGERS, NOISE_WORDS, GENRE_ALIASES,
@@ -29,8 +38,6 @@ from brain.skills.music._shared import (
     _strip_stop_prefix,
 )
 from shared.music_words import resolve_mood
-
-SHORT_QUERY_WORDS = 2
 
 DISLIKE_TRIGGERS = (
     "надоело",
@@ -56,10 +63,6 @@ def _detect_intent(query: str):
         cleaned = cleaned.replace(word, "")
     cleaned = " ".join(cleaned.split()).strip()
     return force_artist, force_track, cleaned
-
-
-def _is_short_query(query: str) -> bool:
-    return len(query.split()) <= SHORT_QUERY_WORDS
 
 
 def classify(command: str) -> dict | None:
@@ -135,7 +138,7 @@ def classify(command: str) -> dict | None:
     if mood:
         return {"action": "play_mood", "mood": mood}
 
-    if any(w in t for w in PLAY_TRIGGERS) or _is_short_query(t):
+    if any(w in t for w in PLAY_TRIGGERS) or len(t.split()) <= 2:
         q2 = command
         for word in PLAY_TRIGGERS:
             q2 = q2.replace(word, "")
@@ -164,9 +167,7 @@ def classify(command: str) -> dict | None:
         if force_track:
             return {"action": "play_track", "track": q2}
 
-        if _is_short_query(q2):
-            return {"action": "play_artist", "artist": q2}
-        else:
-            return {"action": "play_track", "track": q2}
+        # Без явных hints — отдаём сырую строку в поиск (локально → Яндекс).
+        return {"action": "play_search", "query": q2}
 
     return None
