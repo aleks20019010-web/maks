@@ -10,7 +10,7 @@ workers/music/main.py — Music worker.
   плеером, monitor_player видит результат и обновляет флаг.
 
 ── FIX (этап 0.2): MUSIC_AVAILABLE ────────────────────────────────
-  Если внешний диск (E:\\Music) отключён, cfg.MUSIC_AVAILABLE = False.
+  Если внешний диск (E:\Music) отключён, cfg.MUSIC_AVAILABLE = False.
   Music-воркер работает вхолостую: команды принимает, play — отказ.
 
 ── FIX (этап 0.5): warm_up_prefetch ───────────────────────────────
@@ -36,6 +36,21 @@ DUCKING (день 29, вечер):
   - check_duck_watchdog() при пустой очереди.
 
 FIX (день 29, вечер, #2): _handle_play в отдельном потоке.
+
+── LOCAL_LIKED (v6.5) ─────────────────────────────────────────────
+  _handle_play(name="local_liked") — делегирует в modes.queue_local_liked()
+  (локальные первыми, догрузка Яндексом — в modes.py). main.py больше
+  не знает про liked_tracks/search_local — тонкий диспатч.
+
+── SEARCH (v6.5) ──────────────────────────────────────────────────
+  _handle_play(name="search") — поиск по запросу:
+    1. search_local(query) — локальный индекс (точный → phon → fuzzy).
+       Нашли — ОЧИЩАЕМ playlist/queued/prefetched, кладём один
+       LocalTrack, play_index(0). Это гарантирует, что заиграет
+       именно найденный трек, а не warm_up-локальный, который
+       _stop_old_track → _reset_playback_state положил в playlist[0].
+    2. search.search_track(query) — Яндекс.
+    3. Не нашли — лог.
 """
 
 import sys
@@ -193,6 +208,38 @@ def _handle_play(name: str, data: dict):
     elif name == "liked":
         if modes.queue_liked_tracks():
             playback.play_index(0)
+
+    elif name == "local_liked":
+        if modes.queue_local_liked():
+            playback.play_index(0)
+
+    elif name == "search":
+        query = data.get("query", "")
+        if not query:
+            return
+        from workers.music.search import search_local
+        local = search_local(query)
+        if local:
+            from workers.music.local import LocalTrack
+            with state.playlist_lock:
+                state.playlist.clear()
+                state.prefetched.clear()
+            with state.queued_lock:
+                state.queued_track_ids.clear()
+            state.playlist_index = 0
+            with state.playlist_lock:
+                state.playlist.append(LocalTrack(local["path"]))
+            state.playlist_mode = "local_search"
+            playback.play_index(0)
+            log(f"play(search) «{query}» → локально: {local.get('artist')} — {local.get('title')}", tag="MUSIC")
+            return
+        track = search.search_track(query)
+        if track:
+            if modes.start_single_track(track):
+                playback.play_index(0)
+            log(f"play(search) «{query}» → яндекс: {track.title}", tag="MUSIC")
+            return
+        log(f"play(search) «{query}» — не найдено", tag="MUSIC", level="WARN")
 
     elif name == "radio":
         station_key = data.get("station", "")
