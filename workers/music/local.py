@@ -28,6 +28,10 @@
 #   LikedTrack — лёгкий дескриптор лайка (artist, title, track_id).
 #   Не грузит Яндекс. Скачивается по требованию в playback.play_index
 #   (search_local → download_by_id(track.id)).
+#
+# ── PHON (v6.5) ─────────────────────────────────────────────────
+#   phon_artist / phon_title в индексе — для search_local (search.py:
+#   точный → phon → fuzzy). phon() из workers/music/phon.py.
 
 import os
 import json
@@ -41,6 +45,7 @@ from shared.log import log
 from shared.audio_cache import normalize
 from workers.music import state
 from workers.music._shared import GENRE_TAGS_MAP, _clean_filename
+from workers.music.phon import phon
 
 
 try:
@@ -100,14 +105,18 @@ def _build_index() -> dict:
             mtime, size = st.st_mtime, st.st_size
         except Exception:
             mtime, size = 0, 0
+        artist = tags.get("artist") or ""
+        title = tags.get("title") or _clean_filename(path)
         tracks.append({
             "path": path,
-            "artist": tags.get("artist") or "",
-            "title": tags.get("title") or _clean_filename(path),
+            "artist": artist,
+            "title": title,
             "album": tags.get("album") or "",
             "genre": (tags.get("genre") or "").lower(),
             "mtime": mtime,
             "size": size,
+            "phon_artist": phon(artist),
+            "phon_title": phon(title),
         })
 
     try:
@@ -223,14 +232,18 @@ def add_path_to_index(path: str):
             mtime, size = st.st_mtime, st.st_size
         except Exception:
             mtime, size = 0, 0
+        artist = tags.get("artist") or ""
+        title = tags.get("title") or _clean_filename(path)
         tracks.append({
             "path": path,
-            "artist": tags.get("artist") or "",
-            "title": tags.get("title") or _clean_filename(path),
+            "artist": artist,
+            "title": title,
             "album": tags.get("album") or "",
             "genre": (tags.get("genre") or "").lower(),
             "mtime": mtime,
             "size": size,
+            "phon_artist": phon(artist),
+            "phon_title": phon(title),
         })
         idx["tracks"] = tracks
         _save_index(idx)

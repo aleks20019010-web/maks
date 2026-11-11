@@ -47,6 +47,15 @@
 #     - не скачался → skip (idx += 1, attempts += 1).
 #     - memory.remember_play(...) один раз после выбора файла.
 #   Импорт: from workers.music.local import LocalTrack, LikedTrack.
+#
+# ── LOCAL_SEARCH_NEXT (2026-11-11) ──────────────────────────────
+#   play_next: при переходе «дальше» из режимов local_search / single
+#   сбрасывает playlist_mode в "local_search_next" ДО play_index.
+#   Зачем: brain/main.py в music_started говорит PLAY_SEARCH_FOUND
+#   только для mode in ("single", "local_search"). Если после
+#   play_search (mode="local_search") пользователь нажал «дальше»,
+#   без сброса режима TTS снова сказал бы «Нашёл: {artist} — {title}».
+#   С "local_search_next" TTS молчит (не входит в список).
 
 import os
 import time
@@ -393,6 +402,11 @@ def play_next(from_finish=False):
 
     FIX (этап 2.6): флаг music_playing НЕ трогаем — monitor_player увидит
     результат (Playing → set, Ended/None → clear).
+
+    FIX (2026-11-11): при переходе «дальше» из режимов local_search /
+    single сбрасываем playlist_mode в "local_search_next" ДО play_index.
+    Иначе brain/main.py::_handle_event("music_started", mode=...) снова
+    сказал бы PLAY_SEARCH_FOUND («Нашёл: ...») при каждом next.
     """
     now = time.time()
     if now - state.last_next_time < cfg.NEXT_DEBOUNCE_SEC:
@@ -436,6 +450,12 @@ def play_next(from_finish=False):
                 ms.on_skip(artist=_skip_artist, track=_skip_title)
         except Exception as e:
             log(f"mind_stream.on_skip: {e}", tag="MUSIC", level="WARN")
+
+    # FIX (2026-11-11): TTS PLAY_SEARCH_FOUND — только для первого
+    # трека после play_search. При «дальше»/play_next — сбрасываем
+    # режим, чтобы TTS не срабатывал повторно.
+    if state.playlist_mode in ("local_search", "single"):
+        state.playlist_mode = "local_search_next"
 
     next_idx = state.playlist_index + 1
     with state.playlist_lock:

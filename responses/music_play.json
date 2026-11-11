@@ -107,6 +107,23 @@
     {"text": "sil<[50]> Секунду sil<[75]> ищу {query}", "style": "friendly", "weight": 1.0, "emotion": "neutral", "slot": "core"},
     {"text": "sil<[50]> Смотрю sil<[75]> что есть по запросу {query}", "style": "normal", "weight": 1.0, "emotion": "neutral", "slot": "core"}
   ],
+  "PLAY_SEARCH_FOUND": [
+    {"text": "Включаю sil<[75]> {artist} — {title}", "style": "friendly", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "Нашёл sil<[75]> {artist} — {title}", "style": "normal", "weight": 1.2, "emotion": "good", "slot": "core"},
+    {"text": "sil<[50]> {artist} sil<[75]> {title}", "style": "normal", "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "Есть sil<[75]> {artist} — {title}", "style": "friendly", "weight": 1.2, "emotion": "good", "slot": "core"},
+    {"text": "{artist} sil<[75]> {title} sil<[150]> Держите", "style": "friendly", "weight": 1.2, "emotion": "good", "slot": "core"},
+    {"text": "sil<[50]> Нашёл sil<[75]> {artist} sil<[100]> {title}", "style": "normal", "weight": 1.2, "emotion": "good", "slot": "core"},
+    {"text": "Секунду sil<[75]> Вот: {artist} — {title}", "style": "friendly", "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "{artist} sil<[75]> {title} sil<[150]> Поехали", "style": "friendly", "humor": 0.1, "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "sil<[50]> Отлично sil<[75]> {artist} — {title}", "style": "normal", "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "Вот ваш трек sil<[75]> {artist} — {title}", "style": "formal", "weight": 1.0, "emotion": "neutral", "slot": "core"},
+    {"text": "sil<[50]> Сейчас sil<[75]> {artist} sil<[100]> {title}", "style": "normal", "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "{artist} sil<[75]> {title} sil<[150]> Включаю", "style": "friendly", "weight": 1.2, "emotion": "good", "slot": "core"},
+    {"text": "sil<[50]> Так sil<[75]> {artist} — {title}", "style": "normal", "humor": 0.1, "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "{artist} — {title} sil<[150]> Ловите", "style": "friendly", "humor": 0.1, "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "sil<[50]> Вот sil<[75]> {artist} — {title}", "style": "normal", "weight": 1.0, "emotion": "good", "slot": "core"}
+  ],
   "PLAY_GENRE": [
     {"text": "Включ+аю {genre}", "style": "normal", "weight": 2.5, "emotion": "good", "slot": "core"},
     {"text": "Ст+авлю {genre}", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},

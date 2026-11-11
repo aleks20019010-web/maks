@@ -9,30 +9,17 @@
 #   Проверка ДО playlist_mode — discovery работает в любом режиме.
 #
 # ── FIX (этап 0.5): print → log(tag="MUSIC") ────────────────────
-#   Раньше sources.py шёл в stderr (print), в jarvis.log его не было.
-#   Отладка «почему источник пуст» — только по консоли.
-#   Теперь: log(tag="MUSIC", level=...).
-#     📊/📰 (загрузка источника) — DEBUG (шумно).
-#     ✗ (ошибки Yandex API) — WARN.
-#     📻 (переходы режимов: артист кончился → mixed) — INFO.
-#     ⛔/⏭/♻ (blacklist, дубли, автосброс) — DEBUG.
-#     🔄 DISCOVERY — INFO.
 #
 # ── P1.5 (2026-11-09): Яндекс — не долбить мёртвый API ──────────
-#   _yandex_is_down() / _mark_yandex_fail() / _mark_yandex_ok().
-#   Все обращения к Яндекс-источникам обёрнуты проверкой.
-#   5 фейлов подряд → блок на YANDEX_BLOCK_SEC.
 #
 # ── LOCAL_LIKED (v6.5) ──────────────────────────────────────────
-#   playlist_mode == "local_liked" — ленивый источник лайков.
-#   modes.queue_local_liked() кладёт state.liked_queue = list(liked),
-#   state.liked_cursor = 0. Здесь берём по одному:
-#     item = state.liked_queue[state.liked_cursor]
-#     state.liked_cursor += 1
-#     return LikedTrack(artist, title, track_id)
-#   LikedTrack скачивается по требованию в playback.play_index
-#   (search_local → download_by_id). Исчерпание → mixed.
-#   Discovery для local_liked НЕ работает — нечего ротировать.
+#
+# ── LOCAL_SEARCH (2026-11-11) ───────────────────────────────────
+#   playlist_mode == "local_search" — после play_search, который нашёл
+#   локальный трек. Дальше берём ДРУГИЕ треки того же артиста из
+#   local_index.json. Если кончились — wave.
+#   FIX: фильтр по in_playlist (пути в state.playlist), НЕ по
+#   played_track_ids (там нет путей LocalTrack).
 
 import time
 import random
@@ -77,7 +64,7 @@ def _mark_yandex_fail():
 
 
 def _mark_yandex_ok():
-    """Успех: сброс счётчика и блока. Лог — только если был сброс."""
+    """Успех: сброс счётчика и блока."""
     if state.yandex_fail_count > 0 or state.yandex_blocked_until > 0:
         log("Яндекс: снова доступен, сброс", tag="MUSIC", level="INFO")
     state.yandex_fail_count = 0
@@ -94,14 +81,9 @@ def _is_blacklisted(track_id) -> bool:
 
 
 # ============================================================
-# DISCOVERY (v5) — ротация: мин. weight > 0
+# DISCOVERY (v5)
 # ============================================================
 def _try_discovery():
-    """Трек с мин. weight > 0 (ротация снизу вверх). Рандомно каждые 10–20.
-
-    1. Локальный файл — find_local_by_track(fake_track) по artist+title.
-    2. Яндекс — tracks([int(id)]) для цифровых id.
-    """
     try:
         from memory import memory
         row = memory.get_discovery_track(
@@ -115,7 +97,6 @@ def _try_discovery():
         if not track_id:
             return None
 
-        # 1. Локальный файл — через fake track (find_local_by_track)
         try:
             from types import SimpleNamespace
             from shared.audio_cache import find_local_by_track
@@ -133,7 +114,6 @@ def _try_discovery():
         except Exception as e:
             log(f"discovery local: {e}", tag="MUSIC", level="DEBUG")
 
-        # 2. Яндекс — tracks([int(id)]), только цифровые
         tid_str = str(track_id)
         if state.client is not None and tid_str.isdigit():
             try:
@@ -452,12 +432,6 @@ def _try_similar():
 # LOCAL_LIKED (v6.5) — ленивый источник лайков
 # ============================================================
 def _try_local_liked():
-    """Взять следующий лайк из state.liked_queue (лениво).
-
-    modes.queue_local_liked() наполнил liked_queue и сбросил liked_cursor.
-    Здесь берём по одному: LikedTrack(artist, title, track_id).
-    LikedTrack скачивается по требованию в playback.play_index.
-    """
     queue = getattr(state, "liked_queue", None)
     if not queue:
         return None
@@ -467,7 +441,6 @@ def _try_local_liked():
     item = queue[cursor]
     state.liked_cursor = cursor + 1
 
-    # item может быть dict (из liked_tracks.json) или уже LikedTrack
     if isinstance(item, LikedTrack):
         track = item
     else:
@@ -476,7 +449,6 @@ def _try_local_liked():
         track_id = item.get("track_id", "") if isinstance(item, dict) else ""
         track = LikedTrack(artist=artist, title=title, track_id=str(track_id))
 
-    # Дубли/blacklist — по track_id (если он есть).
     tid = str(track.id) if track.id else ""
     if tid:
         with state.played_lock, state.queued_lock:
@@ -497,9 +469,7 @@ def _try_local_liked():
 def get_next_source_track():
     playlist_mode = state.playlist_mode
 
-    # ── LOCAL_LIKED (v6.5): ленивый источник лайков ──
-    # discovery НЕ работает для local_liked — нечего ротировать,
-    # пользователь явно попросил «мои лайки».
+    # ── LOCAL_LIKED (v6.5) ──
     if playlist_mode == "local_liked":
         track = _try_local_liked()
         if track:
@@ -510,7 +480,48 @@ def get_next_source_track():
         state.local_wait_until = 0.0
         return get_next_source_track()
 
-    # ── DISCOVERY (v5): рандомно каждые 10–20 треков — мин. weight > 0 ──
+    # ── LOCAL_SEARCH (2026-11-11): после локального поиска — похожие ──
+    # FIX: фильтр по in_playlist (пути в state.playlist), НЕ по played.
+    if playlist_mode in ("local_search", "local_search_next"):
+        cur = None
+        with state.playlist_lock:
+            if 0 <= state.playlist_index < len(state.playlist):
+                cur = state.playlist[state.playlist_index]
+        if cur is not None:
+            artist_name = ""
+            artists = getattr(cur, "artists", None)
+            if artists:
+                a = artists[0]
+                artist_name = getattr(a, "name", None) or str(a)
+            if not artist_name:
+                artist_name = getattr(cur, "artist", "") or ""
+            if artist_name:
+                from workers.music.local import _load_index_sync, LocalTrack
+                data = _load_index_sync()
+                all_tracks = data.get("tracks", []) if isinstance(data, dict) else []
+                # Уже в playlist (path) — не добавляем повторно.
+                in_playlist = set()
+                with state.playlist_lock:
+                    for _t in state.playlist:
+                        _p = getattr(_t, "path", None)
+                        if _p:
+                            in_playlist.add(_p)
+                for t in all_tracks:
+                    if t.get("artist", "").lower() != artist_name.lower():
+                        continue
+                    path = t.get("path", "")
+                    if not path or path in in_playlist:
+                        continue
+                    log(f"local_search → похожие {artist_name}: "
+                        f"{t.get('title', '?')}", tag="MUSIC", level="INFO")
+                    return LocalTrack(path)
+        log("local_search исчерпан → wave", tag="MUSIC", level="INFO")
+        state.playlist_mode = "wave"
+        state.wave_exhausted = False
+        state._consecutive_empty = 0
+        return get_next_source_track()
+
+    # ── DISCOVERY (v5) ──
     state.tracks_since_discovery += 1
     if state.tracks_since_discovery >= state.DISCOVERY_NEXT:
         state.tracks_since_discovery = 0

@@ -66,6 +66,15 @@ WARMUP (новое): NLU warmup в фоне при старте.
   При старте (после _init_self_state) в фоне тянет лайки из Яндекса
   и мержит в brain.liked_tracks через merge_from_yandex.
   Не блокирует старт brain — daemon-thread.
+
+── FIX (2026-11-11): двойной TTS на music_started ─────────────────
+  Было: в ветке music_started вызывались и PLAY_SEARCH_FOUND (для
+  mode=single/local_search), и NOW_PLAYING (всегда). TTS получал
+  две команды — одна перебивала другую, иногда обе молчали.
+  Стало: если mode=single/local_search → PLAY_SEARCH_FOUND.
+         иначе → NOW_PLAYING / NO_TRACK_PLAYING.
+  Плюс: в ветке now_playing был баг — использовалась переменная mode,
+  которой в этом событии нет (NameError). Убран мёртвый блок.
 """
 
 import sys
@@ -249,7 +258,7 @@ def _start_yandex_import_async():
 
 
 def _warmup_nlu():
-    """NLU warmup: загрузить intent_router.json + encoder в фоне."""
+    """NLU warmup: загрузить ONNX + tokenizer + labels в фоне."""
     try:
         from brain.nlu import intent as nlu_intent
         nlu_intent.warmup()
@@ -344,23 +353,23 @@ def _handle_event(msg: protocol.Message):
             respond_and_say("WAKE_REPEAT", is_event=True)
 
         elif msg.name == "now_playing":
+            # Это ответ на «что играет» — не путать с music_started.
             artist = msg.data.get("artist", "")
             title = msg.data.get("title", "")
             if artist or title:
                 state.set_current(artist, title)
             from brain.skills._helpers import respond_and_say
             if title and artist:
-                respond_and_say("NOW_PLAYING", is_event=True, title=title, artist=artist)
+                respond_and_say("NOW_PLAYING", is_event=True,
+                                title=title, artist=artist)
             elif title:
-                respond_and_say("NOW_PLAYING", is_event=True, title=title, artist="")
+                respond_and_say("NOW_PLAYING", is_event=True,
+                                title=title, artist="")
             else:
                 respond_and_say("NO_TRACK_PLAYING", is_event=True)
 
         elif msg.name == "discovery":
             # NEW (v6): music сообщил «будет трек-открытие».
-            # Brain решает «когда» → personality_core («что и как») → TTS.
-            # is_event=True → event.type="event" → SELF-реакции НЕ срабатывают,
-            # behavior_energy_low не перехватывает DISCOVERY_NEW.
             artist = msg.data.get("artist", "")
             title = msg.data.get("title", "")
             if artist or title:
@@ -400,6 +409,19 @@ def _handle_event(msg: protocol.Message):
                 log(f"brain: on_music_started: {e}",
                     tag="BRAIN", level="WARN")
 
+            # TTS с каноничным названием: только для play_search.
+            # mode="single" — Яндекс-трек, mode="local_search" — локальный.
+            # Для остальных (artist_only/wave/genre/...) TTS уже сказал skill.py.
+            if (artist or title) and mode in ("single", "local_search"):
+                try:
+                    from brain.skills._helpers import respond_and_say
+                    respond_and_say("PLAY_SEARCH_FOUND",
+                                    artist=artist or "?",
+                                    title=title or "?")
+                except Exception as e:
+                    log(f"brain: PLAY_SEARCH_FOUND TTS: {e}",
+                        tag="BRAIN", level="WARN")
+
         elif msg.name == "track_finished":
             state.clear_current()
 
@@ -428,9 +450,7 @@ def main():
     _init_self_state()
 
     _start_yandex_import_async()   # ← новое: лайки из Яндекса в фоне
-
-    # NLU warmup в фоне — до первой команды. Не блокирует старт.
-    _start_nlu_warmup()
+    _start_nlu_warmup()             # ONNX warmup в фоне
 
     log("brain: слушаю brain_inbox", tag="BRAIN")
 

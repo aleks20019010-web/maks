@@ -391,7 +391,7 @@ class MusicSkill(Skill):
         elif action == "play_search":
             query = result["query"]
             ipc.put(protocol.MUSIC_INBOX, protocol.play_search(query))
-            _respond_and_say("PLAY_SEARCH", query=query)
+            # TTS — после music_started, с каноничным названием (см. on_music_started)
 
         elif action == "like_current":
             from brain import liked_tracks as _lt

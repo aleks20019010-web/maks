@@ -6,8 +6,7 @@ workers/music/main.py — Music worker.
 ── FIX (этап 0.1): music_playing — см. playback.py ────────────────
   set_music_playing / clear_music_playing вызываются ТОЛЬКО в
   playback.py (play_index — инициализация, monitor_player — heartbeat/
-  снятие). main.py флаг НЕ трогает. pause/stop/resume управляют
-  плеером, monitor_player видит результат и обновляет флаг.
+  снятие). main.py флаг НЕ трогает.
 
 ── FIX (этап 0.2): MUSIC_AVAILABLE ────────────────────────────────
   Если внешний диск (E:\Music) отключён, cfg.MUSIC_AVAILABLE = False.
@@ -44,13 +43,15 @@ FIX (день 29, вечер, #2): _handle_play в отдельном поток
 
 ── SEARCH (v6.5) ──────────────────────────────────────────────────
   _handle_play(name="search") — поиск по запросу:
-    1. search_local(query) — локальный индекс (точный → phon → fuzzy).
+    1. music.duck(30) ДО play — чтобы новый плеер сразу стартовал
+       приглушённым (TTS уже говорит; ASR пришлёт duck_on, но музыка
+       уже 30% — set_player применит duck_level, без дёргания громкости).
+    2. search_local(query) — локальный индекс (точный → phon → fuzzy).
        Нашли — ОЧИЩАЕМ playlist/queued/prefetched, кладём один
-       LocalTrack, play_index(0). Это гарантирует, что заиграет
-       именно найденный трек, а не warm_up-локальный, который
-       _stop_old_track → _reset_playback_state положил в playlist[0].
-    2. search.search_track(query) — Яндекс.
-    3. Не нашли — лог.
+       LocalTrack, предзаполняем playlist до 10 треков того же артиста
+       (чтобы очередь продолжалась), play_index(0).
+    3. search.search_track(query) — Яндекс.
+    4. Не нашли — лог.
 """
 
 import sys
@@ -219,8 +220,16 @@ def _handle_play(name: str, data: dict):
             return
         from workers.music.search import search_local
         local = search_local(query)
+
+        # FIX: приглушить ДО play. TTS стартует → ASR шлёт duck_on, но
+        # музыка уже 30% (set_player применит duck_level). Без дёргания.
+        try:
+            music.duck(30)
+        except Exception as e:
+            log(f"search: duck pre-play: {e}", tag="MUSIC", level="WARN")
+
         if local:
-            from workers.music.local import LocalTrack
+            from workers.music.local import LocalTrack, _load_index_sync
             with state.playlist_lock:
                 state.playlist.clear()
                 state.prefetched.clear()
@@ -230,9 +239,38 @@ def _handle_play(name: str, data: dict):
             with state.playlist_lock:
                 state.playlist.append(LocalTrack(local["path"]))
             state.playlist_mode = "local_search"
+
+            # FIX: предзаполнить playlist треками того же артиста.
+            # Без этого get_next_source_track возвращает один и тот же
+            # трек повторно — played_track_ids для LocalTrack не заполняется.
+            try:
+                data_idx = _load_index_sync()
+                all_tracks = data_idx.get("tracks", []) if isinstance(data_idx, dict) else []
+                artist_name = local.get("artist", "").lower()
+                added = 0
+                existing = {local["path"]}
+                for t in all_tracks:
+                    if t.get("artist", "").lower() != artist_name:
+                        continue
+                    p = t.get("path", "")
+                    if not p or p in existing:
+                        continue
+                    with state.playlist_lock:
+                        state.playlist.append(LocalTrack(p))
+                    existing.add(p)
+                    added += 1
+                    if added >= 10:
+                        break
+                log(f"search: добавил {added} треков {artist_name} в playlist",
+                    tag="MUSIC")
+            except Exception as e:
+                log(f"search: похожие: {e}", tag="MUSIC", level="WARN")
+
             playback.play_index(0)
-            log(f"play(search) «{query}» → локально: {local.get('artist')} — {local.get('title')}", tag="MUSIC")
+            log(f"play(search) «{query}» → локально: "
+                f"{local.get('artist')} — {local.get('title')}", tag="MUSIC")
             return
+
         track = search.search_track(query)
         if track:
             if modes.start_single_track(track):
@@ -382,9 +420,6 @@ def main():
         log(f"music: VLC warmup: {e}", tag="MUSIC", level="WARN")
 
     # FIX (этап 0.1): залипший music_playing — сбрасываем при старте.
-    # Тут — единственное место вне playback.py, где трогаем флаг
-    # НАПРЯМУЮ (через clear_music_playing из playback). Это инициализация
-    # процесса, не «второй писатель». Дальше — только monitor_player.
     try:
         from workers.music.playback import clear_music_playing
         clear_music_playing()
