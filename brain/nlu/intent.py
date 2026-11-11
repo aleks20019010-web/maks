@@ -1,48 +1,31 @@
 # brain/nlu/intent.py
-# IntentResolver: SetFit → Intent + confidence.
+# IntentResolver: ONNX (SetFit, fp32) → Intent + confidence.
 #
 # Приоритет:
 #   1. Exact-match с фразой из config/intent_routes.json → (intent, 1.0).
-#   2. SetFit (models/setfit_intents/) → (intent, confidence).
+#   2. ONNX (models/setfit_intents_onnx/model.onnx) → (intent, confidence).
 #   3. Пост-правила (VOLUME_UP/DOWN, CLEANUP_DISK/RECYCLE,
-#      SMALLTALK/SYSTEM_STATUS, LLM_QUESTION/MUSIC_NOW_PLAYING) —
-#      чинят известные слабые места tiny-энкодера.
-#   4. Fuzzy fallback (difflib, порог 0.8) — если SetFit не уверен.
+#      SMALLTALK/SYSTEM_STATUS, LLM_QUESTION/MUSIC_NOW_PLAYING).
+#   4. Fuzzy fallback (difflib, порог 0.8) — если ONNX не уверен.
 #
 # UNKNOWN — если всё ниже порога.
-# warmup() — прогреть SetFit в фоне при старте brain.
+# warmup() — прогреть ONNX в фоне при старте brain.
 #
-# Заменяет semantic_router (IndexedRouter + FastEmbedEncoder).
+# ── ONNX (2026-11-11): замена PyTorch SetFit ──────────────────
+#   Было: from setfit import SetFitModel → 29.5с импорт, 35с warmup.
+#   Стало: onnxruntime + tokenizers.Tokenizer + labels.json.
+#     - import brain.main: 0.1с (setfit не тянется при старте)
+#     - загрузка ONNX: 0.7с
+#     - warmup: 1-2с (вместо 35)
+#     - инференс: 5-10мс (было 20)
 #
-# ── MEM-OPT (2026-11-11): ужимаем PyTorch ──────────────────────
-#   Модель уже маленькая (113 МБ на диске), но torch на CPU ест
-#   600+ МБ на рантайм, пулы потоков и кэши аллокатора.
+#   Модель: models/setfit_intents_onnx/model.onnx (111 МБ, fp32).
+#   Токенизатор: models/setfit_intents/tokenizer.json (2.4 МБ).
+#   Labels: models/setfit_intents_onnx/labels.json (18 классов).
 #
-#   ВАЖНО: import torch и настройка потоков идут ДО from setfit.
-#   set_num_interop_threads работает ТОЛЬКО до первой параллельной
-#   работы torch. setfit при импорте её запускает — поэтому порядок
-#   критичен.
-#
-#   Патчи:
-#     1. env OMP/MKL/TORCH_NUM_THREADS=2 + TOKENIZERS_PARALLELISM=false
-#        в самом начале файла — до любого импорта torch.
-#     2. import torch → set_num_threads(2) → set_num_interop_threads(1)
-#        → set_flush_denormal(True) — ДО from setfit.
-#     3. model.model.eval() + torch.inference_mode() при predict.
-#   Логика resolve/warmup/пост-правил НЕ изменена.
-
-import os
-
-# ── MEM-OPT (патч 1): env ДО любого импорта torch/setfit ──────
-# Каждый поток = стек + буферы. По умолчанию torch создаёт пул
-# по числу ядер (у 6 ГБ RAM обычно 4–8 ядер). 2 потока достаточно
-# для инференса tiny-энкодера, а память падает на 100–200 МБ.
-os.environ["OMP_NUM_THREADS"] = "2"
-os.environ["MKL_NUM_THREADS"] = "2"
-os.environ["TORCH_NUM_THREADS"] = "2"
-os.environ["TOKENIZERS_PARALLELISM"] = "false"
-os.environ["TRANSFORMERS_NO_ADVISORY_WARNINGS"] = "1"
-os.environ["HF_HUB_DISABLE_TELEMETRY"] = "1"
+#   ВАЖНО: onnxruntime может вернуть labels (строки) или probs
+#   (числа). Обрабатываем оба случая. Для набора данных SetFit
+#   обычно отдаёт labels, поэтому conf=1.0 — это нормально.
 
 import json
 import threading
@@ -53,14 +36,20 @@ from shared.log import log
 from brain.nlu.types import Intent
 
 
-_setfit_model = None
+_onnx_session = None
+_onnx_tokenizer = None
+_onnx_labels = None
 _lock = threading.Lock()
-_ROUTES_FILE = cfg.CONFIG_DIR / "intent_routes.json"
-_MODEL_DIR = cfg.DATA_DIR.parent / "models" / "setfit_intents"
 
-# Порог уверенности SetFit: ниже — пробуем fuzzy, потом UNKNOWN.
-# 0.5 — стартовое значение; на CV модель уверена (>0.8) на большинстве
-# правильных предсказаний, а на ошибочных — часто ниже.
+_ROUTES_FILE = cfg.CONFIG_DIR / "intent_routes.json"
+
+# ONNX + tokenizer + labels
+_ONNX_DIR = cfg.DATA_DIR.parent / "models" / "setfit_intents_onnx"
+_ONNX_MODEL = _ONNX_DIR / "model.onnx"
+_ONNX_LABELS = _ONNX_DIR / "labels.json"
+_TOKENIZER_FILE = cfg.DATA_DIR.parent / "models" / "setfit_intents" / "tokenizer.json"
+
+# Порог уверенности: ниже — пробуем fuzzy, потом UNKNOWN.
 _THRESHOLD = 0.5
 _FUZZY_FALLBACK_THRESHOLD = 0.80
 
@@ -157,7 +146,7 @@ def _fuzzy_fallback(text: str) -> tuple[Intent, float] | None:
     return None
 
 
-# ── Пост-правила (чинят известные слабости tiny-энкодера) ──
+# ── Пост-правила ───────────────────────────────────────────
 _VOLUME_DOWN_WORDS = ("уменьши", "убавь", "тише", "потише", "прикрути", "минимум")
 _VOLUME_UP_WORDS = ("увеличь", "прибавь", "громче", "погромче", "максимум")
 _RECYCLE_WORDS = ("корзин", "мусорк")
@@ -167,33 +156,25 @@ _LLM_QUESTION_WORDS = ("что такое", "что значит", "объясн
 
 
 def _apply_post_rules(text: str, intent: Intent) -> Intent:
-    """Чинит известные пары, где tiny-энкодер стабильно путается.
-
-    Применяется ТОЛЬКО если SetFit предсказал один из конфликтующих
-    классов — не перебивает всё подряд.
-    """
+    """Чинит известные пары, где модель стабильно путается."""
     t = text.lower()
 
-    # VOLUME_UP ↔ VOLUME_DOWN: антонимы, tiny не различает.
     if intent in (Intent.VOLUME_UP, Intent.VOLUME_DOWN):
         if any(w in t for w in _VOLUME_DOWN_WORDS):
             return Intent.VOLUME_DOWN
         if any(w in t for w in _VOLUME_UP_WORDS):
             return Intent.VOLUME_UP
 
-    # CLEANUP_DISK ↔ CLEANUP_RECYCLE: «мусор» / «мусорка».
     if intent in (Intent.CLEANUP_DISK, Intent.CLEANUP_RECYCLE):
         if any(w in t for w in _RECYCLE_WORDS):
             return Intent.CLEANUP_RECYCLE
         if any(w in t for w in _DISK_WORDS):
             return Intent.CLEANUP_DISK
 
-    # SMALLTALK → SYSTEM_STATUS: «как дела/жизнь/настроение».
     if intent == Intent.SYSTEM_STATUS:
         if any(w in t for w in _SMALLTALK_AS_SYSTEM):
             return Intent.SMALLTALK
 
-    # LLM_QUESTION ↔ MUSIC_NOW_PLAYING: «что такое/что значит».
     if intent == Intent.MUSIC_NOW_PLAYING:
         if any(w in t for w in _LLM_QUESTION_WORDS):
             return Intent.LLM_QUESTION
@@ -201,134 +182,96 @@ def _apply_post_rules(text: str, intent: Intent) -> Intent:
     return intent
 
 
-# ── SetFit ─────────────────────────────────────────────────
-_torch_tuned = False
-
-
-def _tune_torch():
-    """MEM-OPT (патч 2): настроить пулы потоков torch.
-
-    ВАЖНО: вызывать ДО from setfit. set_num_interop_threads работает
-    только до первой параллельной работы torch, а setfit её запускает
-    при импорте. Разбито на отдельные try, чтобы падение
-    set_num_interop_threads не отменяло set_num_threads и
-    set_flush_denormal.
-    """
-    global _torch_tuned
-    if _torch_tuned:
-        return
-    _torch_tuned = True
-
-    try:
-        import torch
-    except Exception as e:
-        log(f"intent: torch import: {e}", tag="BRAIN", level="WARN")
-        return
-
-    try:
-        torch.set_num_threads(2)
-        log("intent: torch.set_num_threads(2) — ok",
-            tag="BRAIN", level="DEBUG")
-    except Exception as e:
-        log(f"intent: torch.set_num_threads: {e}", tag="BRAIN", level="WARN")
-
-    try:
-        torch.set_num_interop_threads(1)
-        log("intent: torch.set_num_interop_threads(1) — ok",
-            tag="BRAIN", level="DEBUG")
-    except Exception as e:
-        log(f"intent: torch.set_num_interop_threads: {e}",
-            tag="BRAIN", level="WARN")
-
-    try:
-        torch.set_flush_denormal(True)
-        log("intent: torch.set_flush_denormal(True) — ok",
-            tag="BRAIN", level="DEBUG")
-    except Exception as e:
-        log(f"intent: torch.set_flush_denormal: {e}",
-            tag="BRAIN", level="WARN")
-
-
+# ── ONNX ───────────────────────────────────────────────────
 def _init_setfit():
-    global _setfit_model
-    if _setfit_model is not None:
-        return _setfit_model
+    """Загрузить ONNX-модель + tokenizers + labels."""
+    global _onnx_session, _onnx_tokenizer, _onnx_labels
+    if _onnx_session is not None:
+        return _onnx_session
 
     with _lock:
-        if _setfit_model is not None:
-            return _setfit_model
+        if _onnx_session is not None:
+            return _onnx_session
 
-        if not _MODEL_DIR.exists():
-            log(f"intent: SetFit модель не найдена в {_MODEL_DIR} — "
-                f"работаем только на exact+fuzzy", tag="BRAIN", level="ERROR")
+        if not _ONNX_MODEL.exists():
+            log(f"intent: ONNX не найден в {_ONNX_MODEL}",
+                tag="BRAIN", level="ERROR")
             return None
-
-        # ── MEM-OPT (патч 2): настроить torch ДО setfit ──
-        _tune_torch()
+        if not _TOKENIZER_FILE.exists():
+            log(f"intent: tokenizer.json не найден в {_TOKENIZER_FILE}",
+                tag="BRAIN", level="ERROR")
+            return None
+        if not _ONNX_LABELS.exists():
+            log(f"intent: labels.json не найден в {_ONNX_LABELS}",
+                tag="BRAIN", level="ERROR")
+            return None
 
         try:
-            from setfit import SetFitModel
-            model = SetFitModel.from_pretrained(str(_MODEL_DIR))
+            import onnxruntime as ort
+            from tokenizers import Tokenizer
 
-            # ── MEM-OPT (патч 3): eval-режим ──
-            # Отключает dropout/batchnorm-тренинг и градиентные
-            # буферы. SetFit обычно делает это сам, но проверить
-            # стоит — если модель осталась в train, память течёт.
-            try:
-                if hasattr(model, "model") and model.model is not None:
-                    model.model.eval()
-                    log("intent: model.eval() — ok",
-                        tag="BRAIN", level="DEBUG")
-            except Exception as e:
-                log(f"intent: model.eval: {e}", tag="BRAIN", level="WARN")
+            _onnx_session = ort.InferenceSession(str(_ONNX_MODEL))
 
-            _setfit_model = model
-            log(f"intent: SetFit загружен из {_MODEL_DIR}", tag="BRAIN")
+            _onnx_tokenizer = Tokenizer.from_file(str(_TOKENIZER_FILE))
+            _onnx_tokenizer.enable_truncation(max_length=512)
+
+            with open(_ONNX_LABELS, encoding="utf-8") as f:
+                _onnx_labels = json.load(f)
+
+            log(f"intent: ONNX загружен из {_ONNX_DIR} "
+                f"({len(_onnx_labels)} классов)", tag="BRAIN")
         except Exception as e:
-            log(f"intent: SetFit не загрузился: {e}", tag="BRAIN", level="ERROR")
+            log(f"intent: ONNX не загрузился: {e}", tag="BRAIN", level="ERROR")
             return None
 
-    return _setfit_model
+    return _onnx_session
 
 
 def _setfit_predict(text: str) -> tuple[Intent, float] | None:
-    """Предсказание SetFit + уверенность (max вероятность)."""
-    model = _init_setfit()
-    if model is None:
+    """ONNX-инференс + confidence."""
+    session = _init_setfit()
+    if session is None:
         return None
     try:
-        # ── MEM-OPT (патч 3): inference_mode ──
-        # Убирает градиентные буферы во время predict.
-        import torch
-        with torch.inference_mode():
-            proba = model.predict_proba([text])
-        if hasattr(proba, "numpy"):
-            proba = proba.numpy()
-        # proba shape: (1, n_classes)
-        row = proba[0]
-        # индекс максимума
-        best_idx = int(max(range(len(row)), key=lambda i: row[i]))
-        best_conf = float(row[best_idx])
-        label = str(model.labels[best_idx])
+        import numpy as np
+
+        enc = _onnx_tokenizer.encode(text)
+        input_ids = np.array([enc.ids], dtype=np.int64)
+        attention_mask = np.array([enc.attention_mask], dtype=np.int64)
+
+        input_names = [i.name for i in session.get_inputs()]
+        feed = {"input_ids": input_ids, "attention_mask": attention_mask}
+        if "token_type_ids" in input_names:
+            feed["token_type_ids"] = np.zeros_like(input_ids)
+
+        out = session.run(None, feed)[0]
+
+        first = out[0] if hasattr(out, "__getitem__") else out
+        if isinstance(first, str):
+            label = first
+            conf = 1.0
+        else:
+            probs = np.array(first)
+            idx = int(np.argmax(probs))
+            label = _onnx_labels[idx]
+            s = float(probs.sum())
+            if abs(s - 1.0) > 0.05:
+                e = np.exp(probs - probs.max())
+                probs = e / e.sum()
+            conf = float(probs[idx])
+
         try:
             intent = Intent(label)
         except ValueError:
             return None
-        return intent, best_conf
+        return intent, conf
     except Exception as e:
-        log(f"intent: SetFit predict error: {e}", tag="BRAIN", level="WARN")
+        log(f"intent: ONNX predict error: {e}", tag="BRAIN", level="WARN")
         return None
 
 
 # ── resolve ────────────────────────────────────────────────
 def resolve(text: str) -> tuple[Intent, float]:
-    """Вернуть (Intent, confidence). UNKNOWN — если не уверен.
-
-    Приоритет:
-      1. Exact-match → (intent, 1.0).
-      2. SetFit → (intent, confidence) + пост-правила.
-      3. Fuzzy fallback, если SetFit < порога.
-    """
     if not text:
         return Intent.UNKNOWN, 0.0
 
@@ -340,7 +283,7 @@ def resolve(text: str) -> tuple[Intent, float]:
             tag="BRAIN")
         return intent, conf
 
-    # 2. SetFit.
+    # 2. ONNX.
     setfit = _setfit_predict(text)
     if setfit is not None:
         intent, conf = setfit
@@ -348,44 +291,41 @@ def resolve(text: str) -> tuple[Intent, float]:
         intent_fixed = _apply_post_rules(text, intent)
         if intent_fixed != intent:
             log(f"intent: «{text}» → {intent.value} → {intent_fixed.value} "
-                f"(post-rule, setfit_conf={conf:.2f})", tag="BRAIN")
+                f"(post-rule, onnx_conf={conf:.2f})", tag="BRAIN")
             return intent_fixed, conf
         if conf >= _THRESHOLD:
             log(f"intent: «{text}» → {intent.value} "
-                f"(setfit, conf={conf:.2f})", tag="BRAIN")
+                f"(onnx, conf={conf:.2f})", tag="BRAIN")
             return intent, conf
-        # 4. Fuzzy fallback, если SetFit не уверен.
+        # 4. Fuzzy fallback, если ONNX не уверен.
         fuzzy = _fuzzy_fallback(text)
         if fuzzy is not None:
             fi, fc = fuzzy
             log(f"intent: «{text}» → {fi.value} "
-                f"(fuzzy, conf={fc:.2f}, setfit={conf:.2f})", tag="BRAIN")
+                f"(fuzzy, conf={fc:.2f}, onnx={conf:.2f})", tag="BRAIN")
             return fi, fc
         return Intent.UNKNOWN, conf
 
-    # SetFit недоступен — сразу fuzzy.
+    # ONNX недоступен — сразу fuzzy.
     fuzzy = _fuzzy_fallback(text)
     if fuzzy is not None:
         fi, fc = fuzzy
         log(f"intent: «{text}» → {fi.value} "
-            f"(fuzzy, conf={fc:.2f}, setfit=None)", tag="BRAIN")
+            f"(fuzzy, conf={fc:.2f}, onnx=None)", tag="BRAIN")
         return fi, fc
     return Intent.UNKNOWN, 0.0
 
 
 def warmup() -> bool:
-    """Прогреть SetFit (загрузить модель + первый predict)."""
+    """Прогреть ONNX (загрузить сессию + tokenizer + первый predict)."""
     try:
-        model = _init_setfit()
-        if model is None:
-            log("intent: warmup — SetFit не загрузился", tag="BRAIN", level="WARN")
+        session = _init_setfit()
+        if session is None:
+            log("intent: warmup — ONNX не загрузился", tag="BRAIN", level="WARN")
             return False
-        # первый predict — прогрев токенизатора/энкодера
-        # ── MEM-OPT: inference_mode и здесь ──
-        import torch
-        with torch.inference_mode():
-            _ = model.predict(["прогрев"])
-        log("intent: warmup — SetFit готов", tag="BRAIN")
+        # первый predict — прогрев ONNX-сессии
+        _ = _setfit_predict("прогрев")
+        log("intent: warmup — ONNX готов", tag="BRAIN")
         return True
     except Exception as e:
         log(f"intent: warmup error: {e}", tag="BRAIN", level="WARN")
