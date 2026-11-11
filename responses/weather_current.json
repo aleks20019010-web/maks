@@ -19,7 +19,7 @@
     {"text": "{temp} {gradus} sil<[150]> П+асмурно", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
     {"text": "{temp} sil<[50]> облачно sil<[150]> Дожд+я нет", "style": "friendly", "weight": 1.5, "emotion": "good", "slot": "core"},
     {"text": "{temp} {gradus} sil<[150]> Облачно sil<[150]> Но без дождя", "style": "friendly", "weight": 1.2, "emotion": "good", "slot": "core"},
-    {"text": "{temp} sil<[50]> пасм+урно sil<[150]> Можно выходить", "style": "friendly", "humor": 0.1, "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "{temp} sil<[50]> п+асмурно sil<[150]> Можно выходить", "style": "friendly", "humor": 0.1, "weight": 1.0, "emotion": "good", "slot": "core"},
     {"text": "{temp} {gradus} sil<[150]> Облака sil<[50]> но сухо", "style": "normal", "weight": 1.0, "emotion": "good", "slot": "core"}
   ],
   "WEATHER_MILD_RAIN": [
@@ -46,7 +46,7 @@
     {"text": "{temp} {gradus} sil<[50]> облачно sil<[150]> Но т+епло", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
     {"text": "{temp} sil<[50]> {sky} sil<[150]> Дожд+я нет", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
     {"text": "{temp} {gradus} sil<[150]> Облака sil<[50]> но т+епло", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
-    {"text": "{temp} sil<[50]> пасм+урно sil<[150]> Прогул+яться можно", "style": "friendly", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{temp} sil<[50]> п+асмурно sil<[150]> Прогул+яться можно", "style": "friendly", "weight": 1.5, "emotion": "good", "slot": "core"},
     {"text": "{temp} {gradus} sil<[150]> Небо хм+урится sil<[50]> но сухо", "style": "ironic", "humor": 0.2, "weight": 1.0, "emotion": "good", "slot": "core"},
     {"text": "{temp} sil<[50]> облачно sil<[150]> {wind}", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
     {"text": "{temp} {gradus} sil<[150]> Тепло sil<[150]> Облачно sil<[75]> но без дождя", "style": "friendly", "weight": 1.2, "emotion": "good", "slot": "core"},
