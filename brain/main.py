@@ -53,6 +53,19 @@ WARMUP (новое): NLU warmup в фоне при старте.
   события копятся в очереди, ничего не пишется.
   Вызывается после _init_engine(), до _init_skills() — скилы импортируют
   memory, но writer уже запущен.
+
+── P1 (valence/arousal) ───────────────────────────────────────────
+  on_event зовётся:
+    - wake + утро/ночь → morning/night (arousal/valence сдвиг)
+    - команда с похвалой/грубостью → user_praise/user_insult
+    - тишина 30+ мин (в _tick) → silence (valence=0, arousal=0.4)
+  music_liked/music_skipped/music_disliked — в controls.py и music/skill.py.
+
+── YANDEX IMPORT (v6.5) ───────────────────────────────────────────
+  _do_yandex_import() / _start_yandex_import_async().
+  При старте (после _init_self_state) в фоне тянет лайки из Яндекса
+  и мержит в brain.liked_tracks через merge_from_yandex.
+  Не блокирует старт brain — daemon-thread.
 """
 
 import sys
@@ -115,6 +128,14 @@ def _tick():
         from personality_core import self_state as _self_state
         from personality_core import mind_stream as _mind
         st = _self_state.get()
+
+        # P1: тишина 30+ мин → выдохнул (один раз за период тишины)
+        _now = time.time()
+        _last = st.last_command_ts or 0
+        if _last and (_now - _last) > 1800 and (_now - st.last_silence_ts) > 1800:
+            st.on_event("silence")
+            st.last_silence_ts = _now
+
         st.on_tick()
         _mind.get().on_tick(mood=st.mood)
 
@@ -179,6 +200,54 @@ def _init_self_state():
         log(f"brain: self_state load: {e}", tag="BRAIN", level="WARN")
 
 
+def _do_yandex_import():
+    """Импорт лайков из Яндекса. В фоне, не блокирует старт."""
+    try:
+        from shared import yandex
+        from brain import liked_tracks as _lt
+
+        if not yandex.is_ready():
+            log("brain: импорт лайков — Яндекс не подключён", tag="BRAIN", level="DEBUG")
+            return
+
+        client = yandex.get_client()
+        if client is None:
+            return
+
+        liked = client.users_likes_tracks()
+        if not liked or not liked.tracks:
+            log("brain: импорт лайков — пусто", tag="BRAIN")
+            return
+
+        tracks = []
+        for short in liked.tracks:
+            try:
+                t = short.fetch_track()
+                if not t:
+                    continue
+                artist = ', '.join(a.name for a in t.artists) if t.artists else ""
+                tracks.append({
+                    "artist": artist,
+                    "title": t.title or "",
+                    "track_id": str(t.id) if t.id else "",
+                })
+            except Exception:
+                continue
+
+        added = _lt.merge_from_yandex(tracks)
+        log(f"brain: импорт лайков: +{added}, всего {len(_lt.get_liked())}",
+            tag="BRAIN")
+    except Exception as e:
+        log(f"brain: импорт лайков: {e}", tag="BRAIN", level="WARN")
+
+
+def _start_yandex_import_async():
+    """Запустить импорт лайков в daemon-thread (не блокирует старт)."""
+    threading.Thread(target=_do_yandex_import, daemon=True,
+                     name="yandex-import").start()
+    log("brain: импорт лайков запущен (в фоне)", tag="BRAIN")
+
+
 def _warmup_nlu():
     """NLU warmup: загрузить intent_router.json + encoder в фоне."""
     try:
@@ -216,6 +285,20 @@ def _handle_command(msg: protocol.Message):
 
     try:
         result = process_command(text, source=source)
+
+        # P1: реакция на похвалу/грубость по тексту
+        # (process_command возвращает str, intent не отдаёт — эвристика по словам)
+        try:
+            from personality_core import self_state as _ss
+            _st = _ss.get()
+            _low = text.lower()
+            if any(w in _low for w in ("спасибо", "молодец", "умница", "класс", "супер")):
+                _st.on_event("user_praise")
+            elif any(w in _low for w in ("дурак", "тупой", "идиот", "заткнись", "надоел", "бесишь")):
+                _st.on_event("user_insult")
+        except Exception as _e:
+            log(f"brain: self_state.on_event(cmd): {_e}", tag="BRAIN", level="WARN")
+
         if result == "exit":
             log("brain: команда exit — остановка", tag="BRAIN")
             _write_exit_flag()
@@ -234,6 +317,19 @@ def _handle_event(msg: protocol.Message):
     log(f"brain: событие {msg.name} {msg.data}", tag="BRAIN")
 
     try:
+        # P1: события → self_state (valence/arousal реально меняются)
+        try:
+            from personality_core import self_state as _ss
+            _st = _ss.get()
+            _h = time.localtime().tm_hour
+            if msg.name == "wake":
+                if 5 <= _h < 12:
+                    _st.on_event("morning")
+                elif _h >= 23 or _h < 5:
+                    _st.on_event("night")
+        except Exception as _e:
+            log(f"brain: self_state.on_event(wake): {_e}", tag="BRAIN", level="WARN")
+
         if msg.name == "wake":
             _maybe_ritual()
             from brain.skills._helpers import respond_and_say
@@ -330,6 +426,8 @@ def main():
     _init_appraisal()
     _init_reminders()
     _init_self_state()
+
+    _start_yandex_import_async()   # ← новое: лайки из Яндекса в фоне
 
     # NLU warmup в фоне — до первой команды. Не блокирует старт.
     _start_nlu_warmup()

@@ -44,6 +44,15 @@
 # ── FIX (этап 0.5): print → log(tag="MUSIC") ────────────────────
 #   Раньше все сообщения modes.py шли в stderr (print), в jarvis.log
 #   их не было. Отладка «почему режим не сработал» — только по консоли.
+#
+# ── LOCAL_LIKED (v6.5, вариант A) ───────────────────────────────
+#   queue_local_liked() — первая порция (TARGET_AHEAD, ~5) LikedTrack
+#   сразу в playlist (мгновенный старт: play_index(0) в main.py),
+#   остальные — лениво через get_next_source_track (sources.py берёт
+#   из state.liked_queue[state.liked_cursor] по одному, пока не
+#   исчерпает, потом mixed).
+#   LikedTrack скачивается по требованию в playback.play_index
+#   (search_local → download_by_id).
 
 import threading
 import time
@@ -236,3 +245,45 @@ def start_genre(station_id, genre_name):
         return True
     finally:
         music.release_duck()
+
+
+def queue_local_liked():
+    """Ленивый источник лайков: первые TARGET_AHEAD сразу в playlist,
+    остальные — по требованию через get_next_source_track."""
+    from workers.music import state
+    from brain import liked_tracks as _lt
+    from workers.music.local import LikedTrack
+    from shared.log import log
+    from shared import config as cfg
+
+    liked = _lt.get_liked()
+    if not liked:
+        log("queue_local_liked: лайков нет", tag="MUSIC", level="WARN")
+        return False
+
+    with state.playlist_lock:
+        state.playlist.clear()
+        state.prefetched.clear()
+    with state.queued_lock:
+        state.queued_track_ids.clear()
+    state.playlist_index = 0
+    state.playlist_mode = "local_liked"
+
+    state.liked_queue = list(liked)
+    state.liked_cursor = 0
+
+    target_ahead = getattr(cfg, "TARGET_AHEAD", 5)
+    first_batch = min(target_ahead, len(state.liked_queue))
+    for _ in range(first_batch):
+        item = state.liked_queue[state.liked_cursor]
+        state.liked_cursor += 1
+        with state.playlist_lock:
+            state.playlist.append(LikedTrack(
+                item.get("artist", ""),
+                item.get("title", ""),
+                item.get("track_id", ""),
+            ))
+
+    log(f"queue_local_liked: {len(liked)} лайков, "
+        f"{len(state.playlist)} в playlist (первая порция)", tag="MUSIC")
+    return True

@@ -17,6 +17,22 @@
 #     📻 (переходы режимов: артист кончился → mixed) — INFO.
 #     ⛔/⏭/♻ (blacklist, дубли, автосброс) — DEBUG.
 #     🔄 DISCOVERY — INFO.
+#
+# ── P1.5 (2026-11-09): Яндекс — не долбить мёртвый API ──────────
+#   _yandex_is_down() / _mark_yandex_fail() / _mark_yandex_ok().
+#   Все обращения к Яндекс-источникам обёрнуты проверкой.
+#   5 фейлов подряд → блок на YANDEX_BLOCK_SEC.
+#
+# ── LOCAL_LIKED (v6.5) ──────────────────────────────────────────
+#   playlist_mode == "local_liked" — ленивый источник лайков.
+#   modes.queue_local_liked() кладёт state.liked_queue = list(liked),
+#   state.liked_cursor = 0. Здесь берём по одному:
+#     item = state.liked_queue[state.liked_cursor]
+#     state.liked_cursor += 1
+#     return LikedTrack(artist, title, track_id)
+#   LikedTrack скачивается по требованию в playback.play_index
+#   (search_local → download_by_id). Исчерпание → mixed.
+#   Discovery для local_liked НЕ работает — нечего ротировать.
 
 import time
 import random
@@ -26,9 +42,47 @@ from shared import config as cfg
 from shared.log import log
 from workers.music import state
 from workers.music.local import (
-    LocalTrack, get_local_by_genre, get_local_random_track,
+    LocalTrack, LikedTrack, get_local_by_genre, get_local_random_track,
 )
 from workers.music.similar import fetch_similar_background
+
+
+# ============================================================
+# P1.5: Яндекс — не долбить мёртвый API
+# ============================================================
+def _yandex_is_down() -> bool:
+    """True — Яндекс сейчас не дёргаем (блок или ещё не время)."""
+    now = time.time()
+    if now < state.yandex_blocked_until:
+        return True
+    if now < state.yandex_next_try_ts:
+        return True
+    return False
+
+
+def _mark_yandex_fail():
+    """Фейл: +1 к счётчику. 5 подряд — блок на час."""
+    state.yandex_fail_count += 1
+    if state.yandex_fail_count >= cfg.YANDEX_FAIL_MAX:
+        state.yandex_blocked_until = time.time() + cfg.YANDEX_BLOCK_SEC
+        state.yandex_next_try_ts = 0.0
+        log(f"Яндекс: {state.yandex_fail_count} фейлов подряд — "
+            f"блок на {cfg.YANDEX_BLOCK_SEC/60:.0f} мин",
+            tag="MUSIC", level="WARN")
+    else:
+        state.yandex_next_try_ts = time.time() + cfg.YANDEX_RETRY_INTERVAL_SEC
+        log(f"Яндекс: фейл {state.yandex_fail_count}/{cfg.YANDEX_FAIL_MAX}, "
+            f"следующая попытка через {cfg.YANDEX_RETRY_INTERVAL_SEC:.0f}с",
+            tag="MUSIC", level="WARN")
+
+
+def _mark_yandex_ok():
+    """Успех: сброс счётчика и блока. Лог — только если был сброс."""
+    if state.yandex_fail_count > 0 or state.yandex_blocked_until > 0:
+        log("Яндекс: снова доступен, сброс", tag="MUSIC", level="INFO")
+    state.yandex_fail_count = 0
+    state.yandex_next_try_ts = 0.0
+    state.yandex_blocked_until = 0.0
 
 
 def _is_blacklisted(track_id) -> bool:
@@ -141,6 +195,8 @@ def get_next_unplayed_track_from_page(tracks):
 def _try_chart():
     if state.client is None:
         return None
+    if _yandex_is_down():
+        return None
     with state._source_cache_lock:
         if 'chart' not in state._source_cache:
             try:
@@ -164,15 +220,19 @@ def _try_chart():
             except Exception as e:
                 log(f"Chart: {e}", tag="MUSIC", level="WARN")
                 state._source_cache['chart'] = []
+                _mark_yandex_fail()
 
         chart_tracks = state._source_cache.get('chart', [])
         if chart_tracks:
+            _mark_yandex_ok()
             return chart_tracks.pop(0)
     return None
 
 
 def _try_feed_tracks():
     if state.client is None:
+        return None
+    if _yandex_is_down():
         return None
     with state._source_cache_lock:
         if 'feed_tracks' not in state._source_cache:
@@ -199,15 +259,19 @@ def _try_feed_tracks():
             except Exception as e:
                 log(f"Feed tracks: {e}", tag="MUSIC", level="WARN")
                 state._source_cache['feed_tracks'] = []
+                _mark_yandex_fail()
 
         feed_tracks = state._source_cache.get('feed_tracks', [])
         if feed_tracks:
+            _mark_yandex_ok()
             return feed_tracks.pop(0)
     return None
 
 
 def _try_feed_albums():
     if state.client is None:
+        return None
+    if _yandex_is_down():
         return None
     with state._source_cache_lock:
         if 'feed_albums' not in state._source_cache:
@@ -241,15 +305,19 @@ def _try_feed_albums():
             except Exception as e:
                 log(f"Feed albums: {e}", tag="MUSIC", level="WARN")
                 state._source_cache['feed_albums'] = []
+                _mark_yandex_fail()
 
         feed_albums = state._source_cache.get('feed_albums', [])
         if feed_albums:
+            _mark_yandex_ok()
             return feed_albums.pop(0)
     return None
 
 
 def _try_rotor(source_id):
     if state.client is None:
+        return None
+    if _yandex_is_down():
         return None
 
     if state.wave_exhausted:
@@ -271,6 +339,7 @@ def _try_rotor(source_id):
         tracks_result = state.client.rotor_station_tracks(source_id)
     except Exception as e:
         log(f"Rotor ({source_name}): {e}", tag="MUSIC", level="WARN")
+        _mark_yandex_fail()
         return None
 
     if not tracks_result or not tracks_result.sequence:
@@ -296,12 +365,15 @@ def _try_rotor(source_id):
         log(f"Все дубли ({source_name})", tag="MUSIC", level="DEBUG")
         return None
 
+    _mark_yandex_ok()
     with state.source_buffer_lock:
         return state.source_buffer.pop(0)
 
 
 def _try_rotor_session(seeds, label="Rotor session"):
     if state.client is None:
+        return None
+    if _yandex_is_down():
         return None
 
     with state.source_buffer_lock:
@@ -316,6 +388,7 @@ def _try_rotor_session(seeds, label="Rotor session"):
         tracks_result = state.client.rotor_session_tracks(session.radio_session_id)
     except Exception as e:
         log(f"{label}: {e}", tag="MUSIC", level="WARN")
+        _mark_yandex_fail()
         return None
 
     if not tracks_result or not tracks_result.sequence:
@@ -341,6 +414,7 @@ def _try_rotor_session(seeds, label="Rotor session"):
         log(f"{label}: все дубли", tag="MUSIC", level="DEBUG")
         return None
 
+    _mark_yandex_ok()
     with state.source_buffer_lock:
         return state.source_buffer.pop(0)
 
@@ -375,10 +449,66 @@ def _try_similar():
 
 
 # ============================================================
+# LOCAL_LIKED (v6.5) — ленивый источник лайков
+# ============================================================
+def _try_local_liked():
+    """Взять следующий лайк из state.liked_queue (лениво).
+
+    modes.queue_local_liked() наполнил liked_queue и сбросил liked_cursor.
+    Здесь берём по одному: LikedTrack(artist, title, track_id).
+    LikedTrack скачивается по требованию в playback.play_index.
+    """
+    queue = getattr(state, "liked_queue", None)
+    if not queue:
+        return None
+    cursor = getattr(state, "liked_cursor", 0)
+    if cursor >= len(queue):
+        return None
+    item = queue[cursor]
+    state.liked_cursor = cursor + 1
+
+    # item может быть dict (из liked_tracks.json) или уже LikedTrack
+    if isinstance(item, LikedTrack):
+        track = item
+    else:
+        artist = item.get("artist", "") if isinstance(item, dict) else ""
+        title = item.get("title", "") if isinstance(item, dict) else ""
+        track_id = item.get("track_id", "") if isinstance(item, dict) else ""
+        track = LikedTrack(artist=artist, title=title, track_id=str(track_id))
+
+    # Дубли/blacklist — по track_id (если он есть).
+    tid = str(track.id) if track.id else ""
+    if tid:
+        with state.played_lock, state.queued_lock:
+            skip = (tid in state.played_track_ids or
+                    tid in state.queued_track_ids or
+                    _is_blacklisted(tid))
+        if skip:
+            log(f"local_liked: дубль/blacklist «{track.artist} — {track.title}»",
+                tag="MUSIC", level="DEBUG")
+            return _try_local_liked()
+
+    return track
+
+
+# ============================================================
 # ГЛАВНАЯ ФУНКЦИЯ
 # ============================================================
 def get_next_source_track():
     playlist_mode = state.playlist_mode
+
+    # ── LOCAL_LIKED (v6.5): ленивый источник лайков ──
+    # discovery НЕ работает для local_liked — нечего ротировать,
+    # пользователь явно попросил «мои лайки».
+    if playlist_mode == "local_liked":
+        track = _try_local_liked()
+        if track:
+            return track
+        log("local_liked исчерпан → mixed", tag="MUSIC", level="INFO")
+        state.playlist_mode = "mixed"
+        state.local_played_count = 0
+        state.local_wait_until = 0.0
+        return get_next_source_track()
 
     # ── DISCOVERY (v5): рандомно каждые 10–20 треков — мин. weight > 0 ──
     state.tracks_since_discovery += 1
@@ -496,9 +626,10 @@ def get_next_source_track():
             state.playlist_mode = "mixed"
             return get_next_source_track()
 
-        track = _try_rotor(station)
-        if track:
-            return track
+        if not _yandex_is_down():
+            track = _try_rotor(station)
+            if track:
+                return track
 
         local_path = get_local_by_genre(state.genre_name)
         if local_path:
@@ -513,22 +644,24 @@ def get_next_source_track():
 
     if playlist_mode == "wave":
         if getattr(state, "wave_language", None) == "russian":
-            track = _try_rotor_session(
-                seeds=['user:onyourwave', 'settingLanguage:russian'],
-                label="Русская волна",
-            )
-            if track:
-                return track
+            if not _yandex_is_down():
+                track = _try_rotor_session(
+                    seeds=['user:onyourwave', 'settingLanguage:russian'],
+                    label="Русская волна",
+                )
+                if track:
+                    return track
             log("Русская волна пуста → mixed", tag="MUSIC", level="INFO")
             state.playlist_mode = "mixed"
             state.local_played_count = 0
             state.local_wait_until = 0.0
             return get_next_source_track()
 
-        for source_id in cfg.SOURCE_LIST:
-            track = _try_yandex_source(source_id)
-            if track:
-                return track
+        if not _yandex_is_down():
+            for source_id in cfg.SOURCE_LIST:
+                track = _try_yandex_source(source_id)
+                if track:
+                    return track
         log("Все источники пусты → mixed", tag="MUSIC", level="INFO")
         state.playlist_mode = "mixed"
         state.local_played_count = 0
@@ -540,7 +673,8 @@ def get_next_source_track():
         limit = state.LOCAL_MAX_STREAK + random.randint(-jitter, jitter)
 
         if state.local_played_count < limit:
-            if time.time() >= state.local_wait_until:
+            if (time.time() >= state.local_wait_until
+                    and not _yandex_is_down()):
                 for source_id in cfg.SOURCE_LIST:
                     track = _try_yandex_source(source_id)
                     if track:
@@ -556,10 +690,11 @@ def get_next_source_track():
             return LocalTrack(local_path)
 
         state.local_played_count = 0
-        for source_id in cfg.SOURCE_LIST:
-            track = _try_yandex_source(source_id)
-            if track:
-                return track
+        if not _yandex_is_down():
+            for source_id in cfg.SOURCE_LIST:
+                track = _try_yandex_source(source_id)
+                if track:
+                    return track
         return None
 
     return None

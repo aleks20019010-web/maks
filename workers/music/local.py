@@ -23,6 +23,11 @@
 # ── FIX (этап 0.5): print → log(tag="MUSIC") ────────────────────
 #   Раньше все сообщения local.py шли в stderr (print), в jarvis.log
 #   их не было.
+#
+# ── LIKED_TRACK (v6.5) ──────────────────────────────────────────
+#   LikedTrack — лёгкий дескриптор лайка (artist, title, track_id).
+#   Не грузит Яндекс. Скачивается по требованию в playback.play_index
+#   (search_local → download_by_id(track.id)).
 
 import os
 import json
@@ -396,3 +401,16 @@ def get_local_by_genre(genre_query):
     log(f"локальный по жанру «{genre_query}»: {os.path.basename(t['path'])}",
         tag="MUSIC", level="DEBUG")
     return t["path"]
+
+
+class LikedTrack:
+    """Лёгкий дескриптор лайка. Не грузит Яндекс.
+    Скачивается по требованию в playback.play_index (по track_id)."""
+    def __init__(self, artist: str, title: str, track_id: str = ""):
+        self.artist = artist or ""
+        self.title = title or ""
+        self.id = track_id or ""
+        self._is_discovery = False
+
+    def __repr__(self):
+        return f"LikedTrack({self.artist!r}, {self.title!r})"

@@ -6,42 +6,19 @@
 # 30 сек — десятикратный запас. Не успел — Яндекс глючит, ждать нет смысла.
 #
 # ── FIX (этап 0.4): download_track не видит новый файл ────────────
-#   Симптом: «включи арию» → play_artist → start_artist_only →
-#   get_artist_tracks_page → track → play_index → find_local_by_track
-#   → None → download_track → subprocess → after - before — ПУСТО
-#   (JSON-индекс старый, all_audio_files(force_refresh=True) читает
-#   его же) → None → attempts=1 → следующий → ... → 3 → False.
-#   Яндекс-треки не играют. Регрессия FIX 2026-11-08 (JSON-индекс).
+#   ... (не трогаем, твои фиксы) ...
 #
-#   Причина: download_track делал:
-#     before = set(all_audio_files())
-#     subprocess.run(...)
-#     after = set(all_audio_files(force_refresh=True))
-#     new_files = after - before  # ← ПУСТО, JSON не пересобран
-#   all_audio_files(force_refresh=True) → _load_index(force_refresh=True)
-#   → _load_index_sync (JSON, старый) — _build_index НЕ вызывается.
+# ── DOWNLOAD_BY_ID (v6.5) ───────────────────────────────────────
+#   download_by_id(track_id) — скачать трек по yandex track_id напрямую,
+#   без search_track.
 #
-#   Решение (этап 0.4):
-#     1) local.invalidate_index() — сброс _index_cache.
-#     2) subprocess.run(...).
-#     3) _find_new_file(track) — точечный glob по MUSIC_DIR/**/*{ext}
-#        (1–2 сек, БЕЗ mutagen) → фильтр по title в имени →
-#        getsize >= MIN_FILE_SIZE.
-#     4) local.add_path_to_index(path) — дописать ОДНУ запись в JSON
-#        (0.001 сек), не пересобирая.
-#
-#   Почему не _build_index (8 сек): сканирует ВСЮ библиотеку + mutagen
-#   × 3000. Для одного нового файла — избыточно. 5 prefetch = 40 сек.
-#   _find_new_file — 1–2 сек на трек (glob без mutagen).
-#
-#   Fallback: если _find_new_file не нашёл (downloader упал, но файл
-#   уже был) — find_local_by_track(track). Если и он None, и
-#   result.returncode != 0 — поиск по title в all_audio_files(force_refresh=True)
-#   (старый путь, но только в fallback).
-#
-# ── FIX (этап 0.5): print → log(tag="MUSIC") ────────────────────
-#   Раньше все сообщения download.py шли в stderr (print), в jarvis.log
-#   их не было. Отладка «почему трек не скачался» — только по консоли.
+# ── FIX (v6.6): prefetch_worker + LikedTrack ────────────────────
+#   LikedTrack — лёгкий дескриптор (artist + title + track_id),
+#   НЕ Track Яндекса. Раньше prefetch_worker падал на track.artists.
+#   Теперь:
+#     - LocalTrack → в prefetched как path;
+#     - LikedTrack → ищем локально (search_local) → иначе download_by_id;
+#     - Track → как раньше (find_local_by_track / download_track).
 
 import os
 import glob
@@ -56,19 +33,15 @@ from shared.audio_cache import (
 )
 from workers.music import state
 from workers.music.local import (
-    LocalTrack, invalidate_index, add_path_to_index,
+    LocalTrack, LikedTrack, invalidate_index, add_path_to_index,
 )
 
 
-DOWNLOAD_TIMEOUT_SEC = 30   # 30 сек на трек. 300 Мбит = 5-10 МБ за 1-3 сек.
+DOWNLOAD_TIMEOUT_SEC = 30
 
 
 def _find_new_file(track):
-    """FIX (этап 0.4): точечный поиск нового файла по title (glob, 1–2 сек).
-
-    Без полной пересборки индекса (8 сек). Только glob (без mutagen),
-    фильтр по normalize(title) в normalize(имя файла).
-    """
+    """FIX (этап 0.4): точечный поиск нового файла по title (glob, 1–2 сек)."""
     try:
         title_norm = normalize(track.title)
     except Exception:
@@ -116,8 +89,6 @@ def download_track(track):
     env['LANG'] = 'ru_RU.UTF-8'
     env['LC_ALL'] = 'ru_RU.UTF-8'
 
-    # FIX (этап 0.4): сбросить _index_cache до скачивания. После —
-    # _find_new_file (glob) найдёт новый файл, add_path_to_index допишет.
     invalidate_index()
 
     result = None
@@ -140,8 +111,6 @@ def download_track(track):
     finally:
         invalidate_audio_cache()
 
-    # FIX (этап 0.4): точечный поиск нового файла (1–2 сек), не
-    # all_audio_files(force_refresh=True) (читает старый JSON).
     new_path = _find_new_file(track)
     if new_path:
         try:
@@ -162,8 +131,6 @@ def download_track(track):
             tag="MUSIC", level="DEBUG")
         return new_path
 
-    # Fallback: downloader вернул ошибку «уже существует» — файл был,
-    # но не в индексе (или find_local_by_track не нашёл).
     if result and result.returncode != 0:
         stderr = (result.stderr or "").lower()
         if "183" in stderr or "уже существует" in stderr or "already exists" in stderr:
@@ -182,6 +149,22 @@ def download_track(track):
     return None
 
 
+def download_by_id(track_id: str) -> str | None:
+    """Скачать трек по yandex track_id напрямую (без search_track).
+    Возвращает путь к файлу или None."""
+    if state.client is None or not track_id:
+        return None
+    try:
+        tracks = state.client.tracks([str(track_id)])
+        if not tracks:
+            return None
+        return download_track(tracks[0])
+    except Exception as e:
+        log(f"download_by_id({track_id}) error: {e}",
+            tag="MUSIC", level="WARN")
+        return None
+
+
 def prefetch_worker(indices):
     for idx in indices:
         with state.playlist_lock:
@@ -189,6 +172,7 @@ def prefetch_worker(indices):
                 continue
             track = state.playlist[idx]
 
+        # ── LocalTrack ────────────────────────────────────
         if isinstance(track, LocalTrack):
             with state.playlist_lock:
                 state.prefetched[idx] = track.path
@@ -196,6 +180,38 @@ def prefetch_worker(indices):
                 tag="MUSIC", level="DEBUG")
             continue
 
+        # ── LikedTrack (лёгкий дескриптор) ───────────────
+        if isinstance(track, LikedTrack):
+            title = f"{track.title} — {track.artist}"
+            # 1) Локально есть?
+            try:
+                from workers.music.search import search_local
+                local = search_local(f"{track.artist} {track.title}".strip())
+            except Exception as e:
+                log(f"[prefetch] search_local: {e}",
+                    tag="MUSIC", level="WARN")
+                local = None
+            if local:
+                with state.playlist_lock:
+                    state.prefetched[idx] = local["path"]
+                log(f"[prefetch] Локально (лайк): {title}",
+                    tag="MUSIC", level="DEBUG")
+                continue
+            # 2) Скачать по track_id
+            log(f"[prefetch] Качаю лайк: {title}",
+                tag="MUSIC", level="DEBUG")
+            path = download_by_id(track.id)
+            with state.playlist_lock:
+                state.prefetched[idx] = path
+            if path:
+                log(f"[prefetch] Готово (лайк): {title}",
+                    tag="MUSIC", level="DEBUG")
+            else:
+                log(f"[prefetch] ✗ Не удалось (лайк): {title}",
+                    tag="MUSIC", level="WARN")
+            continue
+
+        # ── Track Яндекса (как раньше) ───────────────────
         title = f"{track.title} — {', '.join(a.name for a in track.artists)}"
         local_file = find_local_by_track(track)
         if local_file:

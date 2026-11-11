@@ -102,6 +102,11 @@
     {"text": "{name} sil<[150]> П+онял", "style": "formal", "weight": 1.0, "emotion": "neutral", "slot": "core"},
     {"text": "Сейч+ас включ+у {name}", "style": "normal", "weight": 1.0, "emotion": "good", "slot": "core"}
   ],
+  "PLAY_SEARCH": [
+    {"text": "Ищу sil<[75]> {query}", "style": "normal", "weight": 1.0, "emotion": "neutral", "slot": "core"},
+    {"text": "sil<[50]> Секунду sil<[75]> ищу {query}", "style": "friendly", "weight": 1.0, "emotion": "neutral", "slot": "core"},
+    {"text": "sil<[50]> Смотрю sil<[75]> что есть по запросу {query}", "style": "normal", "weight": 1.0, "emotion": "neutral", "slot": "core"}
+  ],
   "PLAY_GENRE": [
     {"text": "Включ+аю {genre}", "style": "normal", "weight": 2.5, "emotion": "good", "slot": "core"},
     {"text": "Ст+авлю {genre}", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},

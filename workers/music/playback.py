@@ -38,6 +38,15 @@
 #
 #   TTL выводится из heartbeat: runtime_state.TTL_MUSIC_PLAYING =
 #   MUSIC_HEARTBEAT_SEC * 3. Не магическое число.
+#
+# ── LIKED_TRACK (v6.5) ──────────────────────────────────────────
+#   В play_index добавлена ветка isinstance(track, LikedTrack) ПЕРЕД
+#   LocalTrack. LikedTrack — ленивая ссылка на лайк (artist, title, id).
+#     - сначала search_local(artist + title) → локальный файл;
+#     - нет локального → download_by_id(track.id) → файл.
+#     - не скачался → skip (idx += 1, attempts += 1).
+#     - memory.remember_play(...) один раз после выбора файла.
+#   Импорт: from workers.music.local import LocalTrack, LikedTrack.
 
 import os
 import time
@@ -54,7 +63,7 @@ from shared.log import log
 from memory import memory
 from workers.music import state
 from workers.music.player import music
-from workers.music.local import LocalTrack, get_local_random_track
+from workers.music.local import LocalTrack, LikedTrack, get_local_random_track
 from workers.music.download import (
     download_track, start_prefetch, _append_and_prefetch,
 )
@@ -207,7 +216,43 @@ def play_index(idx, announce=False):
             _title_for_mind = ""
             _is_discovery = getattr(track, "_is_discovery", False)
 
-            if isinstance(track, LocalTrack):
+            # ── LikedTrack (лайк, ленивый) ──────────────────────
+            if isinstance(track, LikedTrack):
+                from workers.music.search import search_local
+                query = f"{track.artist} {track.title}".strip()
+                local = search_local(query)
+                if local:
+                    file_path = local["path"]
+                    title = f"{track.title} — {track.artist}"
+                    _artist_for_mind = track.artist
+                    _title_for_mind = track.title
+                    log(f"[{idx+1}/{plen}] Локально (лайк): {title}", tag="MUSIC")
+                else:
+                    log(f"[{idx+1}/{plen}] Скачиваю лайк: {track.title} — {track.artist}",
+                        tag="MUSIC")
+                    try:
+                        from workers.music.download import download_by_id
+                        file_path = download_by_id(track.id)
+                    except Exception as e:
+                        log(f"download_by_id({track.id}) упал: {e}",
+                            tag="MUSIC", level="WARN")
+                        file_path = None
+                    if not file_path:
+                        log(f"Не удалось скачать лайк «{track.title}» — пропуск",
+                            tag="MUSIC", level="WARN")
+                        idx += 1
+                        attempts += 1
+                        continue
+                    title = f"{track.title} — {track.artist}"
+                    _artist_for_mind = track.artist
+                    _title_for_mind = track.title
+                memory.remember_play(
+                    track_id=str(track.id),
+                    artist=track.artist,
+                    title=track.title,
+                    source=state.playlist_mode or 'unknown',
+                )
+            elif isinstance(track, LocalTrack):
                 file_path = track.path
                 title = f"{track.title} — {track.artists[0].name}"
                 _artist_for_mind = track.artists[0].name

@@ -18,6 +18,19 @@ v5 (2026-11-04): discovery — ротация треков с мин. weight > 0
   DISCOVERY_NEXT — порог (перезаписывается random.randint(10,20) после каждого).
   DISCOVERY_MIN / DISCOVERY_MAX — диапазон.
   DISCOVERY_MIN_HOURS — не играл N часов (защита от повтора).
+
+P1.5: Яндекс — не долбить мёртвый API.
+  Константы (YANDEX_FAIL_MAX, YANDEX_RETRY_INTERVAL_SEC, YANDEX_BLOCK_SEC)
+  — в shared/config.py (cfg.*). Здесь — только runtime:
+    yandex_fail_count   — сколько раз подряд не вышло
+    yandex_next_try_ts  — time.time(), раньше которого не дёргаем
+    yandex_blocked_until — time.time(), до которого вообще не дёргаем
+
+── LIKED_QUEUE (v6.5) ─────────────────────────────────────────────
+  liked_queue / liked_cursor — ленивый источник лайков.
+  liked_queue: list[LikedTrack | dict] — очередь (кладёт modes.queue_local_liked).
+  liked_cursor: int — индекс следующего. Не путать с playlist_index
+  (он для основного playlist). Если очередь исчерпана — cursor >= len.
 """
 
 import threading
@@ -36,6 +49,10 @@ prefetched = {}
 current_track_title = None
 current_track_id = None
 last_play_start_time = 0.0
+
+# ── Ленивый источник лайков (v6.5) ────────────────────────────
+liked_queue = []   # список лайков (ленивый источник)
+liked_cursor = 0   # индекс следующего
 
 # Флаг последнего skip (для монитора — не писать ложный finish)
 _last_skipped_track_id = None
@@ -116,3 +133,8 @@ DISCOVERY_MIN_HOURS = 2
 # ── Кэш алиасов ───────────────────────────────────────────────
 _aliases_cache = None
 _aliases_lock = threading.Lock()
+
+# ── P1.5: Яндекс — runtime (константы — в cfg) ────────────────
+yandex_fail_count = 0
+yandex_next_try_ts = 0.0
+yandex_blocked_until = 0.0

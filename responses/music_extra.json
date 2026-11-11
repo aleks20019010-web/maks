@@ -57,5 +57,33 @@
     {"text": "{title} sil<[150]> Оп+ять sil<[75]> но я не пр+отив", "style": "ironic", "humor": 0.3, "weight": 1.2, "emotion": "good", "slot": "core"},
     {"text": "sil<[50]> Сн+ова {title} sil<[150]> Ну что ж sil<[75]> посл+ушаем", "style": "normal", "humor": 0.1, "weight": 1.2, "emotion": "good", "slot": "core"},
     {"text": "{title} sil<[150]> Повт+ор sil<[75]> но с удов+ольствием", "style": "friendly", "humor": 0.1, "weight": 1.0, "emotion": "good", "slot": "core"}
+  ],
+  "LIKE_ADDED": [
+    {"text": "Запомнил: {artist} — {title}", "style": "normal", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "sil<[50]> В лайки: {artist} — {title}", "style": "friendly", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "{artist} — {title} sil<[150]> Добавил в любимые", "style": "normal", "weight": 1.2, "emotion": "good", "slot": "core"},
+    {"text": "sil<[50]> Хороший выбор sil<[150]> {artist} — {title} в лайках", "style": "friendly", "humor": 0.1, "weight": 1.0, "emotion": "good", "slot": "core"}
+  ],
+  "LIKE_ALREADY": [
+    {"text": "Уже в лайках: {artist} — {title}", "style": "normal", "weight": 1.5, "emotion": "neutral", "slot": "core"},
+    {"text": "{artist} — {title} sil<[150]> Уже есть в любимых", "style": "normal", "weight": 1.2, "emotion": "neutral", "slot": "core"},
+    {"text": "sil<[50]> Этот трек уже в лайках", "style": "friendly", "weight": 1.0, "emotion": "neutral", "slot": "core"}
+  ],
+  "DISLIKE_ADDED": [
+    {"text": "Убрал: {artist} — {title}", "style": "normal", "weight": 1.5, "emotion": "neutral", "slot": "core"},
+    {"text": "sil<[50]> Больше не предложу: {artist} — {title}", "style": "normal", "weight": 1.2, "emotion": "neutral", "slot": "core"}
+  ],
+  "DISLIKE_ALREADY": [
+    {"text": "Уже в дизлайках", "style": "normal", "weight": 1.2, "emotion": "neutral", "slot": "core"},
+    {"text": "sil<[50]> Этот трек уже убран", "style": "normal", "weight": 1.0, "emotion": "neutral", "slot": "core"}
+  ],
+  "PLAY_LOCAL_LIKED": [
+    {"text": "Включаю ваши лайки sil<[150]>", "style": "friendly", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "sil<[50]> Ваш локальный плейлист sil<[75]>", "style": "normal", "weight": 1.2, "emotion": "good", "slot": "core"},
+    {"text": "Мои лайки sil<[75]> поехали", "style": "friendly", "humor": 0.1, "weight": 1.0, "emotion": "good", "slot": "core"}
+  ],
+  "PLAY_LOCAL_LIKED_EMPTY": [
+    {"text": "В локальном плейлисте пусто sil<[150]> Скажите «лайкни» на треке", "style": "normal", "weight": 1.5, "emotion": "neutral", "slot": "core"},
+    {"text": "sil<[50]> Пока ничего не лайкали", "style": "friendly", "weight": 1.2, "emotion": "neutral", "slot": "core"}
   ]
 }
