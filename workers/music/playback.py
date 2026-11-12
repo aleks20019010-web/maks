@@ -101,7 +101,7 @@ def _get_music_instance():
             "--no-video",
             "--no-osd",
             "--quiet",
-            "--aout=mmdevice",
+            "--aout=wasapi",
         )
         log("vlc.Instance создан (music, изолирован от TTS)",
             tag="MUSIC", level="DEBUG")

@@ -16,7 +16,10 @@ memory/data/
 data/session_open.flag
 
 # ===== Модели =====
-models/
+# Модели (большие)
+models/*
+!models/wake_models/
+!models/wake_models/*.onnx
 
 # ===== Кэш =====
 cache/

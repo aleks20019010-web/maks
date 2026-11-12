@@ -170,13 +170,14 @@ WAKE_FUZZY_THRESHOLD = 0.35
 COMMAND_TIMEOUT_SEC = 10.0
 WAKE_COOLDOWN_SEC = 3.0
 
-# ============================================================
-# WAKE WORD (ViolaWake) — C10, день 29
-# ============================================================
-WAKE_MODEL_PATH = str(MODELS_DIR / "wake_models" / "max_viola_v2.onnx")
-WAKE_MODEL_THRESHOLD = 0.80
-WAKE_CONFIRM_COUNT = 3
-WAKE_COOLDOWN_S = 2.0
+# ── ViolaWake ───────────────────────────────────────────────
+WAKE_MODEL_PATH = str(MODELS_DIR / "wake_models" / "max_viola_v3.onnx")
+WAKE_MODEL_THRESHOLD = 0.85   # 0.70 sensitive, 0.80 balanced, 0.85 conservative [citation:11]
+WAKE_COOLDOWN_S = 2.0         # секунд между детекциями [citation:2]
+
+# ── Vosk грамматика ─────────────────────────────────────────
+# Vosk будет искать ТОЛЬКО эти слова. [unk] обязателен [citation:13].
+VOSK_HOT_WORDS_GRAMMAR = '["дальше", "стоп", "тише", "громче", "пауза", "продолжи", "назад", "[unk]"]'
 
 # ============================================================
 # A2 (день 29): окна контекста для ASR
@@ -236,12 +237,14 @@ except OSError as e:
     print(f"⚠ config: MUSIC_DIR недоступен ({MUSIC_DIR}): {e}. "
           f"Музыка отключена, остальные воркеры работают.")
 
-# ============================================================
-# AEC (Acoustic Echo Cancellation) — через echoff (WebRTC AEC3)
-# ============================================================
-AEC_ENABLED = False
 
+# ============================================================
+# AEC (Acoustic Echo Cancellation) — через SpeexDSP
+# ============================================================
+AEC_ENABLED = True
+CABLE_DEVICE_INDEX = 2   # CABLE Output (MME) — far-поток для AEC
+
+# Старые параметры echoff (WebRTC) — оставлены на случай отката
 ECHOFF_SAMPLE_RATE_HZ = 48000
 ECHOFF_STREAM_DELAY_MS = 100
-
 AEC_LOOPBACK_DEVICE_INDEX = 10
