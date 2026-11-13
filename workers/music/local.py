@@ -32,6 +32,12 @@
 # ── PHON (v6.5) ─────────────────────────────────────────────────
 #   phon_artist / phon_title в индексе — для search_local (search.py:
 #   точный → phon → fuzzy). phon() из workers/music/phon.py.
+#
+# ── SEARCH_LOCAL_ARTIST_TRACKS (v8.9) ───────────────────────────
+#   search_local_artist_tracks(artist_name) — все треки артиста из
+#   local_index.json: точное совпадение artist → fuzzy (rapidfuzz,
+#   token_set_ratio ≥ 80). Используется в _handle_play("artist") и
+#   _handle_play("search") как быстрый локальный путь до Яндекса.
 
 import os
 import json
@@ -427,3 +433,38 @@ class LikedTrack:
 
     def __repr__(self):
         return f"LikedTrack({self.artist!r}, {self.title!r})"
+
+
+# ── v8.9: локальный поиск артиста ────────────────────────────────
+def search_local_artist_tracks(artist_name: str) -> list[dict]:
+    """Ищет все треки артиста в local_index.json.
+
+    v8.9: _handle_play("artist") и _handle_play("search") сначала
+    локально (быстро, без сети), потом Яндекс fallback.
+    Возвращает list[dict] (tracks), [] если нет.
+    """
+    if not artist_name:
+        return []
+    idx = _load_index()
+    tracks = idx.get("tracks") or []
+    if not tracks:
+        return []
+
+    q = artist_name.lower().strip()
+
+    # 1. Точное совпадение artist
+    exact = [t for t in tracks if t.get("artist", "").lower().strip() == q]
+    if exact:
+        return exact
+
+    # 2. Fuzzy по artist
+    from rapidfuzz import process, fuzz
+    artists = list({t.get("artist", "") for t in tracks if t.get("artist")})
+    if not artists:
+        return []
+    best = process.extractOne(q, artists, scorer=fuzz.token_set_ratio)
+    if best and best[1] >= 80:
+        matched = best[0]
+        return [t for t in tracks if t.get("artist") == matched]
+
+    return []

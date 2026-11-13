@@ -3,32 +3,31 @@ workers/music/main.py — Music worker.
 
 Принимает команды из music_inbox, выполняет.
 
+── FIX (v8.9.1, 2026-11-13): импорты + playlist_mode ──────────────
+  search_local_artist_tracks — в local.py, не в search.py.
+  Раньше: search.search_local_artist_tracks → AttributeError.
+  Теперь: from workers.music.local import search_local_artist_tracks.
+
+  _play_local_artist: playlist_mode = "local_search" (вместо "local_artist").
+  sources.py уже умеет "local_search" — при конце плейлиста докидывает
+  похожие треки артиста из local_index, потом wave. Музыка не
+  останавливается, когда треки артиста кончились.
+
+── FIX (v8.9, 2026-11-13): локальный артист первым ────────────────
+  _handle_play("artist"): сначала search_local_artist_tracks (local_index.json,
+  быстро, без сети), играем локальные треки артиста. Если локально нет —
+  Яндекс fallback (search_artist).
+
+  _handle_play("search"): локальный артист → локальный трек →
+  Яндекс-артист → Яндекс-трек.
+
 ── FIX (v8.4, 2026-11-13): pre-duck в _handle_play("search") ─────
-  pre-duck (music.duck(30) перед стартом трека) нужен, чтобы музыка
-  не «дёргалась» громко→тихо, когда TTS уже говорит. НО: если TTS
-  НЕ говорит — pre-duck залипает без пары (ASR уже отправил duck_off
-  до play_search, TTS молчит → duck_off не последует), музыка остаётся
-  приглушённой до watchdog (60с).
-
-  Фикс: pre-duck срабатывает ТОЛЬКО если TTS реально говорит СЕЙЧАС
-  (workers.tts.state_file.get_state().speaking == True). Иначе —
-  пропускается, музыка стартует нормально.
-
-  Плюс: DUCK_MAX_SEC уменьшен с 60 до 15 (см. cfg) — если pre-duck
-  где-то ещё залипнет, watchdog сработает быстрее.
+  pre-duck срабатывает ТОЛЬКО если TTS говорит СЕЙЧАС.
+  DUCK_MAX_SEC = 15 (вместо 60) — watchdog быстрее.
 
 ── FIX (этап 0.1): music_playing — см. playback.py ────────────────
-  set_music_playing / clear_music_playing вызываются ТОЛЬКО в
-  playback.py (play_index — инициализация, monitor_player — heartbeat/
-  снятие). main.py флаг НЕ трогает.
-
 ── FIX (этап 0.2): MUSIC_AVAILABLE ────────────────────────────────
-  Если внешний диск (E:\\Music) отключён, cfg.MUSIC_AVAILABLE = False.
-  Music-воркер работает вхолостую: команды принимает, play — отказ.
-
 ── FIX (этап 0.5): warm_up_prefetch ───────────────────────────────
-  _reset_playback_state вызывает warm_up_prefetch СИНХРОННО (0.21 сек).
-
 ── FIX (этап 2.3): memory.start() явно ────────────────────────────
 
 A2 (день 29): _handle_play: перед play_index — music.stop().
@@ -43,16 +42,7 @@ DUCKING (день 29, вечер):
 FIX (день 29, вечер, #2): _handle_play в отдельном потоке.
 
 ── LOCAL_LIKED (v6.5) ─────────────────────────────────────────────
-  _handle_play(name="local_liked") — делегирует в modes.queue_local_liked().
-
-── SEARCH (v6.5) ──────────────────────────────────────────────────
-  _handle_play(name="search") — поиск по запросу:
-    1. (v8.4) pre-duck ТОЛЬКО если TTS говорит сейчас.
-    2. search_local(query) — локальный индекс.
-    3. search_track(query) — Яндекс.
-
 ── SEARCH ARTIST-FIRST (v6.8) ─────────────────────────────────────
-  search_artist(query) — Яндекс: артист (группа) первым.
 """
 
 import sys
@@ -91,22 +81,52 @@ def _stop_old_track():
 
 
 def _tts_is_speaking_now() -> bool:
-    """v8.4: проверить, говорит ли TTS СЕЙЧАС.
-
-    Используется для pre-duck в _handle_play("search"): приглушать
-    музыку ДО старта трека имеет смысл только если TTS реально
-    говорит. Иначе pre-duck залипает без пары (ASR уже отправил
-    duck_off до play_search, TTS молчит → duck_off не последует).
-
-    При любой ошибке (state_file недоступен) — возвращаем False,
-    т.е. pre-duck пропускается. Это безопаснее, чем залипший duck.
-    """
+    """v8.4: проверить, говорит ли TTS СЕЙЧАС."""
     try:
         from workers.tts.state_file import get_state
         return bool(get_state().get("speaking", False))
     except Exception as e:
         log(f"music: tts state check: {e}", tag="MUSIC", level="DEBUG")
         return False
+
+
+def _play_local_artist(artist_name: str, local_tracks: list) -> bool:
+    """v8.9.1: играть локальные треки артиста (без Яндекса).
+
+    playlist = [LocalTrack(path) for t in local_tracks[:20]]
+    playlist_mode = "local_search" — sources.py уже умеет: при конце
+    плейлиста докидывает похожие треки артиста из local_index, потом wave.
+    Музыка не останавливается.
+    """
+    from workers.music.local import LocalTrack
+    from workers.music import playback
+
+    with state.playlist_lock:
+        state.playlist.clear()
+        state.prefetched.clear()
+    with state.queued_lock:
+        state.queued_track_ids.clear()
+    state.playlist_index = 0
+
+    added = 0
+    for t in local_tracks[:20]:
+        p = t.get("path", "")
+        if not p:
+            continue
+        with state.playlist_lock:
+            state.playlist.append(LocalTrack(p))
+        added += 1
+
+    if added == 0:
+        return False
+
+    # v8.9.1: sources.py уже умеет "local_search" — при конце плейлиста
+    # докидывает похожие треки артиста из local_index, потом wave.
+    state.playlist_mode = "local_search"
+    playback.play_index(0)
+    log(f"play_artist(«{artist_name}») → локально: {added} треков",
+        tag="MUSIC")
+    return True
 
 
 def _play_mood(mood_tag: str):
@@ -162,6 +182,15 @@ def _handle_play(name: str, data: dict):
         artist_name = data.get("artist", "")
         if not artist_name:
             return
+
+        # v8.9: сначала локально (быстро, без сети), потом Яндекс.
+        from workers.music.local import search_local_artist_tracks
+        local_tracks = search_local_artist_tracks(artist_name)
+        if local_tracks:
+            if _play_local_artist(artist_name, local_tracks):
+                return
+
+        # Яндекс fallback
         artist = search.search_artist(artist_name)
         if not artist:
             log(f"артист «{artist_name}» не найден", tag="MUSIC", level="WARN")
@@ -217,11 +246,9 @@ def _handle_play(name: str, data: dict):
         if not query:
             return
         from workers.music.search import search_local, search_artist, search_track
+        from workers.music.local import search_local_artist_tracks
 
         # v8.4: pre-duck ТОЛЬКО если TTS реально говорит СЕЙЧАС.
-        # Иначе pre-duck залипает без пары: ASR уже отправил duck_off
-        # до play_search (TTS молчит → duck_off не последует),
-        # музыка остаётся 30% до watchdog.
         if _tts_is_speaking_now():
             try:
                 music.duck(30)
@@ -232,15 +259,10 @@ def _handle_play(name: str, data: dict):
             log("search: pre-duck пропущен (TTS не говорит)",
                 tag="MUSIC", level="DEBUG")
 
-        # ── 1. АРТИСТ (группа) — Яндекс первым ──
-        artist = search_artist(query)
-        if artist:
-            from workers.music.aliases import remember_alias
-            remember_alias(query, artist.id, artist.name)
-            if modes.start_artist_only(artist):
-                playback.play_index(0)
-                log(f"play(search) «{query}» → артист: {artist.name}",
-                    tag="MUSIC")
+        # ── 1. ЛОКАЛЬНЫЙ АРТИСТ (v8.9) ──
+        local_artist_tracks = search_local_artist_tracks(query)
+        if local_artist_tracks:
+            if _play_local_artist(query, local_artist_tracks):
                 return
 
         # ── 2. ЛОКАЛЬНЫЙ трек ──
@@ -285,7 +307,18 @@ def _handle_play(name: str, data: dict):
                 f"{local.get('artist')} — {local.get('title')}", tag="MUSIC")
             return
 
-        # ── 3. ЯНДЕКС трек ──
+        # ── 3. ЯНДЕКС артист ──
+        artist = search_artist(query)
+        if artist:
+            from workers.music.aliases import remember_alias
+            remember_alias(query, artist.id, artist.name)
+            if modes.start_artist_only(artist):
+                playback.play_index(0)
+                log(f"play(search) «{query}» → артист: {artist.name}",
+                    tag="MUSIC")
+                return
+
+        # ── 4. ЯНДЕКС трек ──
         track = search_track(query)
         if track:
             if modes.start_single_track(track):
@@ -451,8 +484,6 @@ def main():
     log("music: слушаю music_inbox", tag="MUSIC")
 
     inbox_timeout = getattr(cfg, "MUSIC_INBOX_TIMEOUT", 0.05)
-    # v8.4: 15с вместо 60 — если pre-duck где-то залипнет,
-    # watchdog сработает быстрее. Пользователь заметит, но не минуту.
     duck_max_sec = float(getattr(cfg, "DUCK_MAX_SEC", 15.0))
 
     while True:
