@@ -5,6 +5,12 @@
 #   - labels (строки): ['MUSIC_PLAY']  → confidence = 1.0
 #   - probs (числа):    [0.98, 0.01, ...] → argmax + softmax
 # Обрабатываем оба случая.
+#
+# FIX (2026-11-13): +6 REMINDER_* в PROBES. Раньше 8 фраз, ни одной
+#   на напоминания — ONNX не проверялся для REMINDER_ADD/WHEN/LIST/DONE.
+#   Теперь 14: старые 8 + 6 напоминаний (включая не дословные, чтобы
+#   проверить, что ONNX реально знает новые интенты, а не только
+#   exact-match из intent_routes.json).
 
 import json
 import time
@@ -57,7 +63,8 @@ def predict(text):
 
 # 4. Контрольные фразы
 PROBES = [
-    ("включи мою музыку", "MUSIC_PLAY"),
+    # старые 8
+    ("включи мою музыку", "MUSIC_PLAY"),  # → local_liked → лайки
     ("ария колизей", "MUSIC_PLAY"),
     ("включи король и шут лесник", "MUSIC_PLAY"),
     ("громче", "VOLUME_UP"),
@@ -65,6 +72,14 @@ PROBES = [
     ("что за песня", "MUSIC_NOW_PLAYING"),
     ("привет", "SMALLTALK"),
     ("погода", "WEATHER_QUERY"),
+    # NEW (2026-11-13): напоминания
+    ("напомни через 10 минут позвонить", "REMINDER_ADD"),
+    ("запомни завтра в девять к врачу", "REMINDER_ADD"),
+    ("когда к врачу", "REMINDER_WHEN"),
+    ("когда у меня встреча", "REMINDER_WHEN"),          # не дословно — проверка ONNX
+    ("мои напоминания", "REMINDER_LIST"),
+    ("что на завтра", "REMINDER_LIST"),
+    ("готово позвонить маме", "REMINDER_DONE"),
 ]
 
 print("\n=== Контрольные фразы ===")

@@ -39,21 +39,24 @@
 #   decision_engine для intent нет — Decision(EXECUTE) с reason
 #   «no decision engine → delegate to skill». Router вызовет
 #   skill.handle(command) напрямую. Мгновенно (0.5 сек), без LLM.
-#   Скилы smalltalk / cleanup / jellyfin умеют handle(str), им не нужен
-#   entity/decision — они разбираются по тексту сами.
 #
-# ── v6.9: MUSIC_LIKE / MUSIC_DISLIKE / MUSIC_LOCAL_LIKED ────────
-#   _load_decisions() регистрирует эти интенты → MusicDecisionEngine.
-#   Entity для них не извлекается (extractors только MUSIC_PLAY /
-#   MUSIC_WAVE). MusicDecisionEngine.resolve() для этих интентов
-#   ставит action фиксированно (like_current / dislike_current /
-#   play_local_liked), без entity. Дальше skill._dispatch.
+# ── FIX (2026-11-13): pending fill при ABSENT ───────────────────
+#   Раньше: _try_fill_pending при EntityState.ABSENT всё равно строил
+#   CLARIFY (decision_engine.resolve для ADD-без-entity → CLARIFY).
+#   Получался цикл: pending висит, любая фраза («что сейчас», «что я
+#   забыл») → «На когда поставить?» → pending висит.
+#   Теперь: если pending-ответ не распознан как entity (ABSENT) —
+#   clear_pending + return None. Pipeline идёт обычным путём
+#   (intent_resolve). «что сейчас» → MUSIC_NOW_PLAYING, «что я забыл»
+#   → REMINDER_LIST.
 #
-# РАСШИРЯЕМОСТЬ:
-#   Регистрация экстракторов/движков — через _EXTRACTORS / _DECISIONS.
-#   MusicEntityExtractor + MusicDecisionEngine — единственные сейчас.
-#   Weather — адаптер отдельно (этап 10). Reminders — потом.
-#   Добавить новый тип: дописать в словарь, не трогая pipeline.
+# ── FIX (2026-11-13): pending_original в Command.context ────────
+#   Раньше: при pending fill command.original_text = новый текст
+#   («через десять минут»), а исходный («напомни хлеб») терялся.
+#   Скил брал fallback_text из original_text → в reminders.json
+#   попадало «через десять минут» вместо «хлеб».
+#   Теперь: в command.context кладётся "pending_original" =
+#   pending.original_text. Скил берёт его как fallback.
 
 import time
 from typing import Optional
@@ -72,14 +75,17 @@ from shared.log import log
 
 
 # ── Регистрация экстракторов / движков ─────────────────────
-# Music — единственный на этом этапе. Weather — адаптер отдельно.
-# Reminders — потом (у них нет entity в NLU-смысле, только date/time).
 def _load_extractors() -> dict[Intent, object]:
     """Intent → EntityExtractor. Ленивая загрузка (импорт тяжёлый)."""
     from brain.nlu.entity.music import get as get_music_entity
+    from brain.nlu.entity.reminders import get as get_dt, get_text as get_txt
     return {
         Intent.MUSIC_PLAY: get_music_entity(),
         Intent.MUSIC_WAVE: get_music_entity(),
+        Intent.REMINDER_ADD: get_dt(),
+        Intent.REMINDER_LIST: get_dt(),
+        Intent.REMINDER_WHEN: get_txt(),
+        Intent.REMINDER_DONE: get_txt(),
     }
 
 
@@ -89,11 +95,11 @@ def _load_decisions() -> dict[Intent, object]:
     from brain.nlu.decision.controls import get as get_controls_decision
     from brain.nlu.decision.weather import get as get_weather_decision
     from brain.nlu.decision.system import get as get_system_decision
+    from brain.nlu.decision.reminders import get as get_reminders_decision
 
     return {
         Intent.MUSIC_PLAY: get_music_decision(),
         Intent.MUSIC_WAVE: get_music_decision(),
-        # v6.9: лайки / дизлайки / локальный плейлист.
         Intent.MUSIC_LIKE: get_music_decision(),
         Intent.MUSIC_DISLIKE: get_music_decision(),
         Intent.MUSIC_LOCAL_LIKED: get_music_decision(),
@@ -105,12 +111,13 @@ def _load_decisions() -> dict[Intent, object]:
         Intent.MUSIC_RESUME: get_controls_decision(),
         Intent.MUSIC_NEXT: get_controls_decision(),
         Intent.MUSIC_PREV: get_controls_decision(),
-        # MUSIC_NOW_PLAYING (2026-11-08): «что играет» / «что за песня».
-        # controls.now_playing → protocol.music_now_playing_request → music →
-        # event_now_playing → brain → TTS. Быстро (0.5 сек), без LLM.
         Intent.MUSIC_NOW_PLAYING: get_controls_decision(),
         Intent.WEATHER_QUERY: get_weather_decision(),
         Intent.SYSTEM_STATUS: get_system_decision(),
+        Intent.REMINDER_ADD: get_reminders_decision(),
+        Intent.REMINDER_WHEN: get_reminders_decision(),
+        Intent.REMINDER_LIST: get_reminders_decision(),
+        Intent.REMINDER_DONE: get_reminders_decision(),
     }
 
 
@@ -139,11 +146,6 @@ def process(text: str, context: Optional[NLUContext] = None) -> Decision:
 
     context — NLUContext. Если None — берём синглтон (get_context()).
     Возвращает Decision. При ошибке — FALLBACK с пустой Command.
-
-    Побочные эффекты:
-      - context.add_history(intent, text) — для диагностики
-      - context.set_pending(...) / clear_pending() — TTL 60с
-      - nlu_log.log_diagnostic(...) — logs/nlu.log
     """
     t0 = time.time()
 
@@ -165,7 +167,6 @@ def process(text: str, context: Optional[NLUContext] = None) -> Decision:
     nlu_log.debug("normalizer", normalized=normalized, original=text)
 
     # 2. Context: pending активен?
-    #    Если да — пробуем заполнить entity в pending, НЕ зовём intent.
     pending = context.get_pending()
     if pending is not None:
         decision = _try_fill_pending(pending, normalized, text, context)
@@ -177,7 +178,6 @@ def process(text: str, context: Optional[NLUContext] = None) -> Decision:
                 elapsed=f"{time.time() - t0:.3f}",
             )
             return decision
-        # Не смогли заполнить — pending сбрасываем, идём обычным путём.
         nlu_log.warn(
             "context",
             "pending fill failed, clearing",
@@ -238,7 +238,6 @@ def process(text: str, context: Optional[NLUContext] = None) -> Decision:
             nlu_log.warn("entity", f"exception: {e}", intent=intent.value)
             command.entity = Entity.absent()
     else:
-        # Нет экстрактора — entity не извлекаем. DecisionEngine решит.
         nlu_log.debug("entity", skipped=f"no extractor for {intent.value}")
 
     # 7. Decision
@@ -250,11 +249,7 @@ def process(text: str, context: Optional[NLUContext] = None) -> Decision:
             nlu_log.error("decision", f"exception: {e}", intent=intent.value)
             return _fallback_command(command, f"decision: {e}")
     elif command.skill_name:
-        # FIX (этап 1.1): скил есть, но decision_engine нет (SMALLTALK,
-        # CLEANUP_DISK, CLEANUP_RECYCLE). Раньше — FALLBACK → LLM (6 сек
-        # на «привет»). Теперь — EXECUTE с action="handle": router вызовет
-        # skill.handle(command) (для smalltalk/cleanup — текст, они умеют).
-        # decision_engine не нужен: entity нет, скил сам разберётся.
+        # FIX (этап 1.1): скил есть, но decision_engine нет.
         decision = Decision(
             command=command,
             action=DecisionAction.EXECUTE,
@@ -262,7 +257,6 @@ def process(text: str, context: Optional[NLUContext] = None) -> Decision:
             confidence=command.confidence,
         )
     else:
-        # Нет ни decision engine, ни skill — FALLBACK (router отдаст в LLM).
         decision = _fallback_command(
             command, f"no decision engine for {intent.value}",
         )
@@ -271,7 +265,6 @@ def process(text: str, context: Optional[NLUContext] = None) -> Decision:
     if decision.action == DecisionAction.EXECUTE:
         context.clear_pending()
     elif decision.action == DecisionAction.CLARIFY:
-        # Пользователь должен ответить — ставим pending на 60с.
         pending_new = PendingCommand(
             intent=command.intent,
             missing=[command.entity.type] if command.entity else [],
@@ -308,17 +301,11 @@ def _try_fill_pending(
 ) -> Optional[Decision]:
     """Попробовать заполнить pending новым текстом.
 
-    Возвращает Decision, если получилось (EXECUTE/CLARIFY).
+    Возвращает Decision, если получилось (EXECUTE).
     None — если не получилось (pipeline пойдёт обычным путём).
 
-    Логика:
-      - если текст — отмена («отмена», «не надо») → clear_pending, вернуть
-        None, пусть pipeline пойдёт обычным путём. «Отмена» без intent'а
-        → FALLBACK → router скажет NOT_UNDERSTOOD. Пока так.
-      - иначе: пробуем extract_candidate + match для pending.intent.
-        Если FOUND — EXECUTE с pending.intent + entity.
-        Если UNRESOLVED/AMBIGUOUS — новый CLARIFY (pipeline его обработает).
-        Если ABSENT — не получилось, None.
+    FIX (2026-11-13): при ABSENT не строим CLARIFY (цикл «На когда?»).
+    Сбрасываем pending, return None.
     """
     # Отмена
     if context.is_cancel(normalized):
@@ -334,21 +321,38 @@ def _try_fill_pending(
     try:
         candidate = extractor.extract_candidate(normalized, pending.intent)
         if candidate is None:
-            # Пользователь сказал что-то без параметра — не заполнили.
             return None
 
         entity = extractor.match(candidate, pending.intent)
 
+        # FIX (2026-11-13): ABSENT — не строим CLARIFY (цикл «На когда?»).
+        # Сбрасываем pending, pipeline пойдёт обычным путём (intent resolve).
+        if entity is None or entity.state == EntityState.ABSENT:
+            nlu_log.info(
+                "context",
+                "pending fill: ABSENT, clearing",
+                pending_intent=pending.intent.value,
+                candidate=candidate,
+            )
+            context.clear_pending()
+            return None
+
         # Собираем Command из pending + entity.
+        # FIX (2026-11-13): pending_original — исходный текст («напомни
+        # хлеб»), а не новый («через десять минут»). Скил берёт его как
+        # fallback, если entity.value["text"] пустой.
         command = Command(
             intent=pending.intent,
             entity=entity,
             skill_name=None,
             action=None,
-            confidence=0.9,  # pending fill — уверенно (пользователь ответил)
+            confidence=0.9,
             normalized_text=normalized,
             original_text=original,
-            context={"pending": True},
+            context={
+                "pending": True,
+                "pending_original": pending.original_text,
+            },
         )
 
         # SkillResolver
@@ -374,7 +378,6 @@ def _try_fill_pending(
             decision=decision.action.value,
         )
 
-        # EXECUTE — pending сбрасываем; CLARIFY — оставляем (новый pending).
         if decision.action == DecisionAction.EXECUTE:
             context.clear_pending()
         elif decision.action == DecisionAction.CLARIFY:

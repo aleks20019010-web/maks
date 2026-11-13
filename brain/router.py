@@ -2,7 +2,7 @@
 # Роутер команд: выбирает навык по тексту и вызывает его.
 #
 # ВНЕ ДИАЛОГА (CommandSource.VOICE, VOICE_HOT, SYSTEM):
-#   reminders → pending → fast/skills → NLU pipeline → LLM → NOT_UNDERSTOOD
+#   pending → fast/skills → NLU pipeline → LLM → NOT_UNDERSTOOD
 #   Router решает первым.
 #
 # В ДИАЛОГЕ (CommandSource.VOICE_DIALOG):
@@ -24,17 +24,30 @@
 #   Теперь: перед игнором — _handle_pending_confirm(cmd_lower),
 #   который проверяет cleanup / cleanup_recycle и вызывает
 #   cleanup_confirm / cleanup_recycle_confirm. Скил сам делает pop.
+#
+# ── REMINDERS → NLU + скил (2026-11-13) ─────────────────────────
+#   Раньше: REMINDER_ADD / «что на завтра» / «сделал» обрабатывались
+#   здесь (_handle_reminders, fast-path по регуляркам и спискам фраз).
+#   Это нарушало архитектуру: router не должен знать про напоминания.
+#   Теперь:
+#     - intent_routes: REMINDER_ADD / REMINDER_WHEN / REMINDER_LIST /
+#       REMINDER_DONE → NLU → skill_resolver → "reminders".
+#     - brain/nlu/entity/reminders.py — datetime/text экстракторы.
+#     - brain/nlu/decision/reminders.py — action add/when/list/done.
+#     - brain/skills/reminders/ — handle(Command).
+#   Router больше не знает про напоминания: ни _handle_reminders,
+#   ни _is_explicit_reminder, ни _REMINDER_*_PHRASES.
+#   Импорты datetime_parser и datetime из router удалены (были только
+#   для _handle_reminders). re оставлен — используется в других местах?
+#   Нет: re больше не используется. Удалён.
 
-import re
 import threading
 import time
-from datetime import datetime
 
 from brain.skills import base as skills_base
 from brain.skills._helpers import respond_and_say as _respond_and_say
 from brain import pending
 from brain import relationship
-from brain import datetime_parser
 from brain.nlu import context as nlu_context_mod
 from brain.nlu import pipeline as nlu_pipeline
 from brain.nlu.types import DecisionAction
@@ -53,18 +66,6 @@ MOOD_TO_GENRE = {
     "upbeat": ("бодрое", "genre:pop"),
     "rock": ("рок", "genre:rusrock"),
 }
-
-_REMINDER_LIST_PHRASES = (
-    "ничего не забыл", "что я забыл", "что забыл",
-    "что у меня запланировано", "что у меня в планах",
-    "что на сегодня", "что на завтра",
-    "мои напоминания", "список напоминаний",
-)
-
-_REMINDER_DONE_PHRASES = (
-    "готово", "сделано", "я сделал", "я сделала",
-    "я выполнил", "я выполнила",
-)
 
 
 _repeat_count = 0
@@ -112,30 +113,21 @@ def process_command(command: str, source: CommandSource = CommandSource.VOICE):
 
     # ── ДИАЛОГ: smalltalk → LLM ──
     if source == CommandSource.VOICE_DIALOG:
-        if _is_explicit_reminder(cmd_lower):
-            if _handle_reminders(cmd_lower):
-                return None
-        else:
-            handler = skills_base.find_handler(command)
-            if handler and handler.name == "smalltalk":
-                log(f"router: → smalltalk (dialog)", tag="BRAIN")
-                try:
-                    handler.handle(command)
-                except Exception as e:
-                    from brain.errors import handle_error
-                    handle_error(e, context="skill:smalltalk", speak=True)
-                return None
-            if _try_llm_fallback(command):
-                return None
-            if _handle_reminders(cmd_lower):
-                return None
+        handler = skills_base.find_handler(command)
+        if handler and handler.name == "smalltalk":
+            log(f"router: → smalltalk (dialog)", tag="BRAIN")
+            try:
+                handler.handle(command)
+            except Exception as e:
+                from brain.errors import handle_error
+                handle_error(e, context="skill:smalltalk", speak=True)
+            return None
+        if _try_llm_fallback(command):
+            return None
         _respond_and_say("NOT_UNDERSTOOD")
         return None
 
     # ── ВНЕ ДИАЛОГА: router решает первым ──
-    if _handle_reminders(cmd_lower):
-        return None
-
     if _handle_pending_music(cmd_lower):
         return None
 
@@ -186,7 +178,8 @@ def process_command(command: str, source: CommandSource = CommandSource.VOICE):
 def _execute_decision(decision, command: str, source: CommandSource) -> bool:
     """Исполнить Decision из pipeline. True — обработали, False — нет.
 
-    EXECUTE  → music/controls/weather/system: skill.handle(decision.command)
+    EXECUTE  → music/controls/weather/system/reminders:
+               skill.handle(decision.command)
                остальные: skill.handle(command)
     CLARIFY  → respond_and_say(clarify.phrase_set, **clarify.kwargs)
     FALLBACK → False (router пойдёт в LLM / NOT_UNDERSTOOD)
@@ -207,7 +200,7 @@ def _execute_decision(decision, command: str, source: CommandSource) -> bool:
             f"{skill_name}.{decision.command.action or 'handle'} "
             f"(conf={decision.confidence:.2f})", tag="BRAIN")
         try:
-            if skill.name in ("music", "controls", "weather", "system"):
+            if skill.name in ("music", "controls", "weather", "system", "reminders"):
                 skill.handle(decision.command)
             else:
                 skill.handle(command)
@@ -242,133 +235,6 @@ def _try_llm_fallback(command: str) -> bool:
     except Exception as e:
         log(f"router: llm fallback: {e}", tag="BRAIN", level="WARN")
         return False
-
-
-# ── Явное напоминание? ───────────────────────────────────────
-def _is_explicit_reminder(cmd_lower: str) -> bool:
-    from brain import reminders
-    if any(cmd_lower.startswith(t + " ") or cmd_lower == t for t in reminders.REMINDER_TRIGGERS):
-        return True
-    if any(phrase in cmd_lower for phrase in _REMINDER_LIST_PHRASES):
-        return True
-    if cmd_lower in _REMINDER_DONE_PHRASES:
-        return True
-    return False
-
-
-# ── F1: напоминания ──────────────────────────────────────────
-def _handle_reminders(cmd_lower: str) -> bool:
-    from brain import reminders
-
-    if any(phrase in cmd_lower for phrase in _REMINDER_LIST_PHRASES):
-        pending_list = reminders.get_pending()
-        if not pending_list:
-            _respond_and_say("NOTHING_PENDING")
-            return True
-
-        items = []
-        for p in pending_list:
-            try:
-                dt = datetime.fromisoformat(p["due_at"])
-                items.append((dt, p["text"]))
-            except Exception:
-                items.append((None, p["text"]))
-        items.sort(key=lambda x: (x[0] is None, x[0]))
-
-        lines = []
-        for dt, text in items:
-            if dt:
-                lines.append(f"{text} — {reminders.fmt_due(dt)}")
-            else:
-                lines.append(text)
-
-        _respond_and_say("PENDING_LIST", items="; ".join(lines), count=len(items))
-        return True
-
-    m = re.match(
-        r'^когда\s+(?:я\s+)?(?:должен|должна|надо|нужно|планирую|собираюсь|мне\s+надо|мне\s+нужно)\s+(.+?)\??$',
-        cmd_lower,
-    )
-    if m:
-        text = m.group(1).strip()
-        upcoming = reminders.get_upcoming(text)
-        if upcoming:
-            p = upcoming[0]
-            try:
-                dt = datetime.fromisoformat(p["due_at"])
-                _respond_and_say("REMINDER_WHEN", text=p["text"], when=reminders.fmt_due(dt))
-            except Exception:
-                _respond_and_say("NOT_UNDERSTOOD_SHORT")
-        else:
-            _respond_and_say("REMINDER_NOT_FOUND", text=text)
-        return True
-
-    m2 = re.match(r'^что\s+с\s+(.+?)\??$', cmd_lower)
-    if m2:
-        text = m2.group(1).strip()
-        upcoming = reminders.get_upcoming(text)
-        if upcoming:
-            p = upcoming[0]
-            try:
-                dt = datetime.fromisoformat(p["due_at"])
-                _respond_and_say("REMINDER_WHEN", text=p["text"], when=reminders.fmt_due(dt))
-            except Exception:
-                _respond_and_say("NOT_UNDERSTOOD_SHORT")
-        else:
-            _respond_and_say("REMINDER_NOT_FOUND", text=text)
-        return True
-
-    rest = reminders.strip_reminder_trigger(cmd_lower)
-    if rest is not None:
-        if not rest:
-            _respond_and_say("NOT_UNDERSTOOD_SHORT")
-            return True
-
-        parsed = datetime_parser.parse_delay(rest)
-        if parsed:
-            delay, text = parsed
-            r = reminders.add(text, delay)
-            if r:
-                _respond_and_say("REMINDER_ADDED", text=text, minutes=delay)
-                return True
-
-        parsed = datetime_parser.parse_when(rest)
-        if parsed:
-            due, text = parsed
-            r = reminders.add_at(text, due)
-            if r:
-                _respond_and_say("REMINDER_ADDED_AT", text=text, when=reminders.fmt_due(due))
-                return True
-
-        r = reminders.add(rest, 5)
-        if r:
-            _respond_and_say("REMINDER_ADDED", text=rest, minutes=5)
-            return True
-        _respond_and_say("NOT_UNDERSTOOD_SHORT")
-        return True
-
-    if cmd_lower in _REMINDER_DONE_PHRASES:
-        pending_list = reminders.get_pending()
-        if pending_list:
-            p = pending_list[0]
-            reminders.mark_done(p["id"])
-            _respond_and_say("REMINDER_DONE", text=p["text"])
-        else:
-            _respond_and_say("NOT_UNDERSTOOD_SHORT")
-        return True
-
-    if cmd_lower.startswith(("я позвонил ", "я позвонила ",
-                             "я сделал ", "я сделала ",
-                             "я выполнил ", "я выполнила ")):
-        parts = cmd_lower.split(" ", 2)
-        if len(parts) >= 3:
-            rest = parts[2].strip()
-            if reminders.mark_done_by_text(rest):
-                _respond_and_say("REMINDER_DONE", text=rest)
-                return True
-        return False
-
-    return False
 
 
 # ── pending (ask + offer) ─────────────────────────────────────

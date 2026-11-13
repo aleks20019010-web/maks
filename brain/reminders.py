@@ -8,20 +8,30 @@
 #
 # kind:
 #   "delay" — «через N минут» — один слот ровно в due_at.
-#   "date"  — конкретная дата/время — два слота:
-#             до 12:00 → 21:00 и 22:00 предыдущего дня;
-#             после 12:00 → 10:00 и 11:00 этого же дня.
+#   "date"  — конкретная дата/время — несколько слотов:
+#             - вечером накануне: 22:00 и 23:00 (если событие завтра или позже);
+#             - за час до события (due - 1h), если ещё не прошёл;
+#             - за 5 минут до события (due - 5m), если «за час» уже прошёл,
+#               но до события ещё есть время.
 #
-# Просроченные: если событие прошло больше MAX_SLOT_AGE_MINUTES минут —
-# напоминание удаляется, не озвучивается. Иначе — озвучивается.
+# FIX (2026-11-13): get_reminder_times — новая логика слотов.
+#   Раньше: до полудня → 21:00/22:00 накануне; после полудня → 10:00/11:00
+#   того же дня. Не совпадало с ожиданием: «вечером 22–23, и за час до».
+#   Теперь: 22:00/23:00 накануне + за час до + за 5 минут (fallback).
 #
-# check_and_remind() — фоновый поток: раз в 30 сек проверяет слоты
-# и говорит вслух. Не зависит от wake / команды.
+# FIX (2026-11-13): get_due_slots — проверяем СЛОТ, а не due.
+#   Раньше: if now - due > MAX_SLOT_AGE_MINUTES — удаляли. Для kind="date"
+#   слоты (22:00 накануне) могли быть в прошлом, а due — в будущем.
+#   now - due < 0 → не удаляли. А slot <= now → озвучивали «вчерашний»
+#   слот сразу после добавления (было: «напомнил через 4 секунды»).
+#   Теперь: если слот просрочен > MAX_SLOT_AGE_MINUTES — скип. Если все
+#   слоты просрочены и due в прошлом — удалить напоминание.
 #
-# FIX (день 28, 5.15): сюда переехали REMINDER_TRIGGERS, fmt_due,
-# strip_reminder_trigger из brain/router.py. Причина: они про напоминания,
-# не про маршрутизацию. router.py вызывает reminders.fmt_due(...) и
-# reminders.strip_reminder_trigger(...). Один источник правды.
+# FIX (2026-11-13, #2): дедуп в _add_entry.
+#   Если уже есть невыполненное напоминание с тем же text и тем же due_at
+#   (до минуты) — не добавляем второе, возвращаем существующее с флагом
+#   "_duplicate": True. Скил по флагу скажет REMINDER_ALREADY,
+#   а не REMINDER_ADDED / REMINDER_ADDED_AT.
 
 import json
 import os
@@ -41,16 +51,15 @@ _stop = threading.Event()
 _lock = threading.Lock()
 
 CHECK_INTERVAL_SEC = 30
-MAX_SLOT_AGE_MINUTES = 30  # если событие прошло > 30 мин — удалить, не говорить
+MAX_SLOT_AGE_MINUTES = 5  # если слот прошёл > 5 мин — не озвучивать, удалить
 
 
-# ── Триггеры (используются и в router.py: _is_explicit_reminder,
-#    _strip_reminder_trigger). Публичное имя — без подчёркивания. ──
+# ── Триггеры (используются в reminder-скиле: _strip_trigger) ──
 REMINDER_TRIGGERS = ("напомни", "напомнить", "запомни", "запомнить")
 
 
 # ────────────────────────────────────────────────────────────
-# ФОРМАТИРОВАНИЕ И ПАРСИНГ (перенесено из router.py, 5.15)
+# ФОРМАТИРОВАНИЕ И ПАРСИНГ
 # ────────────────────────────────────────────────────────────
 _MONTHS_RU = {
     1: "января", 2: "февраля", 3: "марта", 4: "апреля",
@@ -111,22 +120,49 @@ def get_reminder_times(due_at: datetime, kind: str = "date") -> list:
     """Вернуть список datetime — когда напоминать.
 
     kind == "delay" → один слот ровно в due_at.
+
     kind == "date":
-      Если событие до 12:00 — 21:00 и 22:00 предыдущего дня.
-      Если после 12:00 — 10:00 и 11:00 этого же дня.
+      1. Вечером накануне: 22:00 и 23:00 (если событие завтра или позже).
+      2. За час до события (due - 1h), если ещё не прошёл.
+      3. За 5 минут до события (due - 5m), если «за час» уже прошёл,
+         но до события ещё есть время.
+
+    Примеры (now = 13 ноя 10:00):
+      14 ноя 09:00 → [13 ноя 22:00, 13 ноя 23:00, 14 ноя 08:00]
+      14 ноя 15:00 → [13 ноя 22:00, 13 ноя 23:00, 14 ноя 14:00]
+      13 ноя 18:00 → [13 ноя 17:00]  (22:00/23:00 после события — скип)
+      13 ноя 17:30 (now=17:30) → [13 ноя 17:25? нет, 5м уже...]
+
+    Примеры (now = 13 ноя 17:30):
+      13 ноя 18:00 → [13 ноя 17:55]  («за час» прошёл, «за 5 минут»)
     """
+    now = _now()
+
     if kind == "delay":
         return [due_at]
-    if due_at.hour < 12:
-        prev = due_at - timedelta(days=1)
-        return [
-            prev.replace(hour=21, minute=0, second=0, microsecond=0),
-            prev.replace(hour=22, minute=0, second=0, microsecond=0),
-        ]
-    return [
-        due_at.replace(hour=10, minute=0, second=0, microsecond=0),
-        due_at.replace(hour=11, minute=0, second=0, microsecond=0),
-    ]
+
+    slots = []
+
+    # 1. Вечером накануне: 22:00 и 23:00 (если событие завтра или позже)
+    if due_at.date() > now.date():
+        prev_evening = (due_at - timedelta(days=1)).replace(
+            hour=22, minute=0, second=0, microsecond=0,
+        )
+        slots.append(prev_evening)                      # 22:00
+        slots.append(prev_evening.replace(hour=23))     # 23:00
+
+    # 2. За час до события
+    one_hour_before = due_at - timedelta(hours=1)
+    if one_hour_before > now:
+        slots.append(one_hour_before)
+    else:
+        # 3. «За час» прошёл — за 5 минут до события
+        five_min_before = due_at - timedelta(minutes=5)
+        if five_min_before > now:
+            slots.append(five_min_before)
+
+    # Уникализация + сортировка (вечернее 23:00 может совпасть с «за час до 00:00»)
+    return sorted(set(slots))
 
 
 # ────────────────────────────────────────────────────────────
@@ -137,7 +173,26 @@ def _add_entry(text: str, due_at: datetime, kind: str) -> dict | None:
     if not text or due_at is None:
         return None
 
+    # FIX (2026-11-13): дедуп. Если уже есть невыполненное напоминание
+    # с тем же text и тем же due_at (до минуты) — не добавляем второе,
+    # возвращаем существующее с флагом "_duplicate": True.
+    # Скил по флагу скажет "Уже записано", а не "Записал".
+    due_key = due_at.replace(second=0, microsecond=0)
     data = _load()
+    for p in data:
+        if p.get("done"):
+            continue
+        try:
+            p_due = datetime.fromisoformat(p["due_at"]).replace(second=0, microsecond=0)
+        except Exception:
+            continue
+        if p.get("text", "").strip().lower() == text.lower() and p_due == due_key:
+            log(f"reminders: дубликат «{text}» на {p['due_at']} — не добавляю",
+                tag="BRAIN")
+            result = dict(p)
+            result["_duplicate"] = True
+            return result
+
     next_id = max((p.get("id", 0) for p in data), default=0) + 1
     entry = {
         "id": next_id,
@@ -195,7 +250,9 @@ def get_upcoming(text: str) -> list:
 def get_due_slots() -> list:
     """Список (reminder, slot_index, slot_time) — просроченных и неотмеченных.
 
-    Просроченные напоминания (событие прошло > MAX_SLOT_AGE_MINUTES) удаляются.
+    FIX (2026-11-13): проверяем СЛОТ, а не due.
+    Если слот просрочен > MAX_SLOT_AGE_MINUTES — не озвучивать.
+    Если все слоты просрочены и due в прошлом — удалить напоминание.
     """
     global _cache
     now = _now()
@@ -210,21 +267,24 @@ def get_due_slots() -> list:
         except Exception:
             continue
 
-        # Событие прошло больше чем на MAX_SLOT_AGE_MINUTES — удалить
-        if now - due > timedelta(minutes=MAX_SLOT_AGE_MINUTES):
-            to_remove.append(p["id"])
-            continue
-
         kind = p.get("kind", "date")
         slots = get_reminder_times(due, kind)
+
+        slot_fresh = False
         for idx, slot in enumerate(slots):
             key = (p["id"], idx)
             if key in _reminded_slots:
                 continue
+            if now - slot > timedelta(minutes=MAX_SLOT_AGE_MINUTES):
+                continue          # слот просрочен — не озвучивать
+            slot_fresh = True
             if slot <= now:
                 result.append((p, idx, slot))
 
-    # Удалить устаревшие
+        # Если все слоты просрочены и due в прошлом — удалить
+        if not slot_fresh and now > due:
+            to_remove.append(p["id"])
+
     if to_remove:
         data = _load()
         data = [p for p in data if p["id"] not in to_remove]

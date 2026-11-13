@@ -6,6 +6,14 @@
 # Возвращает:
 #   parse_when(text) → (due_datetime, clean_text) | None
 #   parse_delay(text) → (delay_minutes, clean_text) | None
+#   parse_date_only(text) → date | None   (для REMINDER_LIST, «что на завтра»)
+#
+# FIX (2026-11-13): parse_delay без обязательного хвоста.
+#   Раньше: r'^через\s+...\s+(.+)$' — «через час» без текста после
+#   не парсился, pending-ответ «через час» уходил в clarify-цикл.
+#   Теперь: (.*)$ — хвост опциональный, clean_text может быть пустым.
+#   Регрессии нет: _handle_reminders удалён, parse_delay используется
+#   только в DateTimeExtractor.
 
 import re
 from datetime import datetime, timedelta
@@ -41,7 +49,7 @@ _NUM_WORDS = {
     "одну": 1, "один": 1, "одна": 1,
     "две": 2, "два": 2, "три": 3, "четыре": 4, "пять": 5,
     "шесть": 6, "семь": 7, "восемь": 8, "девять": 9, "десять": 10,
-    "пятнадцать": 15, "двадцать": 20, "тридцать": 30,
+    "пятнадцать": 15, "двадцать": 20, "тридцать": 30, "шестьдесят": 60,
 }
 
 
@@ -139,13 +147,15 @@ def _extract_date(text: str):
 
 
 def parse_delay(text: str):
-    """«через 10 минут X» / «через одну минуту X» / «через 2 часа X».
+    """«через 10 минут X» / «через одну минуту X» / «через 2 часа X»
+    / «через час» / «через 10 минут» (без хвоста).
 
     Возвращает (delay_minutes, clean_text) или None.
+    clean_text может быть пустым — если хвоста нет (pending-ответ «через час»).
     """
     t = text.strip()
     m = re.match(
-        r'^через\s+(\d+|[а-яё\-]+)\s*(минут|мин|час|ч)\w*\s+(.+)$',
+        r'^через\s+(\d+|[а-яё\-]+)\s*(минут|мин|час|ч)\w*\s*(.*)$',
         t
     )
     if not m:
@@ -233,5 +243,49 @@ def parse_when(text: str):
         if due < now:
             due = due + timedelta(days=1)
         return due, clean
+
+    return None
+
+
+def parse_date_only(text: str):
+    """Дата без времени: «завтра», «послезавтра», «сегодня», «29 октября».
+
+    Возвращает datetime.date или None.
+    Для REMINDER_LIST («что на завтра») — там время не нужно.
+    parse_when не трогаем: он про «завтра в 9:00», с хвостом.
+
+    FIX (2026-11-13): добавлена. parse_when("завтра") → None (нужен хвост),
+    а «что на завтра» после вычитания «что на» даёт ровно «завтра».
+    """
+    from datetime import date as _date
+
+    if not text:
+        return None
+    t = text.strip().lower()
+    now = datetime.now()
+
+    # «завтра/послезавтра/сегодня» — без хвоста
+    if t in ("завтра",):
+        return (now + timedelta(days=1)).date()
+    if t in ("послезавтра",):
+        return (now + timedelta(days=2)).date()
+    if t in ("сегодня",):
+        return now.date()
+
+    # «29 октября» / «двадцать третьего октября» — без времени
+    date_parsed, _clean = _extract_date(t)
+    if date_parsed:
+        day, month = date_parsed
+        year = now.year
+        try:
+            d = _date(year, month, day)
+        except ValueError:
+            return None
+        if d < now.date():
+            try:
+                d = d.replace(year=year + 1)
+            except ValueError:
+                return None
+        return d
 
     return None

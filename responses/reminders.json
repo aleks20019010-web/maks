@@ -1,0 +1,41 @@
+{
+  "REMINDER_ADD_CLARIFY": [
+    {"text": "sil<[50]> Во сколько напомнить?", "style": "normal", "weight": 2.0, "emotion": "neutral", "slot": "core"},
+    {"text": "sil<[50]> На когда поставить?", "style": "friendly", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Уточни время", "style": "formal", "weight": 1.5, "emotion": "neutral", "slot": "core"},
+    {"text": "sil<[50]> Когда напомнить?", "style": "normal", "weight": 1.5, "emotion": "neutral", "slot": "core"},
+    {"text": "sil<[50]> На какое время?", "style": "friendly", "weight": 1.2, "emotion": "good", "slot": "core"},
+    {"text": "Скажи, когда напомнить", "style": "formal", "weight": 1.0, "emotion": "neutral", "slot": "core"},
+    {"text": "sil<[50]> К какому времени?", "style": "normal", "weight": 1.0, "emotion": "neutral", "slot": "core"},
+    {"text": "sil<[50]> Когда поставить напоминание?", "style": "friendly", "weight": 0.8, "emotion": "good", "slot": "core"}
+  ],
+  "REMINDER_DONE_CLARIFY": [
+    {"text": "sil<[50]> А что именно?", "style": "friendly", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "sil<[50]> Что закрыть?", "style": "normal", "weight": 2.0, "emotion": "neutral", "slot": "core"},
+    {"text": "Уточни, что сделано", "style": "formal", "weight": 1.5, "emotion": "neutral", "slot": "core"},
+    {"text": "sil<[50]> Что выполнено?", "style": "normal", "weight": 1.5, "emotion": "neutral", "slot": "core"},
+    {"text": "sil<[50]> Какое напоминание закрыть?", "style": "friendly", "weight": 1.2, "emotion": "good", "slot": "core"},
+    {"text": "sil<[50]> Что там сделано?", "style": "friendly", "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "Назови, что выполнено", "style": "formal", "weight": 1.0, "emotion": "neutral", "slot": "core"},
+    {"text": "sil<[50]> Что именно сделано?", "style": "normal", "weight": 0.8, "emotion": "neutral", "slot": "core"},
+    {"text": "sil<[50]> Ну и что закрываем?", "style": "ironic", "humor": 0.2, "weight": 0.8, "emotion": "good", "slot": "core"},
+    {"text": "Уточни", "style": "formal", "weight": 0.8, "emotion": "neutral", "slot": "core"}
+  ],
+  "REMINDER_LIST_EMPTY_DAY": [
+    {"text": "sil<[50]> На {day} ничего нет", "style": "normal", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "{day} свободен", "style": "formal", "weight": 1.5, "emotion": "neutral", "slot": "core"},
+    {"text": "sil<[50]> {day} — пусто sil<[150]> Отдыхайте", "style": "friendly", "weight": 1.5, "emotion": "good", "slot": "core"},
+    {"text": "sil<[50]> На {day} ничего не запланировано", "style": "formal", "weight": 1.2, "emotion": "neutral", "slot": "core"},
+    {"text": "sil<[50]> {day} у вас пусто", "style": "normal", "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "sil<[50]> На {day} ничего", "style": "friendly", "weight": 1.0, "emotion": "good", "slot": "core"},
+    {"text": "{day} — ни одного напоминания", "style": "formal", "weight": 0.8, "emotion": "neutral", "slot": "core"},
+    {"text": "sil<[50]> {day} свободен sil<[150]> Наслаждайтесь", "style": "friendly", "humor": 0.1, "weight": 0.8, "emotion": "good", "slot": "core"}
+  ],
+  "REMINDER_ALREADY": [
+    {"text": "sil<[50]> Уже записано sil<[150]> {text} sil<[75]> {when}", "style": "normal", "weight": 2.0, "emotion": "neutral", "slot": "core"},
+    {"text": "sil<[50]> Такое уже есть sil<[150]> {text} sil<[75]> {when}", "style": "friendly", "weight": 2.0, "emotion": "good", "slot": "core"},
+    {"text": "Уже записано: {text} — {when}", "style": "formal", "weight": 1.5, "emotion": "neutral", "slot": "core"},
+    {"text": "sil<[50]> Это уже стоит в напоминаниях sil<[150]> {text} sil<[75]> {when}", "style": "normal", "weight": 1.2, "emotion": "neutral", "slot": "core"},
+    {"text": "sil<[50]> Не буду дублировать sil<[150]> {text} уже есть на {when}", "style": "friendly", "weight": 1.0, "emotion": "good", "slot": "core"}
+  ]
+}

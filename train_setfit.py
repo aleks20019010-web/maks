@@ -6,13 +6,29 @@
   1) contrastive-обучение энкодера (SetFit Trainer) — 1 эпоха;
   2) ПЕРЕОБУЧЕНИЕ ГОЛОВЫ с class_weight="balanced" на train-эмбеддингах —
      лечит перекос MUSIC_PLAY (126) против остальных (10);
-  3) метрики на val, confusion matrix, 6 контрольных фраз;
+  3) метрики на val, confusion matrix, контрольные фразы;
   4) сохранение модели в models/setfit_intents/, отчёт в data/train_report.md.
 
 База: cointegrated/rubert-tiny2.
 
 Запуск (откуда угодно):
     python train_setfit.py
+
+── FIX (2026-11-13): PROBES для REMINDER_* ───────────────────────
+   Раньше: 6 контрольных фраз, ни одна не про reminders. После
+   переобучения с новыми интентами (REMINDER_WHEN/LIST/DONE) модель
+   могла «зелёно» пройти старые пробы, а новые интенты никто не
+   проверил. Теперь: +4 фразы на REMINDER_ADD/WHEN/LIST/DONE.
+
+── FIX (2026-11-13, #2): load_data() из data/intents/*.json ──────
+   Датасет теперь по файлу на интент (data/intents/MUSIC_PLAY.json
+   и т.д.). Fallback: старый data/setfit_train.json.
+   Позволяет добавлять фразы в один файл, не трогая остальные.
+
+── FIX (2026-11-13, #3): find_project_root() без setfit_train.json ──
+   Раньше: искал только data/setfit_train.json. Если его удалить
+   (перейдя полностью на data/intents/*.json), скрипт падал с
+   sys.exit. Теперь: ищет data/intents/ ИЛИ data/setfit_train.json.
 """
 
 import argparse
@@ -25,7 +41,7 @@ from pathlib import Path
 # ---------- автопоиск корня проекта ----------
 
 def find_project_root() -> Path:
-    """Ищем папку, в которой есть data/setfit_train.json, поднимаясь от cwd и от скрипта."""
+    """Ищем корень проекта: data/intents/ или data/setfit_train.json."""
     candidates = [
         Path.cwd(),
         Path(__file__).resolve().parent,
@@ -33,11 +49,13 @@ def find_project_root() -> Path:
     ]
     for base in candidates:
         for parent in [base, *base.parents]:
+            if (parent / "data" / "intents").is_dir():
+                return parent
             if (parent / "data" / "setfit_train.json").is_file():
                 return parent
     sys.exit(
-        "Не найден data/setfit_train.json. Искал вверх от:\n  "
-        + "\n  ".join(str(c) for c in candidates)
+        "Не найден ни data/intents/, ни data/setfit_train.json. "
+        "Искал вверх от:\n  " + "\n  ".join(str(c) for c in candidates)
     )
 
 
@@ -49,17 +67,54 @@ REPORT_PATH = ROOT / "data" / "train_report.md"
 DEFAULT_BASE = "cointegrated/rubert-tiny2"
 
 # Контрольные фразы: рискованные пары + то, что проверяли руками.
+# FIX (2026-11-13): +4 на REMINDER_* (ADD/WHEN/LIST/DONE).
 PROBES = [
+    # музыка / общие
     ("включи мою музыку",              "MUSIC_WAVE"),
     ("что за песня",                   "MUSIC_NOW_PLAYING"),
     ("почему песня так называется",    "LLM_QUESTION"),
     ("расскажи про группу",            "LLM_QUESTION"),
     ("громче",                         "VOLUME_UP"),
     ("почисти корзину",                "CLEANUP_RECYCLE"),
+    # напоминания (2026-11-13)
+    ("напомни через 10 минут позвонить", "REMINDER_ADD"),
+    ("когда к врачу",                    "REMINDER_WHEN"),
+    ("мои напоминания",                  "REMINDER_LIST"),
+    ("готово позвонить маме",            "REMINDER_DONE"),
 ]
 
 
 def load_data():
+    """Загрузить датасет из data/intents/*.json (по файлу на интент).
+
+    Fallback: старый data/setfit_train.json (list[{text,label}]).
+    """
+    intents_dir = ROOT / "data" / "intents"
+    if intents_dir.is_dir():
+        rows = []
+        for path in sorted(intents_dir.glob("*.json")):
+            label = path.stem  # MUSIC_PLAY.json → MUSIC_PLAY
+            try:
+                items = json.loads(path.read_text(encoding="utf-8"))
+            except Exception as e:
+                sys.exit(f"{path}: {e}")
+            if not isinstance(items, list):
+                sys.exit(f"{path}: ожидался list")
+            for item in items:
+                if isinstance(item, str):
+                    text = item.strip()
+                elif isinstance(item, dict) and "text" in item:
+                    text = str(item["text"]).strip()
+                else:
+                    sys.exit(f"{path}: плохая запись {item!r}")
+                if text:
+                    rows.append({"text": text, "label": label})
+        if not rows:
+            sys.exit(f"{intents_dir}: пусто")
+        print(f"Датасет: {len(rows)} фраз из {len(list(intents_dir.glob('*.json')))} файлов")
+        return rows
+
+    # Fallback: старый единый файл
     with open(DATA_PATH, encoding="utf-8") as f:
         rows = json.load(f)
     if not isinstance(rows, list) or not rows:

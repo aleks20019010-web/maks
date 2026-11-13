@@ -46,6 +46,20 @@
 #   (локальный плейлист из liked_tracks.json, без Яндекса).
 #   Раньше «включи мою музыку» уходило в MUSIC_PLAY → entity local_liked
 #   (костыль через phrase-entity). Теперь — отдельный интент.
+#
+# ── REMINDER_WHEN / REMINDER_LIST / REMINDER_DONE (2026-11-13) ────
+#   Перенос напоминаний из router (fast-path) в NLU + скил.
+#   Раньше: REMINDER_ADD обрабатывался в router.py по регуляркам,
+#   «когда напоминание» / «что на завтра» / «сделал» — вообще не
+#   распознавались (уходили в LLM или UNKNOWN).
+#   Теперь:
+#     REMINDER_ADD  → reminders.add    (создать напоминание)
+#     REMINDER_WHEN → reminders.when   (когда следующее / во сколько)
+#     REMINDER_LIST → reminders.list   (что на завтра / список)
+#     REMINDER_DONE → reminders.done   (отметить выполненным)
+#   Дата/время парсится в скиле через brain/datetime_parser.py
+#   (parse_when для add, parse_date_only для list).
+#   Entity для REMINDER_* не извлекается в NLU (парсинг — в скиле).
 
 from dataclasses import dataclass, field
 from enum import Enum
@@ -94,8 +108,11 @@ class Intent(str, Enum):
     # Система
     SYSTEM_STATUS = "SYSTEM_STATUS"
 
-    # Напоминания
+    # Напоминания (2026-11-13): перенос из router в скил + NLU.
     REMINDER_ADD = "REMINDER_ADD"
+    REMINDER_WHEN = "REMINDER_WHEN"
+    REMINDER_LIST = "REMINDER_LIST"
+    REMINDER_DONE = "REMINDER_DONE"
 
     # Очистка
     CLEANUP_DISK = "CLEANUP_DISK"

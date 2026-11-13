@@ -16,6 +16,16 @@
 #   MUSIC_DISLIKE → music.dislike_current (add_dislike + music_next)
 #   MUSIC_LOCAL_LIKED → music.play_local_liked (локальный плейлист)
 #   Раньше: resolver: нет скила для MUSIC_LIKE → FALLBACK → LLM (4-15 сек).
+#
+# ── REMINDER_* (2026-11-13) ─────────────────────────────────────
+#   Перенос напоминаний из router (fast-path) в NLU + скил.
+#   _INTENT_TO_SKILL: REMINDER_ADD / REMINDER_WHEN / REMINDER_LIST /
+#   REMINDER_DONE → "reminders".
+#   Раньше был только REMINDER_ADD с комментарием «пока нет скила —
+#   уйдёт в _handle_reminders раньше». Теперь скил reminders
+#   зарегистрирован, все четыре интента идут в него.
+#   action ставит reminders decision engine (add/when/list/done)
+#   или скил сам по command.intent, если decision engine нет.
 
 from brain.nlu.types import Command, Intent
 from brain.skills import base as skills_base
@@ -46,7 +56,11 @@ _INTENT_TO_SKILL: dict[Intent, str | None] = {
     Intent.VOLUME_SET: "controls",
     Intent.WEATHER_QUERY: "weather",
     Intent.SYSTEM_STATUS: "system",
-    Intent.REMINDER_ADD: "reminders",   # пока нет скила — уйдёт в _handle_reminders раньше
+    # Напоминания (2026-11-13): все четыре → reminders.
+    Intent.REMINDER_ADD: "reminders",
+    Intent.REMINDER_WHEN: "reminders",
+    Intent.REMINDER_LIST: "reminders",
+    Intent.REMINDER_DONE: "reminders",
     Intent.CLEANUP_DISK: "cleanup",
     Intent.CLEANUP_RECYCLE: "cleanup_recycle",
     Intent.SMALLTALK: "smalltalk",
