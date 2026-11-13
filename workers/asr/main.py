@@ -1,29 +1,46 @@
 """
-workers/asr/main.py — ASR worker (v8.7).
+workers/asr/main.py — ASR worker (v8.9.2).
 
-v8.7 (2026-11-13): DIALOG ОТКЛЮЧЁН.
-  Пользователь не ведёт диалог с Максом без «Макс». DIALOG (окно 10с
-  после TTS) ловил эхо музыки (встроенные динамики близко к микрофону,
-  AEC не справляется). GigaAM слышал «ну»/«ой» из песни → brain →
-  бред. Отключили DIALOG полностью. ASR больше не знает про музыку.
-  WAIT (после бипа) и wake (Vosk) — остаются.
+v8.9.2 (2026-11-13): fallback до ring.total.
+  Симптом: «макс запомни 14 октября в 9 часов к врачу» → GigaAM получил
+  «макс запомни четырнадцатого» (обрезано). Vosk с грамматикой закрыл
+  фразу рано (по последнему слову из грамматики: «макс за пауза [unk]»),
+  data_end_pos = позиция после «пауза», а не конец речи. GigaAM fallback
+  брал [data_end_pos - 4с, data_end_pos] — хвост «октября в 9 часов
+  к врачу» не попадал.
+
+  Фикс: fallback берёт [data_end_pos - 4с, ring.total] — всю фразу до
+  текущего момента. Пользователь к моменту fallback (через 1.5с после
+  wake) уже замолчал → ring.total = конец речи → GigaAM получает всю
+  фразу, включая хвост после data_end_pos.
+
+v8.9.1: локальный артист первым (music).
+v8.9: локальный артист первым (music).
+v8.8: retry search_artist, speaking=True до synth, audio_set_volume(0).
+v8.7: DIALOG off (ASR не знает про музыку).
+v8.6: (внутренняя).
+v8.5: brain _send_music_after_tts.
+v8.4: pre-duck только если TTS говорит; DUCK_MAX_SEC=15.
+v8.3: TTS watchdog (play_tts_file 45с, таймауты VLC).
+v8.2: wake через Vosk, GigaAM на плотных VAD-сегментах.
 
 Роли:
-  • Vosk — единственный wake-детектор («макс» в грамматике) + hot-words.
+  • Vosk — wake-детектор («макс» в грамматике) + hot-words.
   • VAD — работает ПОСТОЯННО, копит плотные сегменты в deque.
   • GigaAM — только wake и WAIT. Свободная речь — после «Макс».
   • WAIT — после бипа, пользователь говорит команду без «Макс».
 
-Архитектура (без изменений с v8.6):
-  • Vosk снова wake-детектор. Violi отключён.
+Архитектура:
+  • Vosk снова wake-детектор. Viola отключён.
   • Vosk даёт data_end_pos (конец фразы), VAD уже создал сегмент
     по тому же silence → GigaAM берёт плотный сегмент.
   • VAD_RATIO=3.0, VAD_MIN_RMS=0.004 — видит тихую речь.
-  • WAKE_SEG_TIMEOUT_SEC=1.5 — Vosk закрывает фразу по silence, VAD тоже.
+  • VOSK_SEG_TIMEOUT_SEC=1.5 — Vosk закрывает фразу по silence, VAD тоже.
   • TTS watchdog (v8.3): play_tts_file в потоке с join(45с).
   • ASR TTL на _tts_speaking (v8.3): 60с — страховка от зависшего TTS.
   • WAIT эксклюзивен. Дедуп команд. vosk_q maxsize=200.
   • stats при изменениях (не спамит).
+  • DIALOG ОТКЛЮЧЁН (v8.7) — ASR не знает про музыку.
 """
 
 import difflib
@@ -103,8 +120,7 @@ SEG_PAD_AFTER_SEC = 0.15
 # WAIT
 WAIT_EARLY_SILENCE_SEC = 2.0
 
-# v8.7: DIALOG ОТКЛЮЧЁН.
-# _DIALOG_WINDOW_SEC и связанные функции оставлены — вдруг вернём.
+# v8.7: DIALOG ОТКЛЮЧЁН. Переменные оставлены для совместимости.
 DIALOG_WINDOW_SEC = 10.0
 
 DUP_CMD_WINDOW_SEC = 4.0
@@ -399,8 +415,7 @@ def duck_worker():
 
 # ── Флаги ───────────────────────────────────────────────────
 def _is_music_playing() -> bool:
-    # v8.7: используется ТОЛЬКО в логах/дебаге. DIALOG отключён,
-    # ASR не принимает решений на основе музыки.
+    # v8.7: используется ТОЛЬКО в логах/дебаге. DIALOG отключён.
     return rt.exists(rt.FLAG_MUSIC_PLAYING)
 
 
@@ -413,8 +428,6 @@ def _session_open() -> bool:
 
 
 # ── Окно диалога (v8.7: ОТКЛЮЧЕНО) ────────────────────────
-# Функции оставлены для совместимости, но не вызываются.
-# DIALOG не открывается, DIALOG-ветка в gigaam_worker удалена.
 def _open_dialog_window(start_pos: int):
     # v8.7: no-op. DIALOG отключён.
     pass
@@ -990,11 +1003,19 @@ def main():
                         _seg_consume(sg[1])
                         vad_ok = True
                     else:
-                        audio = ring.get(max(0, pos - int(VOSK_TAIL_SEC * sr)), pos)
-                        _seg_consume(pos)
+                        # v8.9.2: fallback до ring.total (не до pos) — GigaAM
+                        # получает всю фразу, включая хвост после data_end_pos.
+                        # Vosk с грамматикой закрывает фразу раньше, чем
+                        # пользователь закончил: «макс запомни четырнадцатого
+                        # октября в 9 часов к врачу» → Vosk закрыл после
+                        # «пауза» → GigaAM получил только «макс запомни
+                        # четырнадцатого» → brain не увидел дату.
+                        end_pos = ring.total
+                        audio = ring.get(max(0, pos - int(VOSK_TAIL_SEC * sr)), end_pos)
+                        _seg_consume(end_pos)
                         vad_ok = False
                         log(f"asr: [GIGAAM/{source}] VAD сегмент не найден — fallback "
-                            f"({VOSK_TAIL_SEC:.1f}с до data_end_pos)",
+                            f"(до ring.total, {VOSK_TAIL_SEC:.1f}с до data_end_pos)",
                             tag="ASR", level="WARN")
 
                     t_rec = time.time()
