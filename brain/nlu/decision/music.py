@@ -5,38 +5,40 @@
 #   FOUND      → EXECUTE(play_artist / play_genre / play_track / play_radio / play_mood)
 #   ABSENT     → EXECUTE(play_wave)        «включи музыку» / «вруби чего-нибудь»
 #   ABSENT+radio → EXECUTE(play_radio)     «включи радио» (без станции)
-#   UNRESOLVED → CLARIFY(«не нашёл X, может, Y?»)  «включи Орион»
-#   AMBIGUOUS  → CLARIFY(«нашёл 2: Ария, Кипелия. Какой?»)
+#   UNRESOLVED → EXECUTE(play_search)      «включи Орион» (локально → Яндекс)
+#   AMBIGUOUS  → EXECUTE(play_search)      «включи планка» (5 кандидатов → search)
 #
-# ПОЧЕМУ DecisionEngine, А НЕ ХАРДКОД В PIPELINE:
-#   У музыки своя логика (FOUND artist → play_artist, FOUND genre → play_genre).
-#   У погоды будет другая. У напоминаний — третья. Если всё в pipeline —
-#   pipeline превратится в свалку if/elif. DecisionEngine — свой на каждый
-#   тип. pipeline зовёт decision.resolve(command) и не знает деталей.
+# ── MUSIC_LIKE / MUSIC_DISLIKE / MUSIC_LOCAL_LIKED (v6.9) ──────────
+#   Добавлены в supported_intents.
+#   MUSIC_LIKE    → EXECUTE(like_current)    — add_like в liked_tracks.json
+#   MUSIC_DISLIKE → EXECUTE(dislike_current) — add_dislike + music_next
+#   MUSIC_LOCAL_LIKED → EXECUTE(play_local_liked) — локальный плейлист
 #
-# ЧЕГО DecisionEngine НЕ ДЕЛАЕТ:
-#   - не извлекает entity (это entity/*)
-#   - не выбирает скил (это skill_resolver)
-#   - не говорит (это router)
-#   Он только отвечает: «что делать с этой Command?».
+# ── FIX (v6.6): UNRESOLVED/AMBIGUOUS → play_search, не CLARIFY ─────
+#   Раньше: UNRESOLVED/AMBIGUOUS → CLARIFY(«нашёл 2: Ария, Кипелия»).
+#   Проблема: если фразы CLARIFY нет в responses/music.json — тишина.
+#   Теперь: сразу EXECUTE(play_search(query)) — music worker сам:
+#     1. search_local (точный → фонетика → fuzzy)
+#     2. если нет — Яндекс (search_track)
 #
-# RADIO (2026-11-07): «включи радио» без станции.
-#   entity/music.py::match возвращает Entity(type="radio", value=None,
-#   state=ABSENT, source="radio_no_station"). Раньше ABSENT → всегда
-#   play_wave — радио терялось («включи радио» → моя волна). Теперь:
-#   ABSENT + type="radio" → EXECUTE(play_radio) без value → скил выберет
-#   случайную станцию (см. brain/skills/music/skill.py::_command_to_result).
+# ── FIX (v6.7): query — сырой текст, очищенный от служебных слов ──
+#   Раньше: query = entity.value (кандидат — «блатняка», не «планка»).
+#   Теперь: query = _clean_search_query(command.normalized_text).
+#   «включи группу планка» → «планка».
+#   Служебные слова — в config/search_noise.json (не в коде).
+
+import json
+from pathlib import Path
 
 from brain.nlu.types import (
     Command, Decision, DecisionAction, ClarifyRequest,
     Entity, EntityState, Intent,
 )
+from shared import config as cfg
 from shared.log import log
 
 
-# ── phrase_set для CLARIFY ──────────────────────────────────
-# Ключи в responses/music.json. Если ключа нет — router скажет
-# NOT_UNDERSTOOD (fallback). Добавим фразы позже, если понадобятся.
+# ── phrase_set для CLARIFY (оставлены для совместимости, не используются) ──
 CLARIFY_UNRESOLVED_ARTIST = "MUSIC_CLARIFY_UNRESOLVED_ARTIST"
 CLARIFY_AMBIGUOUS_ARTIST = "MUSIC_CLARIFY_AMBIGUOUS_ARTIST"
 CLARIFY_AMBIGUOUS_GENERIC = "MUSIC_CLARIFY_AMBIGUOUS"
@@ -54,26 +56,68 @@ _TYPE_TO_ACTION: dict[str, str] = {
 }
 
 
+# ── Служебные слова из config/search_noise.json ──────────────
+_NOISE_FILE = Path(cfg.BASE_DIR) / "config" / "search_noise.json"
+_SEARCH_NOISE: set[str] | None = None
+
+
+def _load_search_noise() -> set[str]:
+    """Загрузить noise_words из config/search_noise.json. Лениво, 1 раз."""
+    global _SEARCH_NOISE
+    if _SEARCH_NOISE is not None:
+        return _SEARCH_NOISE
+    if not _NOISE_FILE.exists():
+        log(f"decision.music: {_NOISE_FILE} не найден — noise пуст",
+            tag="BRAIN", level="WARN")
+        _SEARCH_NOISE = set()
+        return _SEARCH_NOISE
+    try:
+        with open(_NOISE_FILE, "r", encoding="utf-8-sig") as f:
+            data = json.load(f)
+        words = data.get("noise_words", [])
+        if isinstance(words, list):
+            _SEARCH_NOISE = {w.lower().strip() for w in words if isinstance(w, str) and w.strip()}
+        else:
+            _SEARCH_NOISE = set()
+    except Exception as e:
+        log(f"decision.music: search_noise load: {e}",
+            tag="BRAIN", level="WARN")
+        _SEARCH_NOISE = set()
+    return _SEARCH_NOISE
+
+
+def _clean_search_query(text: str) -> str:
+    """Убрать служебные слова из запроса. «включи группу планка» → «планка»."""
+    if not text:
+        return ""
+    noise = _load_search_noise()
+    words = text.lower().split()
+    cleaned = [w for w in words if w not in noise]
+    return " ".join(cleaned).strip()
+
+
 class MusicDecisionEngine:
     """DecisionEngine для музыкальных интентов.
 
-    Поддерживает MUSIC_PLAY и MUSIC_WAVE.
+    Поддерживает MUSIC_PLAY, MUSIC_WAVE, MUSIC_LIKE, MUSIC_DISLIKE,
+    MUSIC_LOCAL_LIKED.
     MUSIC_STOP/PAUSE/RESUME/NEXT/PREV — не сюда (controls, не NLU-решение).
     """
 
     supported_intents: tuple[Intent, ...] = (
         Intent.MUSIC_PLAY,
         Intent.MUSIC_WAVE,
+        # v6.9: лайки / дизлайки / локальный плейлист.
+        Intent.MUSIC_LIKE,
+        Intent.MUSIC_DISLIKE,
+        Intent.MUSIC_LOCAL_LIKED,
     )
 
     def supports(self, intent: Intent) -> bool:
         return intent in self.supported_intents
 
     def resolve(self, command: Command) -> Decision:
-        """Command → Decision. Не бросает.
-
-        При ошибке — FALLBACK (router отдаст в LLM / NOT_UNDERSTOOD).
-        """
+        """Command → Decision. Не бросает."""
         if command is None:
             return self._fallback(None, "command is None")
 
@@ -81,11 +125,35 @@ class MusicDecisionEngine:
             if not self.supports(command.intent):
                 return self._fallback(command, f"intent {command.intent.value} not supported")
 
-            # MUSIC_WAVE — всегда EXECUTE(play_wave). Параметра нет.
+            # v6.9: лайки / дизлайки — без entity, action фиксирован.
+            if command.intent == Intent.MUSIC_LIKE:
+                command.action = "like_current"
+                return Decision(
+                    command=command,
+                    action=DecisionAction.EXECUTE,
+                    reason="MUSIC_LIKE → like_current",
+                    confidence=command.confidence,
+                )
+            if command.intent == Intent.MUSIC_DISLIKE:
+                command.action = "dislike_current"
+                return Decision(
+                    command=command,
+                    action=DecisionAction.EXECUTE,
+                    reason="MUSIC_DISLIKE → dislike_current",
+                    confidence=command.confidence,
+                )
+            if command.intent == Intent.MUSIC_LOCAL_LIKED:
+                command.action = "play_local_liked"
+                return Decision(
+                    command=command,
+                    action=DecisionAction.EXECUTE,
+                    reason="MUSIC_LOCAL_LIKED → play_local_liked",
+                    confidence=command.confidence,
+                )
+
             if command.intent == Intent.MUSIC_WAVE:
                 return self._execute_wave(command)
 
-            # MUSIC_PLAY — смотрим entity.
             return self._resolve_play(command)
 
         except Exception as e:
@@ -98,15 +166,10 @@ class MusicDecisionEngine:
     def _resolve_play(self, command: Command) -> Decision:
         entity = command.entity
 
-        # Нет entity — считаем ABSENT (пользователь не назвал параметр).
         if entity is None:
             return self._execute_wave(command, reason="entity None → ABSENT")
 
-        # RADIO (2026-11-07): «включи радио» без станции → play_radio.
-        # entity/music.py::match вернул Entity(type="radio", value=None,
-        # state=ABSENT, source="radio_no_station"). Раньше ABSENT → всегда
-        # play_wave — «включи радио» включало мою волну. Теперь — play_radio
-        # без value → скил выберет случайную станцию.
+        # RADIO: «включи радио» без станции → play_radio (без value).
         if entity.state == EntityState.ABSENT and entity.type == "radio":
             command.action = "play_radio"
             return Decision(
@@ -122,26 +185,21 @@ class MusicDecisionEngine:
         if entity.state == EntityState.FOUND:
             return self._execute_found(command, entity)
 
-        if entity.state == EntityState.UNRESOLVED:
-            return self._clarify_unresolved(command, entity)
+        # ── FIX (v6.6): UNRESOLVED / AMBIGUOUS → play_search ──
+        if entity.state in (EntityState.UNRESOLVED, EntityState.AMBIGUOUS):
+            return self._execute_search(command, entity)
 
-        if entity.state == EntityState.AMBIGUOUS:
-            return self._clarify_ambiguous(command, entity)
-
-        # Неизвестный state — FALLBACK, не молчим.
         return self._fallback(command, f"unknown entity state {entity.state}")
 
     def _execute_found(self, command: Command, entity: Entity) -> Decision:
         """FOUND → EXECUTE с action по entity.type."""
         action = _TYPE_TO_ACTION.get(entity.type or "")
         if action is None:
-            # FOUND с неизвестным типом (например, date для музыки) — FALLBACK.
             return self._fallback(
                 command,
                 f"FOUND but unknown entity.type={entity.type!r}",
             )
 
-        # Обновим command.action, чтобы router/скил знал, что делать.
         command.action = action
         return Decision(
             command=command,
@@ -161,68 +219,45 @@ class MusicDecisionEngine:
         )
 
     # ========================================================
-    # CLARIFY
+    # UNRESOLVED / AMBIGUOUS → play_search (локально → Яндекс)
     # ========================================================
-    def _clarify_unresolved(self, command: Command, entity: Entity) -> Decision:
-        """UNRESOLVED → CLARIFY(«не нашёл X, может, Y?»).
+    def _execute_search(self, command: Command, entity: Entity) -> Decision:
+        """UNRESOLVED / AMBIGUOUS → EXECUTE(play_search).
 
-        entity.value — что пользователь назвал («орион»).
-        Мы не знаем «Y» (альтернативу) на этом этапе — match не нашёл.
-        Поэтому вопрос generic: «не нашёл X, уточните». Альтернативы —
-        забота скила/LLM, если понадобится. NLU не выдумывает.
-        """
-        candidate = entity.value or ""
-        clarify = ClarifyRequest(
-            phrase_set=CLARIFY_UNRESOLVED_ARTIST,
-            kwargs={"candidate": candidate},
-            reason="unresolved_artist",
-        )
-        return Decision(
-            command=command,
-            action=DecisionAction.CLARIFY,
-            reason=f"UNRESOLVED candidate={candidate!r}",
-            confidence=entity.match_confidence,
-            clarify=clarify,
-        )
-
-    def _clarify_ambiguous(self, command: Command, entity: Entity) -> Decision:
-        """AMBIGUOUS → CLARIFY(«нашёл 2: Ария, Кипелия. Какой?»).
-
-        entity.candidates — список с value и confidence.
-        Собираем «Ария, Кипелов» для подстановки в фразу.
+        query — СЫРОЙ текст пользователя (normalized_text), ОЧИЩЕННЫЙ
+        от «включи», «поставь», «группу», «трек» и т.д.
+        НЕ entity.value (кандидат — может быть не тем: «блатняка» вместо «планка»).
         """
         candidates = entity.candidates or []
-        if not candidates:
-            return self._fallback(command, "AMBIGUOUS but no candidates")
 
-        # Уникальные значения, до 5 штук.
-        seen = set()
-        values: list[str] = []
-        for c in candidates:
-            if c.value and c.value not in seen:
-                seen.add(c.value)
-                values.append(c.value)
-            if len(values) >= 5:
-                break
+        # 1. Сырой текст пользователя (normalized_text) → чистим.
+        raw = (command.normalized_text or "").strip()
+        query = _clean_search_query(raw)
 
-        if not values:
-            return self._fallback(command, "AMBIGUOUS but empty values")
+        # 2. Fallback: entity.value → первый кандидат.
+        if not query:
+            query = (entity.value or "").strip()
+        if not query and candidates:
+            query = (candidates[0].value or "").strip()
+        if not query:
+            return self._fallback(
+                command, f"{entity.state.value} but empty query",
+            )
 
-        candidates_str = ", ".join(values)
-        clarify = ClarifyRequest(
-            phrase_set=CLARIFY_AMBIGUOUS_GENERIC,
-            kwargs={
-                "candidates": candidates_str,
-                "count": len(values),
-            },
-            reason="ambiguous_artist",
+        command.action = "play_search"
+        command.entity = Entity(
+            type="search",
+            value=query,
+            state=EntityState.FOUND,
+            match_confidence=entity.match_confidence,
+            source=f"{entity.state.value.lower()}_fallback",
         )
         return Decision(
             command=command,
-            action=DecisionAction.CLARIFY,
-            reason=f"AMBIGUOUS {len(values)} candidates",
+            action=DecisionAction.EXECUTE,
+            reason=f"{entity.state.value} {len(candidates)} candidates "
+                   f"→ play_search({query!r})",
             confidence=entity.match_confidence,
-            clarify=clarify,
         )
 
     # ========================================================
@@ -231,7 +266,6 @@ class MusicDecisionEngine:
     def _fallback(self, command: Command | None, reason: str) -> Decision:
         """FALLBACK — router отдаст в LLM / NOT_UNDERSTOOD."""
         if command is None:
-            # Заглушка: пустая Command, чтобы Decision не был None-command.
             command = Command(
                 intent=Intent.UNKNOWN,
                 entity=None,

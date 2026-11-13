@@ -3,31 +3,37 @@ workers/music/main.py — Music worker.
 
 Принимает команды из music_inbox, выполняет.
 
+── FIX (v8.4, 2026-11-13): pre-duck в _handle_play("search") ─────
+  pre-duck (music.duck(30) перед стартом трека) нужен, чтобы музыка
+  не «дёргалась» громко→тихо, когда TTS уже говорит. НО: если TTS
+  НЕ говорит — pre-duck залипает без пары (ASR уже отправил duck_off
+  до play_search, TTS молчит → duck_off не последует), музыка остаётся
+  приглушённой до watchdog (60с).
+
+  Фикс: pre-duck срабатывает ТОЛЬКО если TTS реально говорит СЕЙЧАС
+  (workers.tts.state_file.get_state().speaking == True). Иначе —
+  пропускается, музыка стартует нормально.
+
+  Плюс: DUCK_MAX_SEC уменьшен с 60 до 15 (см. cfg) — если pre-duck
+  где-то ещё залипнет, watchdog сработает быстрее.
+
 ── FIX (этап 0.1): music_playing — см. playback.py ────────────────
   set_music_playing / clear_music_playing вызываются ТОЛЬКО в
   playback.py (play_index — инициализация, monitor_player — heartbeat/
   снятие). main.py флаг НЕ трогает.
 
 ── FIX (этап 0.2): MUSIC_AVAILABLE ────────────────────────────────
-  Если внешний диск (E:\Music) отключён, cfg.MUSIC_AVAILABLE = False.
+  Если внешний диск (E:\\Music) отключён, cfg.MUSIC_AVAILABLE = False.
   Music-воркер работает вхолостую: команды принимает, play — отказ.
 
 ── FIX (этап 0.5): warm_up_prefetch ───────────────────────────────
-  _reset_playback_state вызывает warm_up_prefetch СИНХРОННО (0.21 сек):
-  get_local_random_track + _append_and_prefetch → playlist[0] = локальный.
-  Дальше queue_wave (modes.py) НЕ чистит playlist — play_index(0) берёт
-  готовый локальный → ▶ за 0.5 сек.
+  _reset_playback_state вызывает warm_up_prefetch СИНХРОННО (0.21 сек).
 
 ── FIX (этап 2.3): memory.start() явно ────────────────────────────
-  MemoryEngine.__init__(start_writer=False) по умолчанию. memory.start()
-  после ipc.init() — до первого remember_play в playback.py.
 
-A2 (день 29):
-  - _handle_play: перед play_index — music.stop() (старый трек СТОП,
-    не пауза). TTS уже был до (brain _dispatch).
+A2 (день 29): _handle_play: перед play_index — music.stop().
 
-MOOD:
-  - _handle_play(name="mood") → client.metatag(mood_tag) → station_id.
+MOOD: _handle_play(name="mood") → client.metatag(mood_tag) → station_id.
 
 DUCKING (день 29, вечер):
   - duck_on/duck_off → music.duck()/music.restore().
@@ -37,21 +43,16 @@ DUCKING (день 29, вечер):
 FIX (день 29, вечер, #2): _handle_play в отдельном потоке.
 
 ── LOCAL_LIKED (v6.5) ─────────────────────────────────────────────
-  _handle_play(name="local_liked") — делегирует в modes.queue_local_liked()
-  (локальные первыми, догрузка Яндексом — в modes.py). main.py больше
-  не знает про liked_tracks/search_local — тонкий диспатч.
+  _handle_play(name="local_liked") — делегирует в modes.queue_local_liked().
 
 ── SEARCH (v6.5) ──────────────────────────────────────────────────
   _handle_play(name="search") — поиск по запросу:
-    1. music.duck(30) ДО play — чтобы новый плеер сразу стартовал
-       приглушённым (TTS уже говорит; ASR пришлёт duck_on, но музыка
-       уже 30% — set_player применит duck_level, без дёргания громкости).
-    2. search_local(query) — локальный индекс (точный → phon → fuzzy).
-       Нашли — ОЧИЩАЕМ playlist/queued/prefetched, кладём один
-       LocalTrack, предзаполняем playlist до 10 треков того же артиста
-       (чтобы очередь продолжалась), play_index(0).
-    3. search.search_track(query) — Яндекс.
-    4. Не нашли — лог.
+    1. (v8.4) pre-duck ТОЛЬКО если TTS говорит сейчас.
+    2. search_local(query) — локальный индекс.
+    3. search_track(query) — Яндекс.
+
+── SEARCH ARTIST-FIRST (v6.8) ─────────────────────────────────────
+  search_artist(query) — Яндекс: артист (группа) первым.
 """
 
 import sys
@@ -65,25 +66,11 @@ from shared.log import log
 
 from workers.music import state
 from workers.music.player import music
-# FIX (этап 0.1): set_music_playing / clear_music_playing — только в
-# playback.py. main.py их НЕ импортирует и НЕ вызывает.
-# FIX (этап 0.5): warm_up_prefetch — первый трек готов заранее.
 from workers.music.playback import warm_up_prefetch
 
 
 def _reset_playback_state():
-    """Очистка playlist/queued/индекса.
-
-    FIX (этап 0.5): после очистки — warm_up_prefetch СИНХРОННО
-    (0.21 сек): get_local_random_track + _append_and_prefetch →
-    playlist[0] = локальный.
-
-    FIX (этап 2.6): music_playing НЕ трогаем. monitor_player увидит
-    != Playing и сбросит флаг. main.py — только плеер и playlist.
-
-    Общий блок для _stop_old_track() и _handle_control("stop").
-    Ducking-флаги НЕ трогает.
-    """
+    """Очистка playlist/queued/индекса."""
     with state.playlist_lock:
         state.playlist.clear()
         state.prefetched.clear()
@@ -91,16 +78,11 @@ def _reset_playback_state():
         state.queued_track_ids.clear()
     state.playlist_index = 0
     state.playlist_mode = None
-    # FIX (этап 0.5): синхронный warm_up — см. docstring модуля.
     warm_up_prefetch()
 
 
 def _stop_old_track():
-    """A2: остановить старый трек перед новой командой play.
-
-    ducking-флаги НЕ сбрасываем: если TTS ещё говорит, MusicManager.set_player
-    создаст новый плеер сразу приглушённым.
-    """
+    """A2: остановить старый трек перед новой командой play."""
     try:
         music.stop()
     except Exception as e:
@@ -108,11 +90,27 @@ def _stop_old_track():
     _reset_playback_state()
 
 
-def _play_mood(mood_tag: str):
-    """Запустить станцию по настроению.
+def _tts_is_speaking_now() -> bool:
+    """v8.4: проверить, говорит ли TTS СЕЙЧАС.
 
-    mood_tag — tag метатега («Энергичное»).
+    Используется для pre-duck в _handle_play("search"): приглушать
+    музыку ДО старта трека имеет смысл только если TTS реально
+    говорит. Иначе pre-duck залипает без пары (ASR уже отправил
+    duck_off до play_search, TTS молчит → duck_off не последует).
+
+    При любой ошибке (state_file недоступен) — возвращаем False,
+    т.е. pre-duck пропускается. Это безопаснее, чем залипший duck.
     """
+    try:
+        from workers.tts.state_file import get_state
+        return bool(get_state().get("speaking", False))
+    except Exception as e:
+        log(f"music: tts state check: {e}", tag="MUSIC", level="DEBUG")
+        return False
+
+
+def _play_mood(mood_tag: str):
+    """Запустить станцию по настроению."""
     from shared import yandex
     from workers.music import modes, playback
 
@@ -135,7 +133,7 @@ def _play_mood(mood_tag: str):
         if playlists:
             first_title = getattr(playlists[0], "title", "<no title>")
             log(f"play_mood({mood_tag}) — нет station_id, "
-                f"есть плейлист «{first_title}», но modes не умеет play_playlist",
+                f"есть плейлист «{first_title}»",
                 tag="MUSIC", level="WARN")
         else:
             log(f"play_mood({mood_tag}) — нет station_id и плейлистов",
@@ -218,16 +216,35 @@ def _handle_play(name: str, data: dict):
         query = data.get("query", "")
         if not query:
             return
-        from workers.music.search import search_local
+        from workers.music.search import search_local, search_artist, search_track
+
+        # v8.4: pre-duck ТОЛЬКО если TTS реально говорит СЕЙЧАС.
+        # Иначе pre-duck залипает без пары: ASR уже отправил duck_off
+        # до play_search (TTS молчит → duck_off не последует),
+        # музыка остаётся 30% до watchdog.
+        if _tts_is_speaking_now():
+            try:
+                music.duck(30)
+                log("search: pre-duck (TTS идёт)", tag="MUSIC", level="DEBUG")
+            except Exception as e:
+                log(f"search: duck pre-play: {e}", tag="MUSIC", level="WARN")
+        else:
+            log("search: pre-duck пропущен (TTS не говорит)",
+                tag="MUSIC", level="DEBUG")
+
+        # ── 1. АРТИСТ (группа) — Яндекс первым ──
+        artist = search_artist(query)
+        if artist:
+            from workers.music.aliases import remember_alias
+            remember_alias(query, artist.id, artist.name)
+            if modes.start_artist_only(artist):
+                playback.play_index(0)
+                log(f"play(search) «{query}» → артист: {artist.name}",
+                    tag="MUSIC")
+                return
+
+        # ── 2. ЛОКАЛЬНЫЙ трек ──
         local = search_local(query)
-
-        # FIX: приглушить ДО play. TTS стартует → ASR шлёт duck_on, но
-        # музыка уже 30% (set_player применит duck_level). Без дёргания.
-        try:
-            music.duck(30)
-        except Exception as e:
-            log(f"search: duck pre-play: {e}", tag="MUSIC", level="WARN")
-
         if local:
             from workers.music.local import LocalTrack, _load_index_sync
             with state.playlist_lock:
@@ -240,9 +257,6 @@ def _handle_play(name: str, data: dict):
                 state.playlist.append(LocalTrack(local["path"]))
             state.playlist_mode = "local_search"
 
-            # FIX: предзаполнить playlist треками того же артиста.
-            # Без этого get_next_source_track возвращает один и тот же
-            # трек повторно — played_track_ids для LocalTrack не заполняется.
             try:
                 data_idx = _load_index_sync()
                 all_tracks = data_idx.get("tracks", []) if isinstance(data_idx, dict) else []
@@ -271,7 +285,8 @@ def _handle_play(name: str, data: dict):
                 f"{local.get('artist')} — {local.get('title')}", tag="MUSIC")
             return
 
-        track = search.search_track(query)
+        # ── 3. ЯНДЕКС трек ──
+        track = search_track(query)
         if track:
             if modes.start_single_track(track):
                 playback.play_index(0)
@@ -291,12 +306,7 @@ def _handle_play(name: str, data: dict):
 
 
 def _run_play_async(name: str, data: dict):
-    """Выполнить _handle_play в фоне под флагом state.switching.
-
-    music_inbox продолжает читаться: duck_on/duck_off от ASR
-    обрабатываются в пределах MUSIC_INBOX_TIMEOUT (0.05 сек),
-    пока загрузка трека идёт.
-    """
+    """Выполнить _handle_play в фоне под флагом state.switching."""
     state.switching = True
     try:
         _handle_play(name, data)
@@ -327,17 +337,11 @@ def _handle_control(name: str, data: dict):
     elif name == "prev":
         playback.play_prev()
     elif name == "pause":
-        # FIX (этап 2.6): флаг music_playing НЕ трогаем. monitor_player
-        # увидит Paused (≤1 сек) → clear_music_playing().
         music.pause()
         music.mark_user_paused()
     elif name == "resume":
-        # FIX (этап 2.6): флаг НЕ трогаем. monitor_player увидит Playing
-        # (≤1 сек) → set_music_playing() (heartbeat).
         music.resume()
     elif name == "stop":
-        # FIX (этап 2.6): флаг НЕ трогаем. monitor_player увидит
-        # Stopped/None → clear.
         try:
             music.stop()
         except Exception as e:
@@ -399,7 +403,6 @@ def main():
     log("music: старт", tag="MUSIC")
     ipc.init()
 
-    # FIX (этап 2.3): memory.start() явно.
     try:
         from memory import memory
         memory.start()
@@ -419,7 +422,6 @@ def main():
     except Exception as e:
         log(f"music: VLC warmup: {e}", tag="MUSIC", level="WARN")
 
-    # FIX (этап 0.1): залипший music_playing — сбрасываем при старте.
     try:
         from workers.music.playback import clear_music_playing
         clear_music_playing()
@@ -449,7 +451,9 @@ def main():
     log("music: слушаю music_inbox", tag="MUSIC")
 
     inbox_timeout = getattr(cfg, "MUSIC_INBOX_TIMEOUT", 0.05)
-    duck_max_sec = float(getattr(cfg, "DUCK_MAX_SEC", 60.0))
+    # v8.4: 15с вместо 60 — если pre-duck где-то залипнет,
+    # watchdog сработает быстрее. Пользователь заметит, но не минуту.
+    duck_max_sec = float(getattr(cfg, "DUCK_MAX_SEC", 15.0))
 
     while True:
         msg = ipc.get(protocol.MUSIC_INBOX, timeout=inbox_timeout)

@@ -53,7 +53,14 @@
 #   исчерпает, потом mixed).
 #   LikedTrack скачивается по требованию в playback.play_index
 #   (search_local → download_by_id).
+#
+# ── FIX (v6.9): shuffle в queue_local_liked ──────────────────────
+#   Раньше: liked_queue = list(liked) — в порядке файла. Новый лайк
+#   (добавлен в конец liked_tracks.json) играл последним через 150
+#   треков. Теперь: random.shuffle — новый лайк может заиграть в
+#   любой момент. Старые тоже перемешаны.
 
+import random
 import threading
 import time
 
@@ -249,7 +256,11 @@ def start_genre(station_id, genre_name):
 
 def queue_local_liked():
     """Ленивый источник лайков: первые TARGET_AHEAD сразу в playlist,
-    остальные — по требованию через get_next_source_track."""
+    остальные — по требованию через get_next_source_track.
+
+    v6.9: shuffle — не по порядку файла. Новый лайк может заиграть
+    в любой момент, а не последним через 150 треков.
+    """
     from workers.music import state
     from brain import liked_tracks as _lt
     from workers.music.local import LikedTrack
@@ -269,7 +280,9 @@ def queue_local_liked():
     state.playlist_index = 0
     state.playlist_mode = "local_liked"
 
+    # v6.9: shuffle — не по порядку файла.
     state.liked_queue = list(liked)
+    random.shuffle(state.liked_queue)
     state.liked_cursor = 0
 
     target_ahead = getattr(cfg, "TARGET_AHEAD", 5)
@@ -284,6 +297,6 @@ def queue_local_liked():
                 item.get("track_id", ""),
             ))
 
-    log(f"queue_local_liked: {len(liked)} лайков, "
+    log(f"queue_local_liked: {len(liked)} лайков (shuffle), "
         f"{len(state.playlist)} в playlist (первая порция)", tag="MUSIC")
     return True

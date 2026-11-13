@@ -42,6 +42,13 @@
 #   Скилы smalltalk / cleanup / jellyfin умеют handle(str), им не нужен
 #   entity/decision — они разбираются по тексту сами.
 #
+# ── v6.9: MUSIC_LIKE / MUSIC_DISLIKE / MUSIC_LOCAL_LIKED ────────
+#   _load_decisions() регистрирует эти интенты → MusicDecisionEngine.
+#   Entity для них не извлекается (extractors только MUSIC_PLAY /
+#   MUSIC_WAVE). MusicDecisionEngine.resolve() для этих интентов
+#   ставит action фиксированно (like_current / dislike_current /
+#   play_local_liked), без entity. Дальше skill._dispatch.
+#
 # РАСШИРЯЕМОСТЬ:
 #   Регистрация экстракторов/движков — через _EXTRACTORS / _DECISIONS.
 #   MusicEntityExtractor + MusicDecisionEngine — единственные сейчас.
@@ -86,6 +93,10 @@ def _load_decisions() -> dict[Intent, object]:
     return {
         Intent.MUSIC_PLAY: get_music_decision(),
         Intent.MUSIC_WAVE: get_music_decision(),
+        # v6.9: лайки / дизлайки / локальный плейлист.
+        Intent.MUSIC_LIKE: get_music_decision(),
+        Intent.MUSIC_DISLIKE: get_music_decision(),
+        Intent.MUSIC_LOCAL_LIKED: get_music_decision(),
         Intent.VOLUME_UP: get_controls_decision(),
         Intent.VOLUME_DOWN: get_controls_decision(),
         Intent.VOLUME_SET: get_controls_decision(),

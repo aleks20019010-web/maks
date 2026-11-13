@@ -10,20 +10,12 @@
 # router.py больше не знает про соответствие intent → skill_name.
 # Он зовёт pipeline.process(), а pipeline зовёт skill_resolver.resolve().
 #
-# ПОЧЕМУ НЕ dict В ROUTER:
-#   Раньше _INTENT_TO_SKILL жил в router.py с комментарием «этап 4 переедет
-#   в skill_resolver». Этап 4 наступил. Теперь один источник правды:
-#   resolver. Если добавишь новый intent — добавь сюда, и только сюда.
-#
-# ЧЕГО RESOLVER НЕ ДЕЛАЕТ:
-#   - не извлекает entity (это entity/*)
-#   - не принимает решение EXECUTE/CLARIFY/FALLBACK (это decision/*)
-#   - не говорит (это router)
-#   Он только отвечает на вопрос «какой скил это обработает?».
-#
-# MUSIC_NOW_PLAYING (2026-11-08): «что играет» → controls.now_playing.
-#   controls._dispatch_action("now_playing") → protocol.music_now_playing_request
-#   → music → event_now_playing → brain → TTS. Быстро (0.5 сек), без LLM.
+# ── MUSIC_LIKE / MUSIC_DISLIKE / MUSIC_LOCAL_LIKED (v6.9) ──────────
+#   Добавлены в _INTENT_TO_SKILL → "music".
+#   MUSIC_LIKE    → music.like_current    (add_like в liked_tracks.json)
+#   MUSIC_DISLIKE → music.dislike_current (add_dislike + music_next)
+#   MUSIC_LOCAL_LIKED → music.play_local_liked (локальный плейлист)
+#   Раньше: resolver: нет скила для MUSIC_LIKE → FALLBACK → LLM (4-15 сек).
 
 from brain.nlu.types import Command, Intent
 from brain.skills import base as skills_base
@@ -36,6 +28,10 @@ from shared.log import log
 _INTENT_TO_SKILL: dict[Intent, str | None] = {
     Intent.MUSIC_PLAY: "music",
     Intent.MUSIC_WAVE: "music",
+    # MUSIC_LIKE / MUSIC_DISLIKE / MUSIC_LOCAL_LIKED (v6.9) → music.
+    Intent.MUSIC_LIKE: "music",
+    Intent.MUSIC_DISLIKE: "music",
+    Intent.MUSIC_LOCAL_LIKED: "music",
     Intent.MUSIC_STOP: "controls",
     Intent.MUSIC_PAUSE: "controls",
     Intent.MUSIC_RESUME: "controls",

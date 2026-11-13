@@ -2,13 +2,22 @@
 # Поиск артистов, треков, классификация запроса.
 # LOCAL (v6.5): search_local(query) — точный → phon → fuzzy по
 #   data/local_index.json. Возвращает dict или None.
+#
+# v8.8 (2026-11-13): search_artist — retry 3 попытки на каждый variant.
+#   Симптом: «включи король и шут» → «артист не найден» (01:43:21),
+#   хотя за 10 минут до этого тот же артист находился. Яндекс моргает
+#   (rate limit / сеть) → state.client.search(v) exception →
+#   except: continue → все варианты упали → None.
+#   Фикс: retry 3 попытки с паузой 0.5/1.0с + лог exception.
 
 import json
+import time
 from pathlib import Path
 
 from rapidfuzz import process, fuzz
 
 from shared import config as cfg
+from shared.log import log
 from workers.music import state
 from workers.music.phon import phon
 
@@ -26,7 +35,7 @@ def _load_local_index():
                 with open(path, encoding="utf-8") as f:
                     _LOCAL_INDEX = json.load(f)["tracks"]
             except Exception as e:
-                print(f"   local_index load error: {e}")
+                log(f"local_index load error: {e}", tag="MUSIC", level="WARN")
                 _LOCAL_INDEX = []
             for t in _LOCAL_INDEX:
                 t["_hay"] = (
@@ -72,7 +81,12 @@ def search_local(query: str):
 
 
 def search_artist(query):
-    """Нечёткий поиск артиста: падежи + доверие Яндексу."""
+    """Нечёткий поиск артиста: падежи + доверие Яндексу.
+
+    v8.8: retry 3 попытки на каждый variant. Яндекс моргает (rate limit,
+    сеть) — exception → раньше: except: continue → все варианты упали →
+    None → «артист не найден». Теперь: 3 попытки с паузой 0.5/1.0с.
+    """
     if state.client is None:
         return None
 
@@ -91,30 +105,42 @@ def search_artist(query):
         if v in seen:
             continue
         seen.add(v)
-        try:
-            result = state.client.search(v)
-            if result.artists and result.artists.results:
-                artist = result.artists.results[0]
-                print(f"   search_artist(«{v}») → {artist.name}")
-                return artist
-        except Exception:
-            continue
+
+        # v8.8: retry 3 попытки
+        for attempt in range(3):
+            try:
+                result = state.client.search(v)
+                if result.artists and result.artists.results:
+                    artist = result.artists.results[0]
+                    log(f"search_artist(«{v}») → {artist.name}", tag="MUSIC")
+                    return artist
+                # Пусто — не retry, следующий variant
+                log(f"search_artist(«{v}») → пусто", tag="MUSIC", level="DEBUG")
+                break
+            except Exception as e:
+                log(f"search_artist(«{v}») attempt {attempt+1}/3: {e}",
+                    tag="MUSIC", level="WARN")
+                if attempt < 2:
+                    time.sleep(0.5 * (attempt + 1))
+                # после 3 попыток — следующий variant
+        # continue к следующему variant
     return None
 
 
 def search_track(query):
     if state.client is None:
         return None
-    print(f"   search_track(«{query}»)")
+    log(f"search_track(«{query}»)", tag="MUSIC", level="DEBUG")
     try:
         result = state.client.search(query)
         if result.tracks and result.tracks.results:
             track = result.tracks.results[0]
             artists = ', '.join(a.name for a in track.artists)
-            print(f"   → трек: {track.title} — {artists}")
+            log(f"search_track(«{query}») → {track.title} — {artists}",
+                tag="MUSIC", level="DEBUG")
             return track
     except Exception as e:
-        print(f"   ошибка поиска трека: {e}")
+        log(f"search_track(«{query}») exception: {e}", tag="MUSIC", level="WARN")
     return None
 
 
@@ -141,5 +167,5 @@ def find_artist_track(artist, track_query):
                     if a.id == artist.id:
                         return t
     except Exception as e:
-        print(f"   Ошибка find_artist_track: {e}")
+        log(f"find_artist_track exception: {e}", tag="MUSIC", level="WARN")
     return None

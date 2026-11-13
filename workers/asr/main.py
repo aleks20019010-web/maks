@@ -1,32 +1,29 @@
 """
-workers/asr/main.py — ASR worker (v8.2).
+workers/asr/main.py — ASR worker (v8.7).
+
+v8.7 (2026-11-13): DIALOG ОТКЛЮЧЁН.
+  Пользователь не ведёт диалог с Максом без «Макс». DIALOG (окно 10с
+  после TTS) ловил эхо музыки (встроенные динамики близко к микрофону,
+  AEC не справляется). GigaAM слышал «ну»/«ой» из песни → brain →
+  бред. Отключили DIALOG полностью. ASR больше не знает про музыку.
+  WAIT (после бипа) и wake (Vosk) — остаются.
 
 Роли:
   • Vosk — единственный wake-детектор («макс» в грамматике) + hot-words.
-  • ViolaWake — ОТКЛЮЧЁН (VIOLA_ENABLED=False). Не ловит «Макс» в слитной
-    фразе, поэтому убран. Можно включить обратно через флаг.
   • VAD — работает ПОСТОЯННО, копит плотные сегменты в deque.
-  • GigaAM — единственный распознаватель свободной речи, берёт плотный
-    VAD-сегмент.
+  • GigaAM — только wake и WAIT. Свободная речь — после «Макс».
+  • WAIT — после бипа, пользователь говорит команду без «Макс».
 
-Как работает «Макс включи музыку» слитно:
-  * Vosk с грамматикой ловит «макс» в искажённой фразе («макс громче музыка»),
-    триггерит wake с pos = data_end_pos (конец фразы Vosk).
-  * VAD уже создал плотный сегмент «макс включи музыку» (потому что Vosk
-    закрывает фразу по silence, и VAD тоже по silence — они синхронны).
-  * GigaAM берёт этот сегмент, распознаёт «макс включи музыку»,
-    _after_wake отрезает «макс», команда уходит в brain.
-  * Если VAD-сегмент не найден за VOSK_SEG_TIMEOUT_SEC — fallback
-    ring.get(pos - VOSK_TAIL_SEC, pos) = 4с аудио.
-
-Фиксы v8.1 сохранены:
-  • VAD_RATIO=3.0, VAD_MIN_RMS=0.004 — VAD видит тихую речь.
-  • VAD_DEBUG=False — без спама в лог.
-  • _dialog_advance после обработки — DIALOG не берёт то же аудио.
-  • Дедуп одинаковых команд (DUP_CMD_WINDOW_SEC=4.0).
-  • WAKE_FUZZY=0.7 — «мэкс», «макц» ловятся.
-  • vosk_q maxsize=200 — меньше дропов.
-  • WAIT эксклюзивен (Vosk не обрабатывается, пока ждём команду).
+Архитектура (без изменений с v8.6):
+  • Vosk снова wake-детектор. Violi отключён.
+  • Vosk даёт data_end_pos (конец фразы), VAD уже создал сегмент
+    по тому же silence → GigaAM берёт плотный сегмент.
+  • VAD_RATIO=3.0, VAD_MIN_RMS=0.004 — видит тихую речь.
+  • WAKE_SEG_TIMEOUT_SEC=1.5 — Vosk закрывает фразу по silence, VAD тоже.
+  • TTS watchdog (v8.3): play_tts_file в потоке с join(45с).
+  • ASR TTL на _tts_speaking (v8.3): 60с — страховка от зависшего TTS.
+  • WAIT эксклюзивен. Дедуп команд. vosk_q maxsize=200.
+  • stats при изменениях (не спамит).
 """
 
 import difflib
@@ -57,7 +54,7 @@ except ImportError:
     VIOLA_AVAILABLE = False
     WakeDetector = None
 
-# Отключаем Viola: не ловит «Макс» в слитной фразе. Включить = True.
+# v8.7: Viola ОТКЛЮЧЁН. Wake только через Vosk.
 VIOLA_ENABLED = False
 
 try:
@@ -86,7 +83,7 @@ GIGAAM_ENABLED = True
 GIGAAM_MAX_BUFFER_SEC = 10.0
 WAKE_REARM_SEC = 1.2
 
-# ── VAD ──
+# VAD
 VAD_END_SILENCE_SEC = getattr(cfg, "VAD_END_SILENCE_SEC", 0.5)
 VAD_RATIO = getattr(cfg, "VAD_RATIO", 3.0)
 VAD_MIN_RMS = getattr(cfg, "VAD_MIN_RMS", 0.004)
@@ -94,34 +91,31 @@ VAD_MAX_SEG_SEC = getattr(cfg, "VAD_MAX_SEG_SEC", 8.0)
 VAD_MIN_SPEECH_SEC = 0.15
 VAD_DEBUG = getattr(cfg, "VAD_DEBUG", False)
 
-# ── Wake ──
+# Wake
 WAKE_FUZZY = 0.7
+VOSK_SEG_TIMEOUT_SEC = 1.5
+VOSK_TAIL_SEC = 4.0
 
-# Vosk-wake (основной)
-VOSK_SEG_TIMEOUT_SEC = 1.5     # сколько ждать VAD-сегмент после data_end_pos
-VOSK_TAIL_SEC = 4.0            # fallback: сколько брать назад от data_end_pos
-
-# Viola-wake (если включён)
-WAKE_SEG_MARGIN_SEC = 0.6
-WAKE_SEG_TIMEOUT_SEC = 6.0
-WAKE_PRE_SEC = 1.0
-WAKE_TAIL_SEC = 3.0
-
-# ── Паддинги VAD-сегмента ──
+# Паддинги VAD-сегмента
 SEG_PAD_BEFORE_SEC = 0.25
 SEG_PAD_AFTER_SEC = 0.15
 
-# ── WAIT ──
+# WAIT
 WAIT_EARLY_SILENCE_SEC = 2.0
 
-# ── DIALOG ──
+# v8.7: DIALOG ОТКЛЮЧЁН.
+# _DIALOG_WINDOW_SEC и связанные функции оставлены — вдруг вернём.
 DIALOG_WINDOW_SEC = 10.0
-DIALOG_SEG_POLL_SEC = 0.1
 
 DUP_CMD_WINDOW_SEC = 4.0
 
 _GIGAAM_ERROR_LIMIT = 5
 _GIGAAM_RELOAD_COOLDOWN_SEC = 60.0
+
+# TTL для _tts_speaking (v8.3): если speaking=True дольше 60с — игнор.
+_TTS_SPEAKING_TTL_SEC = 60.0
+_tts_speaking_since = 0.0
+_tts_last_state = False
 
 _STATS_LOG_SEC = 60.0
 _STATS = {
@@ -136,7 +130,7 @@ _STATS = {
     "hot_words": 0,
     "wait_commands": 0,
     "wait_timeouts": 0,
-    "dialog_commands": 0,
+    "dialog_commands": 0,  # v8.7: всегда 0 (DIALOG отключён)
     "dup_commands": 0,
     "gigaam_reloads": 0,
 }
@@ -183,6 +177,7 @@ _last_duck_warn_at = 0.0
 _wake_active = False
 _wake_active_lock = threading.Lock()
 
+# v8.7: DIALOG отключён. Переменные оставлены для совместимости.
 _dialog_until = 0.0
 _dialog_start_pos = 0
 _dialog_lock = threading.Lock()
@@ -404,41 +399,40 @@ def duck_worker():
 
 # ── Флаги ───────────────────────────────────────────────────
 def _is_music_playing() -> bool:
+    # v8.7: используется ТОЛЬКО в логах/дебаге. DIALOG отключён,
+    # ASR не принимает решений на основе музыки.
     return rt.exists(rt.FLAG_MUSIC_PLAYING)
+
 
 def _is_expecting_input() -> bool:
     return rt.exists(rt.FLAG_EXPECTING_INPUT)
+
 
 def _session_open() -> bool:
     return rt.exists(rt.FLAG_SESSION_OPEN)
 
 
-# ── Окно диалога ────────────────────────────────────────────
+# ── Окно диалога (v8.7: ОТКЛЮЧЕНО) ────────────────────────
+# Функции оставлены для совместимости, но не вызываются.
+# DIALOG не открывается, DIALOG-ветка в gigaam_worker удалена.
 def _open_dialog_window(start_pos: int):
-    global _dialog_until, _dialog_start_pos
-    with _dialog_lock:
-        now = time.time()
-        was_active = now < _dialog_until
-        if not was_active:
-            _dialog_start_pos = start_pos
-        _dialog_until = now + DIALOG_WINDOW_SEC
+    # v8.7: no-op. DIALOG отключён.
+    pass
 
 
 def _dialog_advance(pos: int):
-    global _dialog_start_pos
-    with _dialog_lock:
-        if pos > _dialog_start_pos:
-            _dialog_start_pos = pos
+    # v8.7: no-op. DIALOG отключён.
+    pass
 
 
 def _dialog_is_active() -> bool:
-    with _dialog_lock:
-        return time.time() < _dialog_until
+    # v8.7: DIALOG отключён — всегда False.
+    return False
 
 
 def _dialog_start_pos_get() -> int:
-    with _dialog_lock:
-        return _dialog_start_pos
+    # v8.7: DIALOG отключён — всегда 0.
+    return 0
 
 
 # ── Слова ───────────────────────────────────────────────────
@@ -466,7 +460,6 @@ def _get_command_words() -> set:
 
 
 def _grammar_words(hot_words) -> list:
-    # «макс» возвращён — Vosk снова wake-детектор.
     words = {"макс"} | _CONTROL_WORDS | _YES_NO_WORDS
     for w in hot_words or ():
         if isinstance(w, str):
@@ -574,11 +567,22 @@ def _wait_pos_get() -> int:
 
 
 def _tts_speaking() -> bool:
+    """v8.3: TTL 60с — страховка от зависшего state_file."""
+    global _tts_speaking_since, _tts_last_state
     try:
         from workers.tts.state_file import get_state
-        return bool(get_state().get("speaking", False))
+        speaking = bool(get_state().get("speaking", False))
     except Exception:
         return False
+
+    now = time.time()
+    if speaking and not _tts_last_state:
+        _tts_speaking_since = now
+    _tts_last_state = speaking
+
+    if speaking and (now - _tts_speaking_since) > _TTS_SPEAKING_TTL_SEC:
+        return False
+    return speaking
 
 
 def _resample(audio: np.ndarray, from_rate: int, to_rate: int) -> np.ndarray:
@@ -729,7 +733,8 @@ def main():
     signal.signal(signal.SIGINT, _handle_shutdown)
     signal.signal(signal.SIGTERM, _handle_shutdown)
 
-    log(f"asr: старт (session_id={_SESSION_ID}, viola_enabled={VIOLA_ENABLED})", tag="ASR")
+    log(f"asr: старт (session_id={_SESSION_ID}, viola_enabled={VIOLA_ENABLED}, "
+        f"dialog_disabled=True)", tag="ASR")
     ipc.init()
 
     try:
@@ -844,8 +849,7 @@ def main():
                 _seg_push(sg)
                 _stat_inc("vad_segments")
                 if VAD_DEBUG:
-                    log(f"asr: [VAD] сегмент {(sg[1] - sg[0]) / sr:.2f}с "
-                        f"порог {segmenter.threshold():.4f}",
+                    log(f"asr: [VAD] сегмент {(sg[1] - sg[0]) / sr:.2f}с",
                         tag="ASR", level="DEBUG")
 
             end_pos = ring.total
@@ -889,8 +893,12 @@ def main():
     threads.append(t)
 
     def stats_worker():
+        prev = None
         while not _shutdown.wait(_STATS_LOG_SEC):
-            log(f"asr: stats {_stats_snapshot()}", tag="ASR")
+            snap = _stats_snapshot()
+            if snap != prev:
+                log(f"asr: stats {snap}", tag="ASR")
+                prev = snap
 
     t = threading.Thread(target=stats_worker, daemon=True, name="asr-stats")
     t.start()
@@ -963,7 +971,7 @@ def main():
         nonlocal gigaam_model
         global _gigaam_busy, _rearm_until
         while not _shutdown.is_set():
-            if _wake_triggered.wait(timeout=DIALOG_SEG_POLL_SEC):
+            if _wake_triggered.wait(timeout=0.1):
                 _wake_triggered.clear()
                 if _shutdown.is_set():
                     break
@@ -971,47 +979,23 @@ def main():
                     with _trig_lock:
                         pos, source, t_trig = _wake_req
 
-                    vad_ok = False
-                    if source == "vosk":
-                        # Vosk даёт data_end_pos = конец фразы (после silence).
-                        # VAD к этому моменту уже создал сегмент (он тоже
-                        # закрывается по silence). Ищем его.
-                        margin = int(VOSK_SEG_TIMEOUT_SEC * sr)  # 1.5с
-                        sg = _wait_segment(
-                            lambda x: x[1] >= pos - margin and x[0] <= pos,
-                            VOSK_SEG_TIMEOUT_SEC,
-                        )
-                        if sg:
-                            audio = _seg_audio(sg)
-                            _seg_consume(sg[1])
-                            _dialog_advance(sg[1])
-                            vad_ok = True
-                        else:
-                            audio = ring.get(max(0, pos - int(VOSK_TAIL_SEC * sr)), pos)
-                            _seg_consume(pos)
-                            _dialog_advance(pos)
-                            log(f"asr: [GIGAAM/vosk] VAD сегмент не найден — fallback "
-                                f"({VOSK_TAIL_SEC:.1f}с до data_end_pos)",
-                                tag="ASR", level="WARN")
+                    margin = int(VOSK_SEG_TIMEOUT_SEC * sr)
+                    sg = _wait_segment(
+                        lambda x: x[1] >= pos - margin and x[0] <= pos,
+                        VOSK_SEG_TIMEOUT_SEC,
+                    )
+
+                    if sg:
+                        audio = _seg_audio(sg)
+                        _seg_consume(sg[1])
+                        vad_ok = True
                     else:
-                        # Viola (если включён): pos = chunk_end
-                        margin = int(WAKE_SEG_MARGIN_SEC * sr)
-                        sg = _wait_segment(
-                            lambda x: x[0] <= pos and x[1] >= pos - margin,
-                            WAKE_SEG_TIMEOUT_SEC,
-                        )
-                        if sg:
-                            audio = _seg_audio(sg)
-                            _seg_consume(sg[1])
-                            _dialog_advance(sg[1])
-                            vad_ok = True
-                        else:
-                            end_pos = min(ring.total, pos + int(WAKE_TAIL_SEC * sr))
-                            audio = ring.get(max(0, pos - int(WAKE_PRE_SEC * sr)), end_pos)
-                            _seg_consume(end_pos)
-                            _dialog_advance(end_pos)
-                            log(f"asr: [GIGAAM/viola] VAD сегмент не найден — fallback",
-                                tag="ASR", level="WARN")
+                        audio = ring.get(max(0, pos - int(VOSK_TAIL_SEC * sr)), pos)
+                        _seg_consume(pos)
+                        vad_ok = False
+                        log(f"asr: [GIGAAM/{source}] VAD сегмент не найден — fallback "
+                            f"({VOSK_TAIL_SEC:.1f}с до data_end_pos)",
+                            tag="ASR", level="WARN")
 
                     t_rec = time.time()
                     text = _recognize(audio)
@@ -1051,32 +1035,7 @@ def main():
                         _gigaam_busy = False
                 continue
 
-            if (_have_model() and _dialog_is_active() and not _is_waiting()
-                    and not _wake_triggered.is_set() and not _gigaam_busy):
-                try:
-                    dialog_start = _dialog_start_pos_get()
-                    sg = _seg_find(lambda x: x[0] >= dialog_start - int(0.2 * sr))
-                    if sg:
-                        _seg_consume(sg[1])
-                        _dialog_advance(sg[1])
-                        audio = _seg_audio(sg)
-                        text = _recognize(audio)
-                        if text:
-                            log(f"asr: [GIGAAM/DIALOG] «{text}»", tag="ASR")
-                            if not _is_echo(text):
-                                stripped = _after_wake(text)
-                                cmd = stripped if stripped is not None else text
-                                if cmd and not _is_dup_command(cmd):
-                                    _open_dialog_window(ring.total)
-                                    ipc.put(protocol.BRAIN_INBOX,
-                                            protocol.command(cmd, source=CommandSource.VOICE))
-                                    _stat_inc("dialog_commands")
-                        else:
-                            log("asr: [GIGAAM/DIALOG] пусто", tag="ASR", level="DEBUG")
-                        _maybe_reload_gigaam()
-                except Exception as e:
-                    log(f"asr: gigaam_worker dialog fatal: {e}", tag="ASR", level="ERROR")
-                continue
+            # v8.7: DIALOG ОТКЛЮЧЁН. Ветка удалена.
 
     t = threading.Thread(target=gigaam_worker, daemon=True, name="asr-gigaam")
     t.start()
@@ -1119,7 +1078,6 @@ def main():
                     _was_speaking = True
                     _mic_on_logged = False
                     log("asr: микрофон ВЫКЛ (TTS идёт)", tag="ASR")
-                    _open_dialog_window(ring.total)
                 _flush_queue(vosk_q)
                 _seg_clear()
                 time.sleep(0.05)
@@ -1137,7 +1095,7 @@ def main():
                         rec_hot = KaldiRecognizer(model, cfg.VOSK_RATE, grammar)
                     except Exception as e:
                         log(f"asr: сброс Vosk: {e}", tag="ASR", level="WARN")
-                _open_dialog_window(ring.total)
+                # v8.7: DIALOG не открываем. Окно не нужно.
 
             mute = POST_TTS_MUTE_WAKE_SEC if _is_waiting() else POST_TTS_MUTE_SEC
             if (now - _tts_stopped_at) < mute:
@@ -1165,7 +1123,6 @@ def main():
                 sg = _seg_find(lambda x: x[0] >= wp - back)
                 if sg:
                     _seg_consume(sg[1])
-                    _dialog_advance(sg[1])
                     audio = _seg_audio(sg)
                     gtext = _recognize(audio)
                     if gtext:
@@ -1241,13 +1198,11 @@ def main():
                     if _is_echo(text):
                         continue
 
-                    # Vosk ловит «макс» → wake
                     if "макс" in tl.split():
                         if _trigger_wake("vosk", data_end_pos):
                             log(f"asr: [VOSK] «макс» в «{text}»", tag="ASR")
                         continue
 
-                    # Hot-words
                     if _is_command_word(tl):
                         log(f"asr: [VOSK] «{text}»", tag="ASR")
                         if not _hot_word_appropriate(tl):
@@ -1255,7 +1210,6 @@ def main():
                             continue
                         log(f"asr: [HOT] «{text}»", tag="ASR")
                         _stat_inc("hot_words")
-                        _dialog_advance(data_end_pos)
                         ipc.put(protocol.BRAIN_INBOX,
                                 protocol.command(text, source=CommandSource.VOICE_HOT))
                         continue

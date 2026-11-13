@@ -16,6 +16,9 @@
 #   is_liked(artist, title) → bool
 #   remove_like(artist, title) → bool
 #   clear_liked() → int
+#
+# v6.9: remove_like — «мне не нравится» убирает из лайков, не добавляет
+#   в отдельный disliked_tracks.json. Дизлайк = удаление из liked_tracks.
 
 import json
 import os
@@ -36,10 +39,7 @@ def _read() -> list:
     if not os.path.exists(LIKED_FILE):
         return []
     try:
-        # FIX: utf-8-sig — файл мог быть сохранён с BOM (Windows Notepad /
-        # PowerShell Out-File). Раньше: open(path) → NameError (path не
-        # определён) → return [] → пустой список лайков.
-        with open(LIKED_FILE, "r", encoding="utf-8-sig") as f:
+        with open(LIKED_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
         return data if isinstance(data, list) else []
     except Exception as e:
@@ -50,7 +50,6 @@ def _read() -> list:
 def _write(data: list) -> bool:
     try:
         os.makedirs(os.path.dirname(LIKED_FILE), exist_ok=True)
-        # FIX: пишем без BOM (utf-8), чтобы _read() читал без проблем.
         with open(LIKED_FILE, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
         return True
@@ -121,6 +120,9 @@ def get_liked() -> list:
 
 
 def remove_like(artist: str, title: str) -> bool:
+    """Убрать из лайков. True — убрано, False — не было / пустые поля."""
+    if not (artist or title):
+        return False
     k = _key(artist, title)
     data = _read()
     new_data = [i for i in data
@@ -131,6 +133,7 @@ def remove_like(artist: str, title: str) -> bool:
 
 
 def clear_liked() -> int:
+    """Очистить все лайки. Возвращает сколько было."""
     data = _read()
     if _write([]):
         return len(data)

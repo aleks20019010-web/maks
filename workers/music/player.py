@@ -30,6 +30,22 @@ _ready:
   duck()/restore()/get_state() без _ready — no-op (намерение
   приглушить фиксируется, применяется в mark_ready).
 
+── FIX (v8.8, 2026-11-13): audio_set_volume(0) в clear_player ──────
+  Симптом: при команде «включи X» старая песня играла ещё 0.5–1с
+  на 100% после DUCK_OFF. Music._stop_old_track → music.stop() →
+  clear_player() → pause() + set_media(None). На Windows с mmdevice
+  VLC pause() НЕ останавливает звук мгновенно (буфер audio device
+  0.5–1с). Старая песня успевала «вылезти» на 100%, когда DUCK_OFF
+  снимал приглушение.
+
+  Фикс: audio_set_volume(0) ПЕРЕД pause()/set_media(None). Простая
+  VLC-операция, срабатывает мгновенно (не блокирует). Старая замолкает
+  ДО того, как DUCK_OFF вернёт громкость.
+
+  Безопасно для ducking: audio_set_volume(0) — на СТАРОМ плеере.
+  MusicManager.volume (пользовательская громкость) не меняется.
+  Новый плеер (set_player) ставит audio_set_volume(ducked/volume).
+
 ── FIX (этап 0.5): _apply_duck_when_playing ──────────────────────
   Симптом: после ускорения queue_wave (0.5 сек вместо 10) ducking
   перестал работать. В логе:
@@ -42,24 +58,11 @@ _ready:
   0.2 сек, не дожидается → возвращает False → «применим при mark_ready».
   Но mark_ready УЖЕ прошёл → duck не применится никогда.
 
-  Причина — тайминг, не привязка. Привязка правильная: ASR делает
-  duck_on когда микрофон выключается (TTS идёт), duck_off когда
-  включается. Раньше mark_ready был через 10 сек (Yandex), и
-  duck_on от ASR успевал до mark_ready → намерение фиксировалось,
-  mark_ready применял. Теперь mark_ready через 0.5 сек → duck_on
-  опаздывает.
-
   Решение: duck() при _ready=True, но state не Playing/Paused —
   запускает фоновый поток _apply_duck_when_playing(target):
   ждёт Playing (до 3 сек) и применяет _fade_to_async(target).
   Выходит, если плеер заменён/очищен (player is not self.player).
   Если за 3 сек не дождались — выходит (VLC сломался / terminal).
-
-  Что НЕ трогаем:
-    - привязку к ASR (правильная);
-    - _duck_on/_duck_off в asr/main.py (работают);
-    - music.duck()/restore() в music/main.py (вызываются правильно);
-    - modes.queue_wave / playback.play_index (работают).
 
 ── FIX (этап 0.5): print → log(tag="MUSIC") ────────────────────
   Раньше player.py логировал в stderr (print), в jarvis.log его
@@ -179,6 +182,17 @@ class MusicManager:
             self._ready = False
 
         if old_player is not None:
+            # v8.8: audio_set_volume(0) ПЕРЕД pause/set_media.
+            # На Windows mmdevice VLC pause() не останавливает звук
+            # мгновенно (буфер audio device 0.5–1с). audio_set_volume(0)
+            # — простая VLC-операция, срабатывает мгновенно, не блокирует.
+            # Старая песня замолкает ДО DUCK_OFF (который вернёт громкость).
+            # MusicManager.volume не меняется — ducking не ломается
+            # (новый плеер в set_player ставит ducked/volume).
+            try:
+                old_player.audio_set_volume(0)
+            except Exception:
+                pass
             try:
                 old_player.pause()
             except Exception:
@@ -187,6 +201,8 @@ class MusicManager:
                 old_player.set_media(None)
             except Exception:
                 pass
+            log("clear_player: volume(0) + pause + set_media(None), "
+                "release в фоне", tag="MUSIC", level="DEBUG")
             threading.Thread(
                 target=self._safe_release,
                 args=(old_player, old_media),

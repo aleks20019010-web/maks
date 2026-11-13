@@ -30,6 +30,22 @@
 #   или LLM_QUESTION (0.67) → 4-15 сек. Теперь: MUSIC_NOW_PLAYING → controls.
 #   controls.now_playing → protocol.music_now_playing_request → music →
 #   event_now_playing → brain → TTS «Кукрыниксы — Страхи» (0.5 сек).
+#
+# ── MUSIC_LIKE / MUSIC_DISLIKE (v6.9) ──────────────────────────────
+#   Добавлены в enum Intent. Раньше их не было — SetFit/ONNX пропускал
+#   «лайк» и «не нравится» как неизвестные интенты (или уходили в
+#   MUSIC_PLAY → play_search → случайный артист «Лайк»).
+#   Теперь:
+#     MUSIC_LIKE    → music.like_current    (add_like в liked_tracks.json)
+#     MUSIC_DISLIKE → music.dislike_current (add_dislike + music_next)
+#   Требуют: skill_resolver маппинг, decision/music.py поддерживает,
+#   pipeline _load_extractors/_load_decisions. Без этого — FALLBACK.
+#
+# ── MUSIC_LOCAL_LIKED (v6.9) ───────────────────────────────────────
+#   «включи мою музыку» / «мои лайки» → music.play_local_liked
+#   (локальный плейлист из liked_tracks.json, без Яндекса).
+#   Раньше «включи мою музыку» уходило в MUSIC_PLAY → entity local_liked
+#   (костыль через phrase-entity). Теперь — отдельный интент.
 
 from dataclasses import dataclass, field
 from enum import Enum
@@ -57,6 +73,15 @@ class Intent(str, Enum):
     # controls.now_playing → protocol.music_now_playing_request → music →
     # event_now_playing → brain → TTS. Быстро (0.5 сек), без LLM.
     MUSIC_NOW_PLAYING = "MUSIC_NOW_PLAYING"
+    # MUSIC_LOCAL_LIKED (v6.9): «включи мою музыку» / «мои лайки».
+    # music.play_local_liked → локальный плейлист (liked_tracks.json).
+    MUSIC_LOCAL_LIKED = "MUSIC_LOCAL_LIKED"
+    # MUSIC_LIKE (v6.9): «лайкни» / «нравится» — текущий трек в лайки.
+    # music.like_current → liked_tracks.json + SELF-событие.
+    MUSIC_LIKE = "MUSIC_LIKE"
+    # MUSIC_DISLIKE (v6.9): «не нравится» / «убери» — текущий в дизлайки.
+    # music.dislike_current → disliked_tracks.json + music_next.
+    MUSIC_DISLIKE = "MUSIC_DISLIKE"
 
     # Громкость
     VOLUME_UP = "VOLUME_UP"
