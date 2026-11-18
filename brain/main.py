@@ -4,83 +4,33 @@ brain/main.py — ядро Макса.
 Поток:
   ASR → brain_inbox → router → навык → helpers → tts_inbox → TTS
 
-Что делает:
-  - Загружает PersonalityEngine.
-  - Подключает навыки (smalltalk, controls, music, weather, system, cleanup).
-  - Запускает appraisal-воркер (reaction).
-  - Запускает reminders-воркер (фоновые напоминания).
-  - Тикает self_state и mind_stream раз в 30 сек.
-  - Загружает self_state из data/self_state.json при старте.
-  - Слушает brain_inbox.
-  - На команду — router.process_command().
-  - Навыки сами шлют в tts_inbox через helpers.
-  - Раз в 20 минут дампит метрики в лог.
-  - I: при music_started записывает привычку (time_bucket → artist).
-  - F1: при первом wake за день — ритуал (утро/вечер/ночь).
-  - F1: напоминания — фоновый воркер (не зависит от wake/команды).
+── DUCKING ────────────────────────────────────────────────────────
+  Brain больше НЕ управляет ducking. `wake` снимает ASR (duck_worker),
+  когда speaking=True или по таймауту 5с. Brain только обрабатывает
+  команду. Это убирает окно wake→tts_synth, где музыка на 100%.
 
-NEW (v6): событие discovery от music worker.
-  Music ловит трек-открытие и шлёт event_discovery в brain.
-  Brain решает «когда» (пришло событие) → зовёт personality_core
-  через respond_and_say("DISCOVERY_NEW", is_event=True, ...) → composer
-  собирает фразу → TTS. Music сам не говорит, music_discovery.json
-  напрямую не читает. Единая личность: discovery идёт через composer.
+── ОЗВУЧКА МУЗЫКИ ────────────────────────────────────────────────
+  - Плейлисты/потоки (wave/genre/mood/radio/liked): озвучивает skill.py
+    до запуска («Включаю мою волну» и т.д.), отдельные треки не объявляются.
+  - Точечные запросы (play_artist/play_track/play_search): skill.py молчит
+    и взводит consume_first_track_announce(); brain озвучивает только первый
+    реально запустившийся трек (PLAY_SEARCH_FOUND), остальные треки очереди —
+    без озвучки.
 
-FIX (v6.4): события (discovery, wake, wake_wait, wake_repeat, now_playing,
-  no_track_playing) → respond_and_say(..., is_event=True).
-  Раньше respond_and_say звал engine.respond (event.type="command") —
-  SELF-реакции (behavior_energy_low) перехватывали событие и вместо
-  DISCOVERY_NEW звучало «Я устал». Теперь события идут через
-  engine.respond_event (event.type="event") — SELF не трогается,
-  composer собирает фразу напрямую.
-
-FIX (день 28, аудит 1.1): при result == "exit" пишем data/brain_exit.flag
-  с timestamp. Supervisor видит фреш-флаг (<60 сек) → не перезапускает brain.
-  Раньше sys.exit(0) → supervisor видел «штатно» → auto_restart=True →
-  перезапускал brain. Команда «выход» не останавливала Макса.
-
-FIX (день 28): _time_bucket и _ritual_for_bucket переехали в shared/time_bucket.py.
-
-WARMUP (новое): NLU warmup в фоне при старте.
-  Раньше первая команда ждала 10-15 сек (intent: router загружен из
-  intent_router.json + FastEmbedEncoder/ONNX). Теперь _start_nlu_warmup()
-  запускает brain.nlu.intent.warmup() в daemon-thread при старте.
-  Router греется параллельно, brain слушает brain_inbox сразу.
-
-── FIX (этап 2.3): memory.start() явно ────────────────────────────
-  MemoryEngine.__init__(start_writer=False) по умолчанию (см. memory/engine.py).
-  _init_memory() вызывает memory.start() — иначе writer не запущен,
-  события копятся в очереди, ничего не пишется.
-  Вызывается после _init_engine(), до _init_skills() — скилы импортируют
-  memory, но writer уже запущен.
-
-── P1 (valence/arousal) ───────────────────────────────────────────
-  on_event зовётся:
-    - wake + утро/ночь → morning/night (arousal/valence сдвиг)
-    - команда с похвалой/грубостью → user_praise/user_insult
-    - тишина 30+ мин (в _tick) → silence (valence=0, arousal=0.4)
-  music_liked/music_skipped/music_disliked — в controls.py и music/skill.py.
-
-── YANDEX IMPORT (v6.5) ───────────────────────────────────────────
-  _do_yandex_import() / _start_yandex_import_async().
-  При старте (после _init_self_state) в фоне тянет лайки из Яндекса
-  и мержит в brain.liked_tracks через merge_from_yandex.
-  Не блокирует старт brain — daemon-thread.
-
-── FIX (2026-11-11): двойной TTS на music_started ─────────────────
-  Было: в ветке music_started вызывались и PLAY_SEARCH_FOUND (для
-  mode=single/local_search), и NOW_PLAYING (всегда). TTS получал
-  две команды — одна перебивала другую, иногда обе молчали.
-  Стало: если mode=single/local_search → PLAY_SEARCH_FOUND.
-         иначе → NOW_PLAYING / NO_TRACK_PLAYING.
-  Плюс: в ветке now_playing был баг — использовалась переменная mode,
-  которой в этом событии нет (NameError). Убран мёртвый блок.
+── FIX (v6.4): события → respond_and_say(is_event=True) ─────────
+── FIX (день 28, аудит 1.1): exit-флаг ──────────────────────────
+── WARMUP: NLU warmup в фоне при старте ─────────────────────────
+── FIX (этап 2.3): memory.start() явно ──────────────────────────
+── P1 (valence/arousal) ─────────────────────────────────────────
+── YANDEX IMPORT (v6.5) ─────────────────────────────────────────
+── UI_BRIDGE (2026-11-18): чат-лог команд пользователя ──────────
+  В _handle_command() сразу после log(...) добавляется append_chat("user", ...)
+  — все распознанные команды попадают в UI-чат с meta=source.
 """
 
 import sys
 import time
 import threading
-from datetime import datetime
 
 from shared import ipc
 from shared import protocol
@@ -101,7 +51,6 @@ _tick_counter = 0
 
 
 def _write_exit_flag():
-    """Аудит 1.1: пометить, что brain вышел штатно. Supervisor не перезапустит."""
     try:
         EXIT_FLAG.parent.mkdir(parents=True, exist_ok=True)
         EXIT_FLAG.write_text(str(time.time()), encoding="utf-8")
@@ -138,7 +87,6 @@ def _tick():
         from personality_core import mind_stream as _mind
         st = _self_state.get()
 
-        # P1: тишина 30+ мин → выдохнул (один раз за период тишины)
         _now = time.time()
         _last = st.last_command_ts or 0
         if _last and (_now - _last) > 1800 and (_now - st.last_silence_ts) > 1800:
@@ -168,7 +116,6 @@ def _init_engine():
 
 
 def _init_memory():
-    """FIX (этап 2.3): явный memory.start() — writer не стартует в __init__."""
     try:
         from memory import memory
         memory.start()
@@ -211,7 +158,6 @@ def _init_self_state():
 
 
 def _do_yandex_import():
-    """Импорт лайков из Яндекса. В фоне, не блокирует старт."""
     try:
         from shared import yandex
         from brain import liked_tracks as _lt
@@ -252,14 +198,12 @@ def _do_yandex_import():
 
 
 def _start_yandex_import_async():
-    """Запустить импорт лайков в daemon-thread (не блокирует старт)."""
     threading.Thread(target=_do_yandex_import, daemon=True,
                      name="yandex-import").start()
     log("brain: импорт лайков запущен (в фоне)", tag="BRAIN")
 
 
 def _warmup_nlu():
-    """NLU warmup: загрузить ONNX + tokenizer + labels в фоне."""
     try:
         from brain.nlu import intent as nlu_intent
         nlu_intent.warmup()
@@ -268,7 +212,6 @@ def _warmup_nlu():
 
 
 def _start_nlu_warmup():
-    """Запустить NLU warmup в daemon-thread (не блокирует старт brain)."""
     threading.Thread(
         target=_warmup_nlu, daemon=True, name="nlu-warmup"
     ).start()
@@ -293,11 +236,13 @@ def _handle_command(msg: protocol.Message):
     metrics.inc("commands")
     log(f"brain: команда «{text}» (source={source.value})", tag="BRAIN")
 
+    # ── UI_BRIDGE (2026-11-18): чат-лог команды пользователя ──
+    from shared.ui_bridge import append_chat
+    append_chat("user", text, meta=source.value)
+
     try:
         result = process_command(text, source=source)
 
-        # P1: реакция на похвалу/грубость по тексту
-        # (process_command возвращает str, intent не отдаёт — эвристика по словам)
         try:
             from personality_core import self_state as _ss
             _st = _ss.get()
@@ -327,7 +272,6 @@ def _handle_event(msg: protocol.Message):
     log(f"brain: событие {msg.name} {msg.data}", tag="BRAIN")
 
     try:
-        # P1: события → self_state (valence/arousal реально меняются)
         try:
             from personality_core import self_state as _ss
             _st = _ss.get()
@@ -354,7 +298,6 @@ def _handle_event(msg: protocol.Message):
             respond_and_say("WAKE_REPEAT", is_event=True)
 
         elif msg.name == "now_playing":
-            # Это ответ на «что играет» — не путать с music_started.
             artist = msg.data.get("artist", "")
             title = msg.data.get("title", "")
             if artist or title:
@@ -370,7 +313,6 @@ def _handle_event(msg: protocol.Message):
                 respond_and_say("NO_TRACK_PLAYING", is_event=True)
 
         elif msg.name == "discovery":
-            # NEW (v6): music сообщил «будет трек-открытие».
             artist = msg.data.get("artist", "")
             title = msg.data.get("title", "")
             if artist or title:
@@ -404,16 +346,20 @@ def _handle_event(msg: protocol.Message):
                     f"не явная команда)", tag="BRAIN", level="DEBUG")
 
             try:
-                from brain.skills.music.skill import on_music_started
+                from brain.skills.music.skill import (
+                    on_music_started,
+                    consume_first_track_announce,
+                )
                 on_music_started(artist, title)
+                should_announce = consume_first_track_announce()
             except Exception as e:
                 log(f"brain: on_music_started: {e}",
                     tag="BRAIN", level="WARN")
+                should_announce = False
 
-            # TTS с каноничным названием: только для play_search.
-            # mode="single" — Яндекс-трек, mode="local_search" — локальный.
-            # Для остальных (artist_only/wave/genre/...) TTS уже сказал skill.py.
-            if (artist or title) and mode in ("single", "local_search"):
+            # Озвучиваем по факту только первый трек после запроса
+            # артиста/трека/поиска; последующие треки и потоки (волна/радио) — молча.
+            if should_announce and (artist or title):
                 try:
                     from brain.skills._helpers import respond_and_say
                     respond_and_say("PLAY_SEARCH_FOUND",
@@ -444,14 +390,14 @@ def main():
         handle_error(e, context="brain._init_engine", speak=False)
         sys.exit(1)
 
-    _init_memory()   # FIX (этап 2.3): memory.start() явно
+    _init_memory()
     _init_skills()
     _init_appraisal()
     _init_reminders()
     _init_self_state()
 
-    _start_yandex_import_async()   # ← новое: лайки из Яндекса в фоне
-    _start_nlu_warmup()             # ONNX warmup в фоне
+    _start_yandex_import_async()
+    _start_nlu_warmup()
 
     log("brain: слушаю brain_inbox", tag="BRAIN")
 

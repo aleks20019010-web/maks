@@ -1,26 +1,5 @@
 # workers/tts/player.py
-# VLC-плеер для TTS. Ducking музыки привязан к ASR (микрофон ВЫКЛ/ВКЛ →
-# duck_on/duck_off), см. workers/asr/main.py. TTS worker ducking НЕ управляет.
-#
-# FIX (v8.3, 2026-11-12): защита от зависания VLC.
-#   - p.play() может зависнуть навсегда, если audio device в bad state
-#     (music VLC держит mmdevice эксклюзивно). Вызываем в daemon-потоке
-#     с join(timeout). При таймауте — return False, поток остаётся
-#     (утечка, но TTS не залипает).
-#   - p.release() может зависнуть (flush буфера + audio device).
-#     Тоже в daemon-потоке с join(timeout).
-#   - p.set_rate() — редкий deadlock в python-vlc при одновременном
-#     доступе из двух инстансов. Тоже с таймаутом.
-#   - p.audio_set_volume() — обёрнут в try/except, не критично.
-#   - p.get_state() — вызывается в цикле, но с проверкой таймаута
-#     через time.time() (не только счётчик waited), на случай если
-#     time.sleep() подвиснет.
-#
-# FIX (2026-10-27): p.release() в finally. Раньше: p.stop() только.
-# FIX (день 29, вечер): duck_music_on/duck_music_off удалены.
-# FIX (день 29): таймауты вынесены в cfg.TTS_START_TIMEOUT_SEC / cfg.TTS_PLAY_TIMEOUT_SEC.
-# v6.2 (2026-11-05): play_tts_file принимает rate и применяет VLC set_rate.
-# FIX (2026-11-07): явный vlc.Instance для TTS, media_new/set_media, media.release().
+# VLC-плеер для TTS.
 
 import os
 import threading
@@ -33,7 +12,6 @@ from shared.log import log
 
 
 TTS_VOLUME = 100
-
 
 _vlc_instance = None
 _vlc_lock = threading.Lock()
@@ -76,9 +54,6 @@ def _rate_to_float(rate) -> float | None:
 
 
 def _call_with_timeout(fn, timeout: float, label: str):
-    """Вызвать fn() в daemon-потоке. Вернуть (result, timed_out).
-    При таймауте поток остаётся жить (утечка), но вызывающий не блокируется.
-    """
     result_box = {"value": None, "exc": None}
 
     def run():
@@ -104,6 +79,16 @@ def _call_with_timeout(fn, timeout: float, label: str):
 def _safe_play(player, timeout: float = 3.0) -> bool:
     _, timed_out = _call_with_timeout(player.play, timeout, "play")
     return not timed_out
+
+
+def _safe_get_state(player, timeout: float = 1.0):
+    try:
+        val, timed_out = _call_with_timeout(player.get_state, timeout, "get_state")
+        if timed_out:
+            return None
+        return val
+    except Exception:
+        return None
 
 
 def _safe_set_rate(player, r: float, timeout: float = 1.0) -> bool:
@@ -140,11 +125,6 @@ def _safe_media_release(media, timeout: float = 1.0):
 
 
 def play_tts_file(file_path: str, rate: str | None = None) -> bool:
-    """Проиграть mp3. Останавливает и освобождает плеер после окончания.
-
-    v8.3: все блокирующие вызовы VLC — в daemon-потоках с таймаутами.
-    Если VLC завис — возвращаем False, TTS-цикл не залипает.
-    """
     if not os.path.exists(file_path):
         return False
 
@@ -178,7 +158,6 @@ def play_tts_file(file_path: str, rate: str | None = None) -> bool:
             if r is not None and abs(r - 1.0) > 1e-6:
                 _safe_set_rate(p, r)
 
-        # p.play() в потоке с таймаутом — не залипаем, если audio device занят.
         played = _safe_play(p, timeout=3.0)
         if not played:
             log(f"tts: play() не стартовал за 3с — прерываю "
@@ -186,14 +165,12 @@ def play_tts_file(file_path: str, rate: str | None = None) -> bool:
                 tag="TTS", level="WARN")
             return False
 
-        # Ждём State.Playing с таймаутом (по wall-clock, не по счётчику — sleep может подвиснуть).
         t_start = time.time()
         started = False
         while (time.time() - t_start) < start_timeout:
-            try:
-                s = p.get_state()
-            except Exception:
-                break
+            s = _safe_get_state(p, timeout=1.0)
+            if s is None:
+                return False
             if s == vlc.State.Playing:
                 started = True
                 break
@@ -205,21 +182,17 @@ def play_tts_file(file_path: str, rate: str | None = None) -> bool:
             time.sleep(0.05)
 
         if not started:
-            try:
-                cur_state = p.get_state()
-            except Exception:
-                cur_state = None
-            log(f"tts: not Playing in {start_timeout:.1f}s, "
-                f"continue waiting (state={_state_str(cur_state)})",
+            cur_state = _safe_get_state(p, timeout=0.5)
+            log(f"tts: not Playing in {start_timeout:.1f}s — прерываю "
+                f"file={os.path.basename(file_path)} (state={_state_str(cur_state)})",
                 tag="TTS", level="WARN")
+            return False
 
-        # Ждём Ended с таймаутом.
         t_play = time.time()
         while (time.time() - t_play) < play_timeout:
-            try:
-                s = p.get_state()
-            except Exception:
-                break
+            s = _safe_get_state(p, timeout=1.0)
+            if s is None:
+                return False
             if s in (vlc.State.Ended, vlc.State.Stopped):
                 ok = True
                 break

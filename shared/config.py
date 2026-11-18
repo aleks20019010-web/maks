@@ -241,7 +241,7 @@ except OSError as e:
 # ============================================================
 # AEC (Acoustic Echo Cancellation) — через SpeexDSP
 # ============================================================
-AEC_ENABLED = True
+AEC_ENABLED = False
 CABLE_DEVICE_INDEX = 2   # CABLE Output (MME) — far-поток для AEC
 
 # Старые параметры echoff (WebRTC) — оставлены на случай отката

@@ -1,31 +1,16 @@
 # brain/skills/music/skill.py
-# MusicSkill — тонкая обёртка. Понимает команду, шлёт в music_inbox.
+# MusicSkill — тонкая обёртка. Понимает Command, шлёт в music_inbox.
 #
-# ── FIX (v8.5, 2026-11-13): _wait_tts_started_then_music ─────────────
-#   Дёрганье музыки при старте: TTS и music стартовали одновременно
-#   (два ipc.put в разные очереди). Music успевал заиграть 100% до того,
-#   как TTS поставит speaking=True → ASR duck_on → музыка 30%.
-#   Пользователь слышал «громко → тихо».
-#
-#   Фикс: music отправляется ТОЛЬКО после того, как TTS реально начал
-#   (speaking=True в workers/tts/state_file). В отдельном потоке —
-#   brain не блокируется, другие команды обрабатываются параллельно.
-#   Music стартует уже под duck (30%), без дёрганья.
-#
-#   Для play_search не нужно: там pre-duck в workers/music/main.py
-#   (_handle_play «search» → music.duck(30) только если TTS говорит).
-#
-# A2-фикс (день 30): _try_ask — только утром, один раз в день.
-# A2: TTS ДО play_index, с каноничным именем из алиаса. Один TTS.
-# MOOD: action="play_mood" → protocol.play_mood(mood_tag).
-# RADIO (2026-11-07): «включи радио» без станции → случайная.
-# RADIO TTS (2026-11-07): PLAY_RADIO с человеческим именем станции.
-# FIX (2026-11-08): ipc.put ДО TTS — УБРАН в v8.5 (см. выше).
-# P1: play_liked → on_event("music_liked"), dislike → on_event("music_disliked").
-# LOCAL_LIKED / LIKE_CURRENT (v6.5).
-# PLAY_SEARCH (v6.5).
+# Логика озвучки:
+#   - Плейлисты/потоки (wave, genre, mood, radio, liked, local_liked):
+#     озвучиваются сразу здесь («Включаю мою волну» и т.д.), старт музыки
+#     ждёт начала TTS (phrase_seq > base_seq), чтобы сработал duck.
+#   - Точечные запросы (play_artist, play_track, play_search):
+#     здесь не озвучиваются; взводится одноразовый флаг _announce_next_track,
+#     и brain/main.py озвучивает первый реально запустившийся трек один раз.
 
 import json
+import os
 import random
 import threading
 import time
@@ -43,112 +28,125 @@ from shared.time_bucket import time_bucket
 
 PENDING_KEY = "music_ask"
 
-# v8.5: сколько ждать speaking=True после отправки TTS.
-# Synth 1–2с (Яндекс + кэш), с запасом 5с.
-_TTS_START_WAIT_SEC = 10.0
-# v8.5: шаг polling state_file.
-_TTS_POLL_SEC = 0.05
+# Сколько ждать старта TTS после отправки фразы (synth 1–2с + запас).
+_TTS_START_WAIT_SEC = 5.0
+# Шаг polling state_file (20мс).
+_TTS_POLL_SEC = 0.02
+
+# Счётчик музыкальных запросов для защиты от гонки потоков при быстрой смене треков
+_dispatch_seq = 0
+_dispatch_lock = threading.Lock()
+
+# Одноразовый флаг: озвучить только первый стартовавший трек (для artist/track/search)
+_announce_next_track = False
+_announce_lock = threading.Lock()
 
 
-def _resolve_alias_name(query: str) -> str | None:
-    if not query:
-        return None
-    path = cfg.ALIASES_FILE
-    if not path.exists():
-        return None
+def arm_first_track_announce() -> None:
+    """Разрешить озвучку ровно одного следующего события music_started."""
+    global _announce_next_track
+    with _announce_lock:
+        _announce_next_track = True
+
+
+def disarm_first_track_announce() -> None:
+    """Отменить ожидание озвучки следующего трека."""
+    global _announce_next_track
+    with _announce_lock:
+        _announce_next_track = False
+
+
+def consume_first_track_announce() -> bool:
+    """Проверить и атомарно сбросить флаг озвучки первого трека."""
+    global _announce_next_track
+    with _announce_lock:
+        val = _announce_next_track
+        _announce_next_track = False
+        return val
+
+
+def _next_dispatch_seq() -> int:
+    global _dispatch_seq
+    with _dispatch_lock:
+        _dispatch_seq += 1
+        return _dispatch_seq
+
+
+def _current_dispatch_seq() -> int:
+    with _dispatch_lock:
+        return _dispatch_seq
+
+
+def _load_radio_stations() -> dict:
+    path = os.path.join(cfg.BASE_DIR, "config", "radio_stations.json")
+    if not os.path.exists(path):
+        return {}
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, "r", encoding="utf-8-sig") as f:
             data = json.load(f)
-    except Exception:
-        return None
-    q = query.lower().strip()
-    entry = data.get(q)
-    if isinstance(entry, dict):
-        name = entry.get("artist_name")
-        if name:
-            return name
-    return None
+        return data if isinstance(data, dict) else {}
+    except Exception as e:
+        log(f"music: _load_radio_stations: {e}", tag="BRAIN", level="WARN")
+        return {}
 
 
 def _pick_random_radio() -> str | None:
-    import os
-    path = os.path.join(cfg.BASE_DIR, "config", "radio_stations.json")
-    if not os.path.exists(path):
+    data = _load_radio_stations()
+    if not data:
         return None
-    try:
-        with open(path, "r", encoding="utf-8-sig") as f:
-            data = json.load(f)
-        if not isinstance(data, dict) or not data:
-            return None
-        return random.choice(list(data.keys()))
-    except Exception as e:
-        log(f"music: _pick_random_radio: {e}", tag="BRAIN", level="WARN")
-        return None
+    return random.choice(list(data.keys()))
 
 
 def _station_name(station_key: str) -> str:
-    import os
-    path = os.path.join(cfg.BASE_DIR, "config", "radio_stations.json")
-    if not os.path.exists(path):
-        return station_key
-    try:
-        with open(path, "r", encoding="utf-8-sig") as f:
-            data = json.load(f)
-        entry = data.get(station_key) if isinstance(data, dict) else None
-        if isinstance(entry, dict):
-            name = entry.get("name")
-            if name:
-                return name
-    except Exception as e:
-        log(f"music: _station_name: {e}", tag="BRAIN", level="WARN")
+    data = _load_radio_stations()
+    entry = data.get(station_key)
+    if isinstance(entry, dict):
+        name = entry.get("name")
+        if name:
+            return name
     return station_key
 
 
-def _tts_is_speaking_now() -> bool:
-    try:
-        from workers.tts.state_file import get_state
-        return bool(get_state().get("speaking", False))
-    except Exception:
-        return False
-
-
-def _wait_tts_started(timeout: float = _TTS_START_WAIT_SEC) -> bool:
-    """Ждать speaking=True в state_file TTS. True — дождались.
-
-    Используется перед отправкой music: TTS synth 1–2с, потом
-    speaking=True → ASR duck_on → music стартует 30%.
-    """
+def _wait_tts_started(base_seq: int, timeout: float = _TTS_START_WAIT_SEC) -> bool:
+    """Ждать, пока phrase_seq в state_file станет больше base_seq."""
     t0 = time.time()
     while time.time() - t0 < timeout:
-        if _tts_is_speaking_now():
-            return True
+        try:
+            from workers.tts.state_file import get_state
+            if get_state()["phrase_seq"] > base_seq:
+                return True
+        except Exception:
+            pass
         time.sleep(_TTS_POLL_SEC)
     return False
 
 
-def _send_music_after_tts(protocol_fn, *args, **kwargs):
-    """v8.5: отправить music-команду ПОСЛЕ speaking=True от TTS.
-
-    В отдельном потоке — brain не блокируется. Если TTS так и не
-    начал говорить за timeout — отправляем всё равно (лучше поздно,
-    чем никогда).
-    """
+def _send_music_after_tts(protocol_fn, *args, seq: int, base_seq: int | None = None, **kwargs):
+    """Отправить music-команду ПОСЛЕ старта TTS-фразы (phrase_seq > base_seq)."""
     def _run():
-        ok = _wait_tts_started()
-        if not ok:
-            log(f"music: TTS не начал за {_TTS_START_WAIT_SEC:.1f}с — "
-                f"отправляю music без ожидания", tag="BRAIN", level="WARN")
+        if base_seq is not None:
+            ok = _wait_tts_started(base_seq)
+            if seq != _current_dispatch_seq():
+                log("music: устаревший запрос после ожидания TTS — пропуск", tag="BRAIN")
+                return
+            if not ok:
+                log(f"music: TTS не начал за {_TTS_START_WAIT_SEC:.1f}с — "
+                    f"отправляю music без ожидания", tag="BRAIN", level="WARN")
+        elif seq != _current_dispatch_seq():
+            return
+
         try:
             ipc.put(protocol.MUSIC_INBOX, protocol_fn(*args, **kwargs))
         except Exception as e:
             log(f"music: ipc.put после TTS: {e}", tag="BRAIN", level="WARN")
 
-    threading.Thread(target=_run, daemon=True, name="music-after-tts").start()
+    threading.Thread(target=_run, daemon=True, name=f"music-after-tts-{seq}").start()
 
 
 class MusicSkill(Skill):
     name = "music"
     priority = 40
+    accepts_command = True
 
     def can_handle(self, text: str) -> bool:
         return False
@@ -175,7 +173,8 @@ class MusicSkill(Skill):
                 tag="BRAIN", level="WARN")
             return None
 
-        log(f"music: {action} ← Command «{command.original_text}»", tag="BRAIN")
+        orig_text = getattr(command, "original_text", "")
+        log(f"music: {action} ← Command «{orig_text}»", tag="BRAIN")
 
         if action == "play_wave" and result.get("language") is None:
             if self._try_ask():
@@ -191,7 +190,7 @@ class MusicSkill(Skill):
         if action == "play_wave":
             result["language"] = None
             return result
-        if action == "play_liked":
+        if action in ("play_liked", "play_local_liked", "dislike"):
             return result
 
         if action == "play_radio":
@@ -206,9 +205,6 @@ class MusicSkill(Skill):
                     tag="BRAIN", level="WARN")
                 return None
             result["station"] = station
-            return result
-
-        if action == "play_local_liked":
             return result
 
         if action in ("like_current", "dislike_current"):
@@ -272,28 +268,39 @@ class MusicSkill(Skill):
                         "snow": "MUSIC_ASK_SNOW",
                         "storm": "MUSIC_ASK_STORM",
                     }[precip]
-                    self._ask(phrase_key, kind="weather",
-                              data={"condition": precip})
-                    relationship.mark_asked_today(asked_key)
-                    return True
+                    if self._ask(phrase_key, kind="weather", data={"condition": precip}):
+                        relationship.mark_asked_today(asked_key)
+                        return True
 
-        recent = relationship.get_recent_prompt()
-        if recent:
-            self._ask("MUSIC_ASK_RECENT", kind="recent",
-                      data={"artist": recent["name"]},
-                      phrase_kwargs={"artist": recent["name"]})
-            return True
+        if not relationship.was_asked_today("music_recent"):
+            recent = relationship.get_recent_prompt()
+            if recent:
+                if self._ask(
+                    "MUSIC_ASK_RECENT",
+                    kind="recent",
+                    data={"artist": recent["name"]},
+                    phrase_kwargs={"artist": recent["name"]},
+                ):
+                    relationship.mark_asked_today("music_recent")
+                    return True
 
         return False
 
     def _ask(self, phrase_key: str, kind: str,
-             data: dict, phrase_kwargs: dict | None = None):
+             data: dict, phrase_kwargs: dict | None = None) -> bool:
+        """Задать уточняющий вопрос и поставить pending. False — если TTS не сработал."""
         kwargs = phrase_kwargs or {}
-        _respond_and_say(phrase_key, **kwargs)
+        base_seq = _respond_and_say(phrase_key, **kwargs)
+        if base_seq is None:
+            log(f"music: _ask({phrase_key}) не озвучен — пропуск pending",
+                tag="BRAIN", level="WARN")
+            return False
 
         def _on_timeout(_data):
-            _respond_and_say("MUSIC_TIMEOUT")
-            _send_music_after_tts(protocol.play_wave, language=None)
+            disarm_first_track_announce()
+            seq = _next_dispatch_seq()
+            timeout_seq = _respond_and_say("MUSIC_TIMEOUT")
+            _send_music_after_tts(protocol.play_wave, language=None, seq=seq, base_seq=timeout_seq)
 
         pending.set(
             PENDING_KEY,
@@ -301,58 +308,55 @@ class MusicSkill(Skill):
             on_timeout=_on_timeout,
             data={"kind": kind, **data},
             wait_tts=True,
+            base_phrase_seq=base_seq,
         )
         log(f"music: спросил ({kind}), pending={PENDING_KEY} (wait_tts)", tag="BRAIN")
+        return True
 
     def _dispatch(self, action: str, result: dict):
-        # v8.5: music отправляется ПОСЛЕ speaking=True от TTS.
-        # Раньше: ipc.put(MUSIC_INBOX) ДО _respond_and_say → music успевал
-        # заиграть 100% до duck_on → дёрганье (100% → 30%).
-        # Теперь: _respond_and_say → поток ждёт speaking=True → music
-        # стартует сразу под duck (30%), TTS закончил → 100%.
-        # Brain не блокируется (поток daemon).
+        seq = _next_dispatch_seq()
 
+        # ── 1. Точечные запросы: молчим сейчас, озвучим 1-й трек по факту старта ──
         if action == "play_artist":
-            artist = result["artist"]
-            canonical = _resolve_alias_name(artist)
-            name_for_tts = canonical or artist
-            _respond_and_say("PLAY_ARTIST_STARTED", artist=name_for_tts)
-            _send_music_after_tts(protocol.play_artist, artist)
+            arm_first_track_announce()
+            ipc.put(protocol.MUSIC_INBOX, protocol.play_artist(result["artist"]))
 
         elif action == "play_track":
-            track = result["track"]
-            canonical = _resolve_alias_name(track)
-            name_for_tts = canonical or track
-            _respond_and_say("PLAY_TRACK_STARTED", title=name_for_tts)
-            _send_music_after_tts(protocol.play_track, track)
+            arm_first_track_announce()
+            ipc.put(protocol.MUSIC_INBOX, protocol.play_track(result["track"]))
 
+        elif action == "play_search":
+            arm_first_track_announce()
+            ipc.put(protocol.MUSIC_INBOX, protocol.play_search(result["query"]))
+
+        # ── 2. Потоки и плейлисты: озвучиваем сразу, отдельные треки не объявляем ──
         elif action == "play_genre":
+            disarm_first_track_announce()
             genre = result["genre"]
             station = result.get("station", "")
-            _respond_and_say("PLAY_GENRE", genre=genre)
-            _send_music_after_tts(protocol.play_genre, genre, station=station)
+            bseq = _respond_and_say("PLAY_GENRE", genre=genre)
+            _send_music_after_tts(protocol.play_genre, genre, station=station, seq=seq, base_seq=bseq)
 
         elif action == "play_mood":
+            disarm_first_track_announce()
             mood_tag = result["mood"]
             log(f"music: → protocol.play_mood({mood_tag!r})", tag="BRAIN")
-            try:
-                _respond_and_say("PLAY_MOOD", mood=mood_tag)
-            except Exception as e:
-                log(f"music: PLAY_MOOD TTS ошибка: {e}", tag="BRAIN", level="WARN")
-            _send_music_after_tts(protocol.play_mood, mood_tag)
+            bseq = _respond_and_say("PLAY_MOOD", mood=mood_tag)
+            _send_music_after_tts(protocol.play_mood, mood_tag, seq=seq, base_seq=bseq)
 
         elif action == "play_wave":
+            disarm_first_track_announce()
             language = result.get("language")
             if language == "russian":
-                _respond_and_say("PLAY_PLAYLIST", name="русскую волну")
+                bseq = _respond_and_say("PLAY_PLAYLIST", name="русскую волну")
             else:
-                _respond_and_say("PLAY_PLAYLIST", name="мою волну")
-            _send_music_after_tts(protocol.play_wave, language=language)
+                bseq = _respond_and_say("PLAY_PLAYLIST", name="мою волну")
+            _send_music_after_tts(protocol.play_wave, language=language, seq=seq, base_seq=bseq)
 
         elif action == "play_liked":
-            # TTS всегда есть (PLAY_PLAYLIST) — music после TTS.
-            _respond_and_say("PLAY_PLAYLIST", name="твою музыку")
-            _send_music_after_tts(protocol.play_liked)
+            disarm_first_track_announce()
+            bseq = _respond_and_say("PLAY_PLAYLIST", name="твою музыку")
+            _send_music_after_tts(protocol.play_liked, seq=seq, base_seq=bseq)
             try:
                 from personality_core import self_state as _ss
                 _ss.get().on_event("music_liked")
@@ -360,21 +364,22 @@ class MusicSkill(Skill):
                 pass
 
         elif action == "play_local_liked":
+            disarm_first_track_announce()
             from brain import liked_tracks as _lt
-            n = len(_lt.get_liked())
-            if n == 0:
+            if len(_lt.get_liked()) == 0:
                 _respond_and_say("PLAY_LOCAL_LIKED_EMPTY")
-                return  # music не нужна
-            _respond_and_say("PLAY_LOCAL_LIKED")
-            _send_music_after_tts(protocol.play_local_liked)
+                return
+            bseq = _respond_and_say("PLAY_LOCAL_LIKED")
+            _send_music_after_tts(protocol.play_local_liked, seq=seq, base_seq=bseq)
 
-        elif action == "play_search":
-            # v8.4: pre-duck в music (_handle_play «search»).
-            # Здесь music отправляется сразу, без ожидания TTS —
-            # pre-duck в music сработает, если TTS говорит.
-            query = result["query"]
-            ipc.put(protocol.MUSIC_INBOX, protocol.play_search(query))
+        elif action == "play_radio":
+            disarm_first_track_announce()
+            station = result["station"]
+            name = _station_name(station)
+            bseq = _respond_and_say("PLAY_RADIO", name=name)
+            _send_music_after_tts(protocol.play_radio, station, seq=seq, base_seq=bseq)
 
+        # ── 3. Оценки текущего трека ───────────────────────────────────────────────
         elif action == "like_current":
             from brain import liked_tracks as _lt
             artist = result.get("artist", "")
@@ -405,12 +410,6 @@ class MusicSkill(Skill):
             else:
                 _respond_and_say("DISLIKE_ALREADY", artist=artist, title=title)
             ipc.put(protocol.MUSIC_INBOX, protocol.music_next())
-
-        elif action == "play_radio":
-            station = result["station"]
-            name = _station_name(station)
-            _respond_and_say("PLAY_RADIO", name=name)
-            _send_music_after_tts(protocol.play_radio, station)
 
         elif action == "dislike":
             ipc.put(protocol.MUSIC_INBOX, protocol.music_dislike())

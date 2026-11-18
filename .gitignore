@@ -68,3 +68,9 @@ data/local_index.json
 py_files.zip
 cv_setfit.py
 _tts_*.mp3
+
+data/music_ui.json
+data/ui_chat.jsonl
+data/cache/
+__pycache__/
+*.pyc

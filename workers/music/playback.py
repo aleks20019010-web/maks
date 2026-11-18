@@ -56,6 +56,13 @@
 #   play_search (mode="local_search") пользователь нажал «дальше»,
 #   без сброса режима TTS снова сказал бы «Нашёл: {artist} — {title}».
 #   С "local_search_next" TTS молчит (не входит в список).
+#
+# ── UI_BRIDGE (2026-11-18) ──────────────────────────────────────
+#   play_index: после старта трека сохраняем в state артиста, название,
+#   обложку (cover_uri/og_image → https URL) и путь к файлу.
+#   monitor_player: раз в секунду публикует прогресс (playing/paused,
+#   artist/title/mode, volume, cover_url, file_path, pos_ms, dur_ms)
+#   через shared.ui_bridge.write_music_ui для UI.
 
 import os
 import time
@@ -376,6 +383,18 @@ def play_index(idx, announce=False):
             state.current_track_id = track.id
             state.playlist_index = idx
             state.last_play_start_time = time.time()
+
+            # ── UI_BRIDGE (2026-11-18): метаданные текущего трека ──
+            cover_url = ""
+            raw_cover = getattr(track, "cover_uri", None) or getattr(track, "og_image", None)
+            if isinstance(raw_cover, str) and raw_cover:
+                cover_url = "https://" + raw_cover.replace("%%", "400x400").lstrip("/")
+
+            state.current_artist = _artist_for_mind
+            state.current_title_only = _title_for_mind
+            state.current_cover_url = cover_url
+            state.current_file_path = file_path or ""
+
             log(f"▶ [{idx+1}/{plen}] {title}", tag="MUSIC")
 
             try:
@@ -510,6 +529,9 @@ def monitor_player():
       clear_music_playing() (если флаг был).
     - st is None (плеера нет): clear_music_playing() (если был).
     - Ended (переход): play_next — как раньше.
+
+    UI_BRIDGE (2026-11-18): раз в секунду публикует прогресс трека
+    в shared.ui_bridge.write_music_ui.
     """
     last_state = None
     last_playing_refresh = 0.0
@@ -529,6 +551,32 @@ def monitor_player():
                 last_flag_alive = False
             last_state = None
             continue
+
+        # ── UI_BRIDGE (2026-11-18): публикация прогресса для UI ──
+        try:
+            from shared.ui_bridge import write_music_ui
+            pos_ms = 0
+            dur_ms = 0
+            if music.player is not None:
+                try:
+                    pos_ms = max(0, int(music.player.get_time()))
+                    dur_ms = max(0, int(music.player.get_length()))
+                except Exception:
+                    pass
+            write_music_ui({
+                "playing": st == vlc.State.Playing,
+                "paused": st == vlc.State.Paused,
+                "artist": state.current_artist,
+                "title": state.current_title_only,
+                "mode": state.playlist_mode or "",
+                "volume": music.get_volume(),
+                "cover_url": state.current_cover_url,
+                "file_path": state.current_file_path,
+                "pos_ms": pos_ms,
+                "dur_ms": dur_ms,
+            })
+        except Exception:
+            pass
 
         now = time.time()
 

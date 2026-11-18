@@ -1,96 +1,17 @@
 # brain/nlu/entity/music.py
 # Извлечение и поиск музыкальных сущностей.
 #
-# extract_candidate — правила, вычитание триггеров. Быстро, детерминированно.
-# match — fuzzy по алиасам (config/aliases.json) + жанрам (config/genre_aliases.json)
-#         + настроениям (config/mood_aliases.json) + радио (config/radio_stations.json
-#         + config/radio_aliases.json).
-#
-# ПОЧЕМУ extract_candidate НЕ ИСПОЛЬЗУЕТ classify():
-#   classify() из brain/skills/music/classify.py — это «весь путь»:
-#   артист/трек/жанр/волна/лайки/радио/dislike. Он принимает решения.
-#   А extract_candidate — только «что пользователь назвал?».
-#   Смешивать нельзя: classify() вернёт {"action": "play_wave"} для
-#   «включи музыку», а нам нужно ABSENT (не назвал параметр). Разные вопросы.
-#   MusicSkill.classify() остаётся для скила. Здесь — свой, узкий, экстрактор.
-#
-# FUZZY:
-#   rapidfuzz — если установлен (pip install rapidfuzz). Иначе — difflib
-#   из stdlib (SequenceMatcher), как в workers/asr/main.py::_is_echo.
-#   Качество с rapidfuzz выше (лучше обрабатывает опечатки), но проект
-#   не должен падать без него. Fallback — честный, не «заглушка».
-#
-#   pymorphy3 — если установлен. Иначе — простая эвристика по окончаниям
-#   (как в workers/music/search.py::search_artist — «арию» → «ария»).
-#   Не идеально, но работает без зависимости.
-#
-# AMBIGUOUS:
-#   Только если 2+ кандидата с разницей confidence < AMBIGUITY_GAP (0.15).
-#   Один явный лидер — FOUND. «Ария» и «Ария (кавер)» с разницей 0.05 —
-#   AMBIGUOUS. «Ария» (0.95) и «Ариzona» (0.40) — FOUND «Ария».
-#
-# MOOD (новое):
-#   config/mood_aliases.json — {слово: tag_метагега}. «бодрое» → «Энергичное».
-#   match() смотрит в mood_aliases ДО fuzzy — чтобы «бодрое» не ушло в артиста.
-#   Entity(type="mood") → decision → play_mood → station_id (mood:energetic).
-#
-# RADIO (2026-11-07):
-#   config/radio_stations.json — {ключ: {name, url, genre}}.
-#   config/radio_aliases.json — {алиас: ключ}.
-#   match() смотрит в radios ДО mood/artist/genre — чтобы «радио ваня»
-#   не ушло в artist fuzzy (было: «радио» → AMBIGUOUS 4 artist).
-#   Логика как в workers/music/radio.py::resolve_radio, но БЕЗ импорта
-#   из workers (brain не должен зависеть от воркеров):
-#     1) точный ключ станции → FOUND;
-#     2) точный алиас → FOUND (ключ);
-#     3) подстрока ключа (sorted by len desc) → FOUND;
-#     4) подстрока алиаса (sorted by len desc) → FOUND;
-#     5) «радио» без станции → ABSENT (включить любую — как play_wave).
-#   Entity(type="radio") → decision → play_radio → workers/music/radio.py.
-#
-# RADIO FIX (2026-11-07, #2): безусловная radio-проверка.
-#   Раньше: if "радио" in cand_lower or cand_lower in _load_radios():
-#     «ваню» → условие False (нет «радио», нет ключа «ваню») →
-#     artist fuzzy → UNRESOLVED → CLARIFY.
-#   Теперь: _resolve_radio(cand_lower) ВСЕГДА (до mood/artist/genre).
-#     «ваню» → алиас → "радио ваня" → FOUND(type="radio").
-#     «ария» → _resolve_radio("ария") → None → mood/artist/genre (как было).
-#   _resolve_radio быстрый (dict lookup + sorted по len desc), ложных
-#   срабатываний на артистов нет: «ария» не в radio_stations/radio_aliases.
-#
-# RADIO FUZZY (2026-11-07, #3): fuzzy по radio_aliases.
-#   ASR может исказить станцию: «включи ваню» → «включи юаню».
-#   «юаню» нет в radio_aliases → _resolve_radio("юаню") → None →
-#   artist fuzzy → UNRESOLVED → CLARIFY. Раньше: только костыль (алиас
-#   «юаню» в JSON). Теперь: fuzzy по radio_aliases (difflib, порог 0.8)
-#   → «юаню» → «ваню» (0.9) → "радио ваня" → FOUND(type="radio").
-#   Порог 0.8 — безопасно: «юра» → «ваню» 0.3 (не FOUND), «включи арию»
-#   → «ария» 0.2 (не radio). Fuzzy только для радио (artist/genre/mood —
-#   отдельно, ниже, в 5a/5b/5c).
-#
-# ── PLAY_SEARCH (v6.5) ──────────────────────────────────────────────
-#   v1: если fuzzy не нашёл ни mood/artist/genre (scored пуст) И кандидат
-#   состоит из 2+ слов — это потенциально «артист + трек» или сырой
-#   запрос. Отдаём Entity.found("search", candidate, 0.9, "play_search").
-#   Одно слово («Орион») — UNRESOLVED, как раньше.
-#   Дальше decision (music.py, _TYPE_TO_ACTION["search"]) → play_search
-#   → workers/music/main.py::_handle_play("search") — локально → Яндекс.
-#
-#   v2: если fuzzy нашёл АРТИСТА, но кандидат содержит лишние слова
-#   (потенциально трек) — тоже search, а не play_artist.
-#   Пример: «король и шут лесник» → fuzzy top=artist «Король и Шут»
-#   (2 слова), candidate=4 слова → cand_words > artist_words →
-#   Entity.found("search", candidate, 0.9, "play_search_artist_track").
-#   Иначе «включи король и шут лесник» включало бы play_artist
-#   («Король и Шут»), теряя «лесник» (название трека).
-#
-# ── LOCAL_LIKED (v6.5) ──────────────────────────────────────────────
-#   «мою музыку» / «мои лайки» / «мне нравится» → Entity.found("local_liked",
-#   "local_liked", 1.0, "phrase"). Проверка ДО radio и fuzzy по артистам,
-#   иначе «включи мою музыку» улетало в fuzzy (artist «Моя Музыка»?) или
-#   radio. Дальше decision (music.py, _TYPE_TO_ACTION["local_liked"]) →
-#   play_local_liked → workers/music/main.py::_handle_play("local_liked").
+# Порядок поиска в match():
+#   0. local_liked («мою музыку» / «мои лайки» / «мне нравится»)
+#   1. radio (точные ключи/алиасы + fuzzy по radio_aliases)
+#   2. mood_aliases (точное + падежи)
+#   3. local_index.json (точные + падежи по artist / phon_artist / title)
+#   4. aliases.json (точные + падежи)
+#   5. genre_aliases.json (точные + падежи)
+#   6. fuzzy по mood + local_artists + aliases + genres (порог 0.80 для артистов)
+#   7. fallback в play_search (локальный поиск → Яндекс.Музыка)
 
+import json
 import os
 import re
 import difflib
@@ -104,9 +25,10 @@ from brain.nlu.entity.base import EntityExtractor
 
 
 # ── Пороги ───────────────────────────────────────────────────
-MIN_MATCH_CONFIDENCE = 0.55   # ниже — UNRESOLVED
-AMBIGUITY_GAP = 0.15          # разница между топ-1 и топ-2 < gap → AMBIGUOUS
-RADIO_FUZZY_THRESHOLD = 0.80  # fuzzy по radio_aliases (2026-11-07, #3)
+MIN_MATCH_CONFIDENCE = 0.72    # для mood/genre fuzzy
+ARTIST_FUZZY_THRESHOLD = 0.80  # для артистов (защита от «нэнси» → «дэнс» 0.67)
+AMBIGUITY_GAP = 0.15           # разница между топ-1 и топ-2 < gap → AMBIGUOUS
+RADIO_FUZZY_THRESHOLD = 0.80   # fuzzy по radio_aliases
 
 
 # ── Триггеры (вычитаются из текста перед кандидатом) ─────────
@@ -115,8 +37,14 @@ from shared.music_words import (
 )
 
 
-# ── Загрузка каталогов ───────────────────────────────────────
-_aliases_cache: dict | None = None
+# ── Загрузка каталогов (с отслеживанием mtime) ───────────────
+_aliases_cache: dict = {}
+_aliases_mtime: float = -1.0
+
+_local_artists_cache: dict[str, str] = {}   # lower_key -> canonical artist name
+_local_tracks_cache: dict[str, str] = {}    # lower_key -> "Artist Title"
+_local_index_mtime: float = -1.0
+
 _genres_cache: dict | None = None
 _moods_cache: dict | None = None
 _radios_cache: dict | None = None
@@ -124,22 +52,83 @@ _radio_aliases_cache: dict | None = None
 
 
 def _load_aliases() -> dict:
-    """config/aliases.json — {alias: {artist_id, artist_name}}."""
-    global _aliases_cache
-    if _aliases_cache is not None:
-        return _aliases_cache
+    """config/aliases.json — {alias: {artist_id, artist_name}} с автообновлением."""
+    global _aliases_cache, _aliases_mtime
     path = cfg.ALIASES_FILE
     if not os.path.exists(path):
         _aliases_cache = {}
+        _aliases_mtime = -1.0
         return _aliases_cache
     try:
-        import json
+        mtime = os.path.getmtime(path)
+        if mtime == _aliases_mtime:
+            return _aliases_cache
         with open(path, "r", encoding="utf-8") as f:
-            _aliases_cache = json.load(f)
+            data = json.load(f)
+        _aliases_cache = data if isinstance(data, dict) else {}
+        _aliases_mtime = mtime
     except Exception as e:
         log(f"entity.music: aliases.json: {e}", tag="BRAIN", level="WARN")
-        _aliases_cache = {}
     return _aliases_cache
+
+
+def _load_local_index() -> tuple[dict[str, str], dict[str, str]]:
+    """data/local_index.json — кэш локальных артистов и треков с автообновлением."""
+    global _local_artists_cache, _local_tracks_cache, _local_index_mtime
+    path = getattr(cfg, "LOCAL_INDEX_FILE", os.path.join(cfg.DATA_DIR, "local_index.json"))
+    if not os.path.exists(path):
+        _local_artists_cache = {}
+        _local_tracks_cache = {}
+        _local_index_mtime = -1.0
+        return _local_artists_cache, _local_tracks_cache
+
+    try:
+        mtime = os.path.getmtime(path)
+        if mtime == _local_index_mtime:
+            return _local_artists_cache, _local_tracks_cache
+
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        tracks = data.get("tracks", []) if isinstance(data, dict) else (
+            data if isinstance(data, list) else []
+        )
+
+        artists_map: dict[str, str] = {}
+        tracks_map: dict[str, str] = {}
+
+        for item in tracks:
+            if not isinstance(item, dict):
+                continue
+            artist = (item.get("artist") or "").strip()
+            phon_artist = (item.get("phon_artist") or "").strip().lower()
+            title = (item.get("title") or "").strip()
+            phon_title = (item.get("phon_title") or "").strip().lower()
+
+            if artist:
+                al = artist.lower()
+                if al not in artists_map:
+                    artists_map[al] = artist
+                if phon_artist and phon_artist not in artists_map:
+                    artists_map[phon_artist] = artist
+
+            if title:
+                tl = title.lower()
+                full_q = f"{artist} {title}".strip() if artist else title
+                if len(tl) >= 3 and tl not in tracks_map:
+                    tracks_map[tl] = full_q
+                if len(phon_title) >= 3 and phon_title not in tracks_map:
+                    tracks_map[phon_title] = full_q
+
+        _local_artists_cache = artists_map
+        _local_tracks_cache = tracks_map
+        _local_index_mtime = mtime
+        log(f"entity.music: local_index обновлён (артистов: {len(artists_map)}, "
+            f"треков: {len(tracks_map)})", tag="BRAIN", level="DEBUG")
+    except Exception as e:
+        log(f"entity.music: local_index.json: {e}", tag="BRAIN", level="WARN")
+
+    return _local_artists_cache, _local_tracks_cache
 
 
 def _load_genres() -> dict:
@@ -152,7 +141,6 @@ def _load_genres() -> dict:
         _genres_cache = {}
         return _genres_cache
     try:
-        import json
         with open(path, "r", encoding="utf-8") as f:
             _genres_cache = json.load(f)
     except Exception as e:
@@ -162,11 +150,7 @@ def _load_genres() -> dict:
 
 
 def _load_moods() -> dict:
-    """config/mood_aliases.json — {слово: tag_метагега}.
-
-    «бодрое» → «Энергичное». tag потом идёт в client.metatag(tag),
-    который возвращает station_id (mood:energetic).
-    """
+    """config/mood_aliases.json — {слово: tag_метатега}."""
     global _moods_cache
     if _moods_cache is not None:
         return _moods_cache
@@ -175,7 +159,6 @@ def _load_moods() -> dict:
         _moods_cache = {}
         return _moods_cache
     try:
-        import json
         with open(path, "r", encoding="utf-8") as f:
             _moods_cache = json.load(f)
     except Exception as e:
@@ -194,7 +177,6 @@ def _load_radios() -> dict:
         _radios_cache = {}
         return _radios_cache
     try:
-        import json
         with open(path, "r", encoding="utf-8-sig") as f:
             data = json.load(f)
         _radios_cache = data if isinstance(data, dict) else {}
@@ -214,7 +196,6 @@ def _load_radio_aliases() -> dict:
         _radio_aliases_cache = {}
         return _radio_aliases_cache
     try:
-        import json
         with open(path, "r", encoding="utf-8-sig") as f:
             data = json.load(f)
         _radio_aliases_cache = data if isinstance(data, dict) else {}
@@ -236,7 +217,7 @@ def _similarity(a: str, b: str) -> float:
         return difflib.SequenceMatcher(None, a, b).ratio()
 
 
-def _normalize_case(word: str) -> str:
+def _normalize_case(word: str) -> str | list[str]:
     """Грубая нормализация русских падежей."""
     if not word:
         return word
@@ -285,9 +266,8 @@ def _all_case_variants(word: str) -> list[str]:
     return out
 
 
-# ── RADIO (2026-11-07): resolve как в radio.py, но без импорта ──
+# ── RADIO ────────────────────────────────────────────────────
 def _resolve_radio(candidate: str) -> str | None:
-    """Найти ключ станции по кандидату (аналог radio.py::resolve_radio)."""
     if not candidate:
         return None
     q = candidate.lower().strip()
@@ -297,18 +277,14 @@ def _resolve_radio(candidate: str) -> str | None:
     radios = _load_radios()
     aliases = _load_radio_aliases()
 
-    # 1) точный ключ
     if q in radios:
         return q
-    # 2) точный алиас
     key = aliases.get(q)
     if key and key in radios:
         return key
-    # 3) подстрока ключа
     for station_key in sorted(radios.keys(), key=len, reverse=True):
         if station_key in q:
             return station_key
-    # 4) подстрока алиаса
     for alias in sorted(aliases.keys(), key=len, reverse=True):
         if alias in q:
             key = aliases[alias]
@@ -317,14 +293,7 @@ def _resolve_radio(candidate: str) -> str | None:
     return None
 
 
-# ── RADIO FUZZY (2026-11-07, #3): fuzzy по radio_aliases ──────
 def _fuzzy_radio(candidate: str) -> str | None:
-    """Fuzzy по radio_aliases (difflib). «юаню» → «ваню» → «радио ваня».
-
-    Порог RADIO_FUZZY_THRESHOLD (0.8) — безопасно: «юра» → «ваню» 0.3
-    (не FOUND), «включи арию» → «ария» 0.2 (не radio).
-    Возвращает ключ станции или None.
-    """
     if not candidate:
         return None
     q = candidate.lower().strip()
@@ -364,7 +333,6 @@ class MusicEntityExtractor:
     # EXTRACT_CANDIDATE
     # ========================================================
     def extract_candidate(self, text: str, intent: Intent) -> str | None:
-        """Извлечь кандидата из текста."""
         if not text:
             return None
         if intent not in self.supported_intents:
@@ -402,7 +370,6 @@ class MusicEntityExtractor:
     # MATCH
     # ========================================================
     def match(self, candidate: str, intent: Intent) -> Entity:
-        """Найти candidate в каталоге (radio + mood + алиасы + жанры)."""
         if not candidate:
             return Entity.absent()
         if intent not in self.supported_intents:
@@ -412,26 +379,18 @@ class MusicEntityExtractor:
             moods = _load_moods()
             aliases = _load_aliases()
             genres = _load_genres()
+            local_artists, local_tracks = _load_local_index()
 
             cand_lower = candidate.lower().strip()
 
-            # NEW (local_liked): «мою музыку» / «мои лайки» / «мне нравится» →
-            # локальный плейлист лайков (data/liked_tracks.json).
+            # 0. «мою музыку» / «мои лайки» / «мне нравится»
             if any(phrase in cand_lower for phrase in ("мою музыку", "мои лайки", "мне нравится")):
                 return Entity.found("local_liked", "local_liked", 1.0, "phrase")
 
-            # 0. RADIO (2026-11-07): до mood/artist/genre.
-            #    FIX (2026-11-07, #2): безусловная radio-проверка.
-            #    FIX (2026-11-07, #3): fuzzy по radio_aliases — ASR может
-            #    исказить станцию: «включи ваню» → «включи юаню». «юаню»
-            #    нет в radio_aliases → _resolve_radio → None → artist fuzzy
-            #    → UNRESOLVED → CLARIFY. Теперь: fuzzy по radio_aliases
-            #    (difflib, порог 0.8) → «юаню» → «ваню» (0.9) → «радио ваня».
-            #    Порог 0.8 — безопасно: «юра» → «ваню» 0.3 (не FOUND).
+            # 1. RADIO
             radio_key = _resolve_radio(cand_lower)
             if radio_key:
                 return Entity.found("radio", radio_key, 1.0, "radio")
-            # «радио» без станции (или «радио» + неизвестная станция) → ABSENT
             if cand_lower == "радио":
                 return Entity(
                     type="radio",
@@ -440,32 +399,41 @@ class MusicEntityExtractor:
                     match_confidence=1.0,
                     source="radio_no_station",
                 )
-            # FIX (2026-11-07, #3): fuzzy по radio_aliases.
             fuzzy_radio_key = _fuzzy_radio(cand_lower)
             if fuzzy_radio_key:
                 log(f"entity.music: radio fuzzy «{cand_lower}» → "
                     f"«{fuzzy_radio_key}»", tag="BRAIN", level="DEBUG")
                 return Entity.found("radio", fuzzy_radio_key, 0.85, "radio_fuzzy")
 
-            # 1. MOOD — точное совпадение.
+            # 2. MOOD — точное совпадение
             if cand_lower in moods:
                 return Entity.found("mood", moods[cand_lower], 1.0, "mood_alias")
 
-            # 2. ARTIST — точное совпадение по алиасу.
+            # 3. LOCAL_INDEX (артисты) — точное совпадение
+            if cand_lower in local_artists:
+                return Entity.found("artist", local_artists[cand_lower], 1.0, "local_index")
+
+            # 4. ALIASES — точное совпадение
             if cand_lower in aliases:
                 entry = aliases[cand_lower]
                 name = entry.get("artist_name") if isinstance(entry, dict) else None
                 if name:
                     return Entity.found("artist", name, 1.0, "alias")
 
-            # 3. GENRE — точное совпадение.
+            # 5. LOCAL_INDEX (названия треков) — точное совпадение
+            if cand_lower in local_tracks:
+                return Entity.found("search", local_tracks[cand_lower], 0.98, "local_track")
+
+            # 6. GENRE — точное совпадение
             if cand_lower in genres:
                 return Entity.found("genre", cand_lower, 1.0, "genre_alias")
 
-            # 4. Падежи.
+            # 7. Падежи (mood / local_artists / aliases / genre)
             for variant in _all_case_variants(cand_lower):
                 if variant in moods:
                     return Entity.found("mood", moods[variant], 0.95, "case_mood")
+                if variant in local_artists:
+                    return Entity.found("artist", local_artists[variant], 0.95, "case_local_index")
                 if variant in aliases:
                     entry = aliases[variant]
                     name = entry.get("artist_name") if isinstance(entry, dict) else None
@@ -474,8 +442,9 @@ class MusicEntityExtractor:
                 if variant in genres:
                     return Entity.found("genre", variant, 0.95, "case_genre")
 
-            # 5. Fuzzy по mood + алиасам + жанрам.
+            # 8. Fuzzy по mood + local_artists + aliases + genres
             scored: list[EntityCandidate] = []
+            seen_artists: set[str] = set()
 
             for mood_key, mood_tag in moods.items():
                 if len(mood_key) < 3:
@@ -487,15 +456,26 @@ class MusicEntityExtractor:
                         match_confidence=score, source="fuzzy_mood",
                     ))
 
+            for loc_key, canonical_name in local_artists.items():
+                if len(loc_key) < 3:
+                    continue
+                score = _similarity(cand_lower, loc_key)
+                if score >= ARTIST_FUZZY_THRESHOLD:
+                    scored.append(EntityCandidate(
+                        type="artist", value=canonical_name,
+                        match_confidence=score, source="fuzzy_local",
+                    ))
+                    seen_artists.add(canonical_name.lower())
+
             for alias_key, entry in aliases.items():
                 if len(alias_key) < 3:
                     continue
                 if alias_key in ("макс", "слушаю", "назад", "что"):
                     continue
                 score = _similarity(cand_lower, alias_key)
-                if score >= MIN_MATCH_CONFIDENCE:
+                if score >= ARTIST_FUZZY_THRESHOLD:
                     name = entry.get("artist_name") if isinstance(entry, dict) else None
-                    if not name:
+                    if not name or name.lower() in seen_artists:
                         continue
                     scored.append(EntityCandidate(
                         type="artist", value=name,
@@ -512,10 +492,9 @@ class MusicEntityExtractor:
                         match_confidence=score, source="fuzzy_genre",
                     ))
 
-            # NEW (play_search v2): если fuzzy нашёл артиста, но кандидат
-            # содержит лишние слова (потенциально трек) — отдаём в search,
-            # а не play_artist. Пример: «король и шут лесник» → artist
-            # «Король и Шут» + лишнее «лесник» → play_search.
+            scored.sort(key=lambda c: c.match_confidence, reverse=True)
+
+            # Если fuzzy нашёл артиста, но в запросе есть лишние слова (название трека)
             if scored:
                 top = scored[0]
                 if top.type == "artist":
@@ -528,14 +507,12 @@ class MusicEntityExtractor:
                         )
 
             if not scored:
-                # NEW (play_search): если кандидат — 2+ слова (потенциально
-                # «артист + трек»), отдаём в поиск (локально → Яндекс), а не CLARIFY.
-                # Одно слово («Орион») — UNRESOLVED, как раньше.
-                if len(candidate.split()) >= 2:
-                    return Entity.found("search", candidate, 0.9, "play_search")
+                # Если локально и в алиасах не нашли — отправляем в play_search
+                # (music проверит локально и пойдёт искать в Яндекс.Музыку).
+                if len(cand_lower) >= 2:
+                    return Entity.found("search", candidate, 0.85, "play_search")
                 return Entity.unresolved(candidate, match_confidence=0.0)
 
-            scored.sort(key=lambda c: c.match_confidence, reverse=True)
             top = scored[0]
             if len(scored) >= 2:
                 second = scored[1]

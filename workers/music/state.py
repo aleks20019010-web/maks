@@ -138,3 +138,9 @@ _aliases_lock = threading.Lock()
 yandex_fail_count = 0
 yandex_next_try_ts = 0.0
 yandex_blocked_until = 0.0
+
+# ── Метаданные текущего трека для UI ──────────────────────────
+current_artist = ""
+current_title_only = ""
+current_cover_url = ""
+current_file_path = ""

@@ -1,37 +1,5 @@
 # workers/tts/main.py
 # TTS worker: слушает tts_inbox, синтезирует, играет через VLC.
-# Ducking музыки привязан к ASR (микрофон ВЫКЛ/ВКЛ → duck_on/duck_off).
-# TTS worker про музыку не знает: только выставляет speaking в state_file,
-# ASR читает его и управляет ducking.
-#
-# v8.8 (2026-11-13): speaking=True ДО synth (а не после).
-#   Симптом: «Макс, включи король и шут» → TTS начинает synth (1–5с),
-#   speaking=True появляется только ПОСЛЕ synth → ASR не делает duck_on
-#   → музыка 100% → TTS начинает говорить ПОВЕРХ 100% музыки.
-#   Плюс: brain _wait_tts_started(5с) не дожидается speaking=True →
-#   music без ожидания → дёрганье.
-#
-#   Фикс: speaking=True ДО synth. ASR duck_on сразу (музыка 30%),
-#   brain _wait_tts_started дожидается сразу, TTS говорит поверх 30%.
-#   Если synth упал — finally: speaking=False. MusicManager.volume
-#   не меняется, ducking не ломается.
-#
-# FIX (v8.3, 2026-11-12): защита от зависания TTS на play_tts_file.
-#   play_tts_file вызывается в отдельном daemon-потоке с join(45с).
-#   Если VLC завис — TTS-цикл не залипает: speaking=False гарантированно
-#   сбрасывается в state_file, ASR оживает.
-#
-# FIX (день 29, вечер): duck_music_on/duck_music_off удалены.
-#   - _say_one: убран duck_music_on() перед синтезом и duck_music_off()
-#     в finally. Ducking делает ASR.
-#   - _say_one: tts_state.set_speaking(False) только если был
-#     set_speaking(True) (флаг spoke).
-#   - _handle_say: TTS_ECHO_GUARD_SEC с защитой от TypeError/ValueError.
-#   - main: при KeyboardInterrupt — сброс speaking=False.
-#
-# v6.2 (2026-11-05): rate НЕ передаётся в synth (mp3 всегда speed=1.0,
-#   кэш всегда попадает). rate из personality_core (prosody) передаётся
-#   в player.play_tts_file → VLC set_rate (тон сохраняется).
 
 import os
 import sys
@@ -50,12 +18,9 @@ from workers.tts import player as tts_player
 from workers.tts import state_file as tts_state
 
 
-# v8.3: максимум на одну фразу (синтез + play + VLC-таймауты).
-# play_tts_file внутри имеет свои таймауты (start 3с + play 30с),
-# но если VLC зависнет в p.play() или p.release() — общий watchdog
-# оборвёт через PLAY_HARD_TIMEOUT_SEC.
 PLAY_HARD_TIMEOUT_SEC = 45.0
-
+SYNTH_MAX_ATTEMPTS = 2
+SYNTH_TOTAL_BUDGET_SEC = 7.0
 
 _engine = None
 
@@ -80,13 +45,19 @@ def _cleanup_temp(path: str):
         pass
 
 
-def _synth(text, out_path, rate=None, pitch=None, emotion=None, cache=True) -> bool:
+def _synth(text, out_path, rate=None, pitch=None, emotion=None, cache=True) -> tuple[bool, bool]:
+    """Вернуть (ok, from_cache)."""
     engine = _get_engine()
 
     if cache and tts_cache.cache_hit(engine, text, out_path, rate, pitch, emotion):
-        return True
+        return True, True
 
-    for attempt in range(3):
+    t0 = time.time()
+    for attempt in range(SYNTH_MAX_ATTEMPTS):
+        if time.time() - t0 >= SYNTH_TOTAL_BUDGET_SEC:
+            log(f"tts: бюджет синтеза ({SYNTH_TOTAL_BUDGET_SEC:.1f}с) исчерпан",
+                tag="TTS", level="WARN")
+            break
         try:
             if os.path.exists(out_path):
                 try:
@@ -97,26 +68,22 @@ def _synth(text, out_path, rate=None, pitch=None, emotion=None, cache=True) -> b
             if ok and os.path.exists(out_path) and os.path.getsize(out_path) > 1024:
                 if cache:
                     tts_cache.cache_save(engine, text, out_path, rate, pitch, emotion)
-                return True
-            else:
-                log(f"tts: попытка {attempt+1}: не удалось", tag="TTS", level="WARN")
+                return True, False
+            log(f"tts: попытка {attempt + 1}/{SYNTH_MAX_ATTEMPTS}: не удалось",
+                tag="TTS", level="WARN")
         except Exception as e:
-            log(f"tts: попытка {attempt+1}: {e}", tag="TTS", level="WARN")
-        if attempt < 2:
-            wait = 0.5 * (2 ** attempt)
-            time.sleep(wait)
+            log(f"tts: попытка {attempt + 1}/{SYNTH_MAX_ATTEMPTS}: {e}",
+                tag="TTS", level="WARN")
+
+        if attempt + 1 < SYNTH_MAX_ATTEMPTS and (time.time() - t0) < SYNTH_TOTAL_BUDGET_SEC:
+            time.sleep(0.3)
 
     if cache:
         tts_pending.add(text, rate, pitch, emotion)
-    return False
+    return False, False
 
 
 def _play_with_watchdog(path: str, rate) -> bool:
-    """v8.3: play_tts_file в daemon-потоке с join(45с).
-
-    Если VLC завис — TTS-цикл не залипает. VLC-поток остаётся (утечка),
-    но лучше утечка, чем залипший ASR.
-    """
     result = {"ok": False, "exc": None}
 
     def run():
@@ -144,38 +111,33 @@ def _play_with_watchdog(path: str, rate) -> bool:
 
 
 def _say_one(text, rate=None, pitch=None, emotion=None, cache=True) -> bool:
-    """Синтезировать + проиграть.
-
-    v8.8: speaking=True ДО synth (а не после). ASR duck_on сразу
-    (музыка 30%), brain _wait_tts_started дожидается сразу.
-    TTS говорит поверх 30% музыки. Если synth упал — finally: speaking=False.
-
-    v8.3: play_tts_file в отдельном потоке с watchdog. speaking=False
-    гарантированно сбрасывается в finally, даже если VLC завис.
-    """
     temp = _unique_temp_file()
     spoke = False
+    t_total = time.time()
 
     try:
-        # v8.8: speaking=True ДО synth. ASR duck_on сразу (музыка 30%),
-        # brain _wait_tts_started дожидается. Без «TTS поверх 100%».
         tts_state.set_speaking(True, text)
         spoke = True
 
-        ok = _synth(text, temp, None, pitch, emotion, cache=cache)
+        t_synth = time.time()
+        ok, from_cache = _synth(text, temp, None, pitch, emotion, cache=cache)
+        dt_synth = time.time() - t_synth
         if not ok:
-            log("tts: синтез не удался, пропуск", tag="TTS", level="WARN")
+            log(f"tts: синтез не удался ({dt_synth:.2f}s), пропуск", tag="TTS", level="WARN")
             return False
 
+        t_play = time.time()
         played = _play_with_watchdog(temp, rate)
+        dt_play = time.time() - t_play
+        src = "cache" if from_cache else "yandex"
+        log(f"tts: готово ok={played} src={src} synth={dt_synth:.2f}s "
+            f"play={dt_play:.2f}s total={time.time() - t_total:.2f}s", tag="TTS")
         return played
     except Exception as e:
         log(f"tts: play error: {e}", tag="TTS", level="ERROR")
         return False
     finally:
         if spoke:
-            # speaking=False гарантированно, даже если VLC завис.
-            # last_text остаётся для echo-фильтра в ASR.
             tts_state.set_speaking(False, text)
         _cleanup_temp(temp)
 
@@ -192,9 +154,12 @@ def _handle_say(msg: protocol.Message):
     sync = msg.data.get("sync", True)
 
     _rpe = []
-    if rate: _rpe.append(f"rate={rate}")
-    if pitch: _rpe.append(f"pitch={pitch}")
-    if emotion: _rpe.append(f"emotion={emotion}")
+    if rate:
+        _rpe.append(f"rate={rate}")
+    if pitch:
+        _rpe.append(f"pitch={pitch}")
+    if emotion:
+        _rpe.append(f"emotion={emotion}")
     _rpe_str = f", {', '.join(_rpe)}" if _rpe else ""
 
     log(f"tts: говорю «{text}» (sync={sync}{_rpe_str})", tag="TTS")

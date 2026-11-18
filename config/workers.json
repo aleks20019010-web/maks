@@ -31,6 +31,13 @@
       "auto_restart": true,
       "critical": false,
       "ram_limit_mb": 500
+    },
+    {
+      "name": "ui",
+      "cmd": ["python", "-m", "workers.ui.main"],
+      "auto_restart": true,
+      "critical": false,
+      "ram_limit_mb": 300
     }
   ],
   "supervisor": {
