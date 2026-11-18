@@ -43,6 +43,10 @@ FIX (день 29, вечер, #2): _handle_play в отдельном поток
 
 ── LOCAL_LIKED (v6.5) ─────────────────────────────────────────────
 ── SEARCH ARTIST-FIRST (v6.8) ─────────────────────────────────────
+── EQ (2026-11-18): управление эквалайзером ───────────────────────
+  control "eq_preset" {preset: int|None} → music.set_equalizer_preset().
+  None или < 0 — выключить эквалайзер. Список пресетов UI получает
+  отдельно (см. workers/music/player.py::get_vlc_eq_presets).
 """
 
 import sys
@@ -410,6 +414,8 @@ def _handle_control(name: str, data: dict):
             music.duck(target)
     elif name == "duck_off":
         music.restore()
+    elif name == "eq_preset":
+        music.set_equalizer_preset(data.get("preset"))
     elif name == "dislike":
         track_id = state.current_track_id
         title = state.current_track_title or ""

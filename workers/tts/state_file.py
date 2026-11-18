@@ -1,5 +1,5 @@
 # workers/tts/state_file.py
-# TTS пишет своё состояние в файл — ASR и brain читают.
+# TTS пишет своё состояние в файл — ASR, brain и UI читают.
 #
 # state: {
 #   "speaking": bool,
@@ -10,9 +10,11 @@
 
 import json
 import os
+import threading
 import time
 
 from shared import config as cfg
+from shared.log import log
 
 
 STATE_FILE = os.path.join(cfg.DATA_DIR, "tts_state.json")
@@ -30,7 +32,7 @@ def _read_raw() -> dict:
 
 
 def set_speaking(speaking: bool, last_text: str = ""):
-    """TTS сейчас говорит? Атомарно записать состояние в файл."""
+    """TTS сейчас говорит? Надёжно записать состояние в файл (с учётом блокировок Windows)."""
     now = time.time()
     prev = _read_raw()
     is_speaking = bool(speaking)
@@ -43,13 +45,33 @@ def set_speaking(speaking: bool, last_text: str = ""):
         "ts": now,
         "phrase_seq": phrase_seq,
     }
+    payload = json.dumps(data, ensure_ascii=False)
+    tmp = f"{STATE_FILE}.{os.getpid()}.{threading.get_ident()}.tmp"
+
     try:
-        tmp = STATE_FILE + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False)
-        os.replace(tmp, STATE_FILE)
-    except Exception:
-        pass
+            f.write(payload)
+
+        # В Windows os.replace может получить PermissionError, если ASR/BRAIN/UI
+        # читают файл в эту миллисекунду — делаем до 15 быстрых попыток.
+        for _ in range(15):
+            try:
+                os.replace(tmp, STATE_FILE)
+                return
+            except PermissionError:
+                time.sleep(0.005)
+
+        # Fallback: прямая перезапись, если файл всё ещё занят читателем
+        with open(STATE_FILE, "w", encoding="utf-8") as f:
+            f.write(payload)
+    except Exception as e:
+        log(f"tts: state_file write error: {e}", tag="TTS", level="WARN")
+    finally:
+        if os.path.exists(tmp):
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
 
 
 def get_state() -> dict:

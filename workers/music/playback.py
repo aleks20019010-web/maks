@@ -61,8 +61,8 @@
 #   play_index: после старта трека сохраняем в state артиста, название,
 #   обложку (cover_uri/og_image → https URL) и путь к файлу.
 #   monitor_player: раз в секунду публикует прогресс (playing/paused,
-#   artist/title/mode, volume, cover_url, file_path, pos_ms, dur_ms)
-#   через shared.ui_bridge.write_music_ui для UI.
+#   artist/title/mode, volume, cover_url, file_path, pos_ms, dur_ms,
+#   eq_preset, eq_name) через shared.ui_bridge.write_music_ui для UI.
 
 import os
 import time
@@ -531,7 +531,7 @@ def monitor_player():
     - Ended (переход): play_next — как раньше.
 
     UI_BRIDGE (2026-11-18): раз в секунду публикует прогресс трека
-    в shared.ui_bridge.write_music_ui.
+    в shared.ui_bridge.write_music_ui, включая eq_preset/eq_name.
     """
     last_state = None
     last_playing_refresh = 0.0
@@ -574,6 +574,8 @@ def monitor_player():
                 "file_path": state.current_file_path,
                 "pos_ms": pos_ms,
                 "dur_ms": dur_ms,
+                "eq_preset": music.eq_preset,
+                "eq_name": music.eq_preset_name,
             })
         except Exception:
             pass

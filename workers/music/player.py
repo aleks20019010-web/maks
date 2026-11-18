@@ -74,6 +74,14 @@ _ready:
 FIX (2026-11-08): clear_player и set_player не блокируют release().
 FIX (2026-11-07): PCR, segfault-риски в fade, явный media.
 FIX (2026-10-31): check_duck_watchdog чистит и залипший duck_hold.
+
+── EQ (2026-11-18): эквалайзер VLC ───────────────────────────────
+  Пресеты VLC через libvlc_audio_equalizer_*. Храним выбранный
+  preset_idx и живой libvlc_equalizer_t* (_eq_obj), который надо
+  release'ить при смене. set_equalizer_preset(None/-1) — выключить.
+  _apply_eq_locked() вызывается из set_player() (после установки
+  громкости) и из set_equalizer_preset(). UI получает список через
+  get_vlc_eq_presets() — (index, русское_название).
 """
 
 import threading
@@ -100,6 +108,43 @@ _STATE_TRANSITIONAL = (vlc.State.Opening, vlc.State.Buffering)
 _STATE_TERMINAL = (vlc.State.Error, vlc.State.Ended, vlc.State.Stopped)
 
 
+# ── EQ (2026-11-18): словарь перевода стандартных пресетов VLC ──
+_EQ_NAMES_RU = {
+    "Flat": "Ровный",
+    "Classical": "Классика",
+    "Club": "Клуб",
+    "Dance": "Танцевальный",
+    "Full bass": "Глубокий бас",
+    "Full bass and treble": "Бас и высокие",
+    "Full treble": "Высокие частоты",
+    "Headphones": "Наушники",
+    "Large Hall": "Большой зал",
+    "Live": "Живой звук",
+    "Party": "Вечеринка",
+    "Pop": "Поп",
+    "Reggae": "Регги",
+    "Rock": "Рок",
+    "Ska": "Ска",
+    "Soft": "Мягкий",
+    "Soft rock": "Софт-рок",
+    "Techno": "Техно",
+}
+
+
+def get_vlc_eq_presets() -> list[tuple[int, str]]:
+    """Вернуть список (index, русское_название) доступных пресетов VLC."""
+    out = []
+    try:
+        count = vlc.libvlc_audio_equalizer_get_preset_count()
+        for i in range(count):
+            raw = vlc.libvlc_audio_equalizer_get_preset_name(i)
+            name = raw.decode("utf-8", errors="ignore") if isinstance(raw, bytes) else str(raw)
+            out.append((i, _EQ_NAMES_RU.get(name, name)))
+    except Exception:
+        pass
+    return out
+
+
 class MusicManager:
     def __init__(self):
         self.player = None
@@ -123,6 +168,11 @@ class MusicManager:
         self._fade_cancel = threading.Event()
         self._fade_thread = None
 
+        # ── EQ (2026-11-18) ──
+        self.eq_preset: int | None = None
+        self.eq_preset_name: str = "Выкл"
+        self._eq_obj = None
+
     # ========================================================
     # ПЛЕЕР
     # ========================================================
@@ -141,6 +191,9 @@ class MusicManager:
                     self.player.audio_set_volume(vol)
                 except Exception:
                     pass
+
+                # ── EQ (2026-11-18): перенести пресет на новый плеер ──
+                self._apply_eq_locked()
 
             pid = id(new_player) if new_player else None
             log(f"set_player id={pid}, vol={self.volume}, "
@@ -224,6 +277,40 @@ class MusicManager:
                 media.release()
             except Exception:
                 pass
+
+    # ========================================================
+    # EQ (2026-11-18)
+    # ========================================================
+    def _apply_eq_locked(self):
+        if self.player is None:
+            return
+        try:
+            if self._eq_obj is not None:
+                vlc.libvlc_audio_equalizer_release(self._eq_obj)
+                self._eq_obj = None
+
+            if self.eq_preset is None or self.eq_preset < 0:
+                self.player.set_equalizer(None)
+            else:
+                eq = vlc.libvlc_audio_equalizer_new_from_preset(int(self.eq_preset))
+                if eq:
+                    self._eq_obj = eq
+                    self.player.set_equalizer(eq)
+        except Exception as e:
+            log(f"eq apply error: {e}", tag="MUSIC", level="WARN")
+
+    def set_equalizer_preset(self, preset_idx: int | None):
+        with self.lock:
+            if preset_idx is None or int(preset_idx) < 0:
+                self.eq_preset = None
+                self.eq_preset_name = "Выкл"
+            else:
+                idx = int(preset_idx)
+                presets = dict(get_vlc_eq_presets())
+                self.eq_preset = idx
+                self.eq_preset_name = presets.get(idx, f"Пресет #{idx}")
+            self._apply_eq_locked()
+        log(f"EQ → {self.eq_preset_name}", tag="MUSIC")
 
     # ========================================================
     # FADE
