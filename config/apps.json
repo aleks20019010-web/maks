@@ -1,0 +1,21 @@
+{
+  "chrome": {
+    "display_name": "Google Chrome",
+    "aliases": [
+      "хром",
+      "гугл хром",
+      "chrome",
+      "google chrome",
+      "браузер",
+      "интернет"
+    ],
+    "process_name": "chrome.exe",
+    "commands": ["chrome.exe"],
+    "args": ["--restore-last-session"],
+    "paths": [
+      "%ProgramFiles%\\Google\\Chrome\\Application\\chrome.exe",
+      "%ProgramFiles(x86)%\\Google\\Chrome\\Application\\chrome.exe",
+      "%LocalAppData%\\Google\\Chrome\\Application\\chrome.exe"
+    ]
+  }
+}

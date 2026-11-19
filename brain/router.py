@@ -40,6 +40,19 @@
 #   Импорты datetime_parser и datetime из router удалены (были только
 #   для _handle_reminders). re оставлен — используется в других местах?
 #   Нет: re больше не используется. Удалён.
+#
+# ── APPS → NLU + скил (2026-11-19) ──────────────────────────────
+#   APP_OPEN / APP_CLOSE → NLU → skill_resolver → "apps".
+#   AppsSkill.handle(command) получает Command с Entity (app_key).
+#   В кортеж скиллов, которым передаётся Command, добавлен "apps".
+#
+# ── CLOSE_ALL → fast-path (2026-11-19) ──────────────────────────
+#   «закрой всё» / «закрой все окна» / «закрой все программы» —
+#   перехват ДО NLU (мимо SetFit/ONNX, мимо pipeline). Причина:
+#   «закрой всё» — это не APP_CLOSE (нет имени программы) и не
+#   APP_UNKNOWN (нет объекта). Это отдельное массовое действие
+#   (launcher.close_all_apps). Фразы-триггеры — точные, чтобы
+#   случайно не поймать «закрой хром» (там APP_CLOSE через NLU).
 
 import threading
 import time
@@ -86,6 +99,16 @@ NO_REPEAT_COMMANDS = {
 
 YES_WORDS = {"да", "давай", "конечно", "ага", "угу", "хорошо", "ок", "окей"}
 NO_WORDS = {"нет", "не", "не надо", "неважно", "не важно", "не хочу", "отмена"}
+
+CLOSE_ALL_COMMANDS = {
+    "закрой все",
+    "закрой всё",
+    "закрыть все",
+    "закрыть всё",
+    "закрой все окна",
+    "закрой все программы",
+    "закрой все приложения",
+}
 
 
 def process_command(command: str, source: CommandSource = CommandSource.VOICE):
@@ -147,6 +170,14 @@ def process_command(command: str, source: CommandSource = CommandSource.VOICE):
             _repeat_count = 0
         return None
 
+    # ── Быстрая команда: «Макс, закрой всё» (мимо NLU) ──
+    if cmd_lower in CLOSE_ALL_COMMANDS:
+        log("router: fast-path → close_all_apps", tag="BRAIN")
+        from brain.skills.apps import launcher as apps_launcher
+        apps_launcher.close_all_apps()
+        _respond_and_say("APP_CLOSED_ALL")
+        return None
+
     # ── NLU PIPELINE ──
     try:
         nlu_ctx = nlu_context_mod.get()
@@ -178,7 +209,7 @@ def process_command(command: str, source: CommandSource = CommandSource.VOICE):
 def _execute_decision(decision, command: str, source: CommandSource) -> bool:
     """Исполнить Decision из pipeline. True — обработали, False — нет.
 
-    EXECUTE  → music/controls/weather/system/reminders:
+    EXECUTE  → music/controls/weather/system/reminders/apps:
                skill.handle(decision.command)
                остальные: skill.handle(command)
     CLARIFY  → respond_and_say(clarify.phrase_set, **clarify.kwargs)
@@ -200,7 +231,7 @@ def _execute_decision(decision, command: str, source: CommandSource) -> bool:
             f"{skill_name}.{decision.command.action or 'handle'} "
             f"(conf={decision.confidence:.2f})", tag="BRAIN")
         try:
-            if skill.name in ("music", "controls", "weather", "system", "reminders"):
+            if skill.name in ("music", "controls", "weather", "system", "reminders", "apps"):
                 skill.handle(decision.command)
             else:
                 skill.handle(command)

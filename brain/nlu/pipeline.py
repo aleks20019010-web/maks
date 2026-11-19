@@ -57,6 +57,10 @@
 #   попадало «через десять минут» вместо «хлеб».
 #   Теперь: в command.context кладётся "pending_original" =
 #   pending.original_text. Скил берёт его как fallback.
+#
+# ── APP_OPEN / APP_CLOSE (2026-11-19) ───────────────────────────
+#   Зарегистрированы AppExtractor и AppsDecisionEngine в
+#   _load_extractors() / _load_decisions().
 
 import time
 from typing import Optional
@@ -79,6 +83,7 @@ def _load_extractors() -> dict[Intent, object]:
     """Intent → EntityExtractor. Ленивая загрузка (импорт тяжёлый)."""
     from brain.nlu.entity.music import get as get_music_entity
     from brain.nlu.entity.reminders import get as get_dt, get_text as get_txt
+    from brain.nlu.entity.apps import get as get_app_entity
     return {
         Intent.MUSIC_PLAY: get_music_entity(),
         Intent.MUSIC_WAVE: get_music_entity(),
@@ -86,6 +91,8 @@ def _load_extractors() -> dict[Intent, object]:
         Intent.REMINDER_LIST: get_dt(),
         Intent.REMINDER_WHEN: get_txt(),
         Intent.REMINDER_DONE: get_txt(),
+        Intent.APP_OPEN: get_app_entity(),
+        Intent.APP_CLOSE: get_app_entity(),
     }
 
 
@@ -96,6 +103,7 @@ def _load_decisions() -> dict[Intent, object]:
     from brain.nlu.decision.weather import get as get_weather_decision
     from brain.nlu.decision.system import get as get_system_decision
     from brain.nlu.decision.reminders import get as get_reminders_decision
+    from brain.nlu.decision.apps import get as get_apps_decision
 
     return {
         Intent.MUSIC_PLAY: get_music_decision(),
@@ -118,6 +126,8 @@ def _load_decisions() -> dict[Intent, object]:
         Intent.REMINDER_WHEN: get_reminders_decision(),
         Intent.REMINDER_LIST: get_reminders_decision(),
         Intent.REMINDER_DONE: get_reminders_decision(),
+        Intent.APP_OPEN: get_apps_decision(),
+        Intent.APP_CLOSE: get_apps_decision(),
     }
 
 

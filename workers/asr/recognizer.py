@@ -1,5 +1,14 @@
 # workers/asr/recognizer.py
 # Загрузка и перезагрузка GigaAM-v3, распознавание аудио и фоновый gigaam_worker.
+#
+# ── HOT_TAIL_SEC + раздельная ветка hot/wake (2026-11-19) ───────
+#   HOT_TAIL_SEC: 1.3 → 1.15 (короткое окно для одного hot-слова
+#   «дальше»/«тише»/«стоп»).
+#   В run_worker ветка "hot" больше не ждёт VAD-сегмент (Vosk уже
+#   дождался конца слова): берём готовый сегмент, а если его нет —
+#   fallback на ring.get(pos - HOT_TAIL_SEC, ring.total) без
+#   блокирующего wait_for. Ветка wake осталась с margin_before/
+#   margin_after + wait_for(VOSK_SEG_TIMEOUT_SEC).
 
 import threading
 import time
@@ -20,9 +29,9 @@ from workers.asr.text_utils import CommandFilter, after_wake, hot_word_appropria
 GIGAAM_ENABLED = True
 WAKE_REARM_SEC = 1.2
 HOT_REARM_SEC = 0.3
-VOSK_SEG_TIMEOUT_SEC = 1.5
-VOSK_TAIL_SEC = 4.0
-HOT_TAIL_SEC = 2.0
+VOSK_SEG_TIMEOUT_SEC = 0.85
+VOSK_TAIL_SEC = 1.4
+HOT_TAIL_SEC = 1.15   # Короткое окно для одного hot-слова («дальше», «тише», «стоп»)
 
 _GIGAAM_ERROR_LIMIT = 5
 _GIGAAM_RELOAD_COOLDOWN_SEC = 60.0
@@ -206,27 +215,43 @@ class GigaAMController:
                 with self._trig_lock:
                     pos, source, t_trig, mode, hint_text = self._wake_req
 
-                margin = int(VOSK_SEG_TIMEOUT_SEC * self.sr)
-                sg = self.seg_store.wait_for(
-                    lambda x: x[1] >= pos - margin and x[0] <= pos,
-                    VOSK_SEG_TIMEOUT_SEC,
-                    shutdown_event,
-                )
-
-                if sg:
-                    audio = self.seg_store.extract_audio(sg)
-                    self.seg_store.consume(sg[1])
-                    vad_ok = True
+                if mode == "hot":
+                    # Для hot-слова («дальше», «тише») Vosk уже дождался конца слова.
+                    # Проверяем только уже готовый сегмент без блокирующего ожидания.
+                    sg = self.seg_store.find(
+                        lambda x: x[1] >= pos - int(1.2 * self.sr) and x[0] <= pos
+                    )
+                    if sg:
+                        audio = self.seg_store.extract_audio(sg)
+                        self.seg_store.consume(sg[1])
+                        vad_ok = True
+                    else:
+                        end_pos = self.ring.total
+                        audio = self.ring.get(max(0, pos - int(HOT_TAIL_SEC * self.sr)), end_pos)
+                        self.seg_store.consume(end_pos)
+                        vad_ok = False
                 else:
-                    end_pos = self.ring.total
-                    tail_sec = HOT_TAIL_SEC if mode == "hot" else VOSK_TAIL_SEC
-                    audio = self.ring.get(max(0, pos - int(tail_sec * self.sr)), end_pos)
-                    self.seg_store.consume(end_pos)
-                    vad_ok = False
-                    if mode != "hot":
+                    margin_before = int(1.4 * self.sr)
+                    margin_after = int(0.6 * self.sr)
+                    sg = self.seg_store.wait_for(
+                        lambda x: x[1] >= pos - margin_before and x[0] <= pos + margin_after,
+                        VOSK_SEG_TIMEOUT_SEC,
+                        shutdown_event,
+                    )
+
+                    if sg:
+                        seg_start = min(sg[0], max(0, pos - int(1.2 * self.sr)))
+                        audio = self.seg_store.extract_audio((seg_start, sg[1]))
+                        self.seg_store.consume(sg[1])
+                        vad_ok = True
+                    else:
+                        end_pos = self.ring.total
+                        audio = self.ring.get(max(0, pos - int(VOSK_TAIL_SEC * self.sr)), end_pos)
+                        self.seg_store.consume(end_pos)
+                        vad_ok = False
                         log(f"asr: [GIGAAM/{source}] VAD сегмент не найден — fallback "
-                            f"(до ring.total, {tail_sec:.1f}с до data_end_pos)",
-                            tag="ASR", level="WARN")
+                            f"(до ring.total, {VOSK_TAIL_SEC:.1f}с до data_end_pos)",
+                            tag="ASR", level="DEBUG")
 
                 t_rec = time.time()
                 text = self.recognize(audio)

@@ -1,0 +1,97 @@
+{
+  "APP_OPENED": [
+    {"text": "Открыв+аю {app}", "style": "normal", "emotion": "good", "slot": "core"},
+    {"text": "Запуск+аю {app}", "style": "normal", "emotion": "good", "slot": "core"},
+    {"text": "{app} на экр+ане", "style": "friendly", "humor": 0.1, "emotion": "good", "slot": "core"},
+    {"text": "sil<[50]> Открыв+аю {app}", "style": "normal", "emotion": "good", "slot": "core"},
+    {"text": "Сек+унду sil<[100]> {app} открыв+ается", "style": "normal", "emotion": "good", "slot": "core"},
+    {"text": "Гот+ово sil<[100]> {app} запущен", "style": "formal", "emotion": "neutral", "slot": "core"},
+    {"text": "{app} уж+е на экр+ане", "style": "friendly", "humor": 0.1, "rate": "+5%", "emotion": "good", "slot": "core"},
+    {"text": "Запуст+ил {app}", "style": "normal", "emotion": "good", "slot": "core"},
+    {"text": "sil<[50]> Запуск+аю {app} sil<[100]> Готов+о", "style": "normal", "emotion": "good", "slot": "core"},
+    {"text": "Открыв+аю {app} sil<[150]> Как об+ычно", "style": "ironic", "humor": 0.2, "emotion": "good", "slot": "core"},
+    {"text": "Держ+ите sil<[100]> {app} открыт", "style": "formal", "emotion": "neutral", "slot": "core"},
+    {"text": "{app} перед в+ами", "style": "friendly", "humor": 0.1, "emotion": "good", "slot": "core"}
+  ],
+  "APP_OPEN_FAIL": [
+    {"text": "Не см+ог найти или запуст+ить {app}", "style": "normal", "emotion": "neutral", "slot": "core"},
+    {"text": "Что-то {app} не запуск+ается", "style": "friendly", "humor": 0.1, "emotion": "neutral", "slot": "core"},
+    {"text": "sil<[50]> {app} не откр+ылся sil<[100]> Пров+ерьте, уст+ановлен ли он", "style": "formal", "emotion": "neutral", "slot": "core"},
+    {"text": "Не нашёл {app} sil<[100]> Возм+ожно, он не уст+ановлен", "style": "normal", "emotion": "neutral", "slot": "core"},
+    {"text": "Пр+облема с {app} sil<[100]> Не запуск+ается", "style": "ironic", "humor": 0.2, "emotion": "neutral", "slot": "core"},
+    {"text": "sil<[50]> Хм sil<[100]> {app} не поддался", "style": "ironic", "humor": 0.3, "emotion": "neutral", "slot": "core"},
+    {"text": "{app} не откр+ывается sil<[100]> Я попыт+ался", "style": "formal", "emotion": "neutral", "slot": "core"},
+    {"text": "sil<[50]> {app} капризничает sil<[100]> Не запускается", "style": "ironic", "humor": 0.3, "emotion": "neutral", "slot": "core"},
+    {"text": "Не получ+илось открыть {app} sil<[100]> Может, путь не тот", "style": "normal", "emotion": "neutral", "slot": "core"}
+  ],
+  "APP_CLOSED": [
+    {"text": "Закр+ыл {app}", "style": "normal", "emotion": "good", "slot": "core"},
+    {"text": "{app} закр+ыт", "style": "normal", "emotion": "good", "slot": "core"},
+    {"text": "Выключ+ил {app}", "style": "normal", "emotion": "good", "slot": "core"},
+    {"text": "sil<[50]> Гот+ово sil<[100]> {app} закр+ыт", "style": "formal", "emotion": "neutral", "slot": "core"},
+    {"text": "{app} закрыв+аю", "style": "normal", "emotion": "good", "slot": "core"},
+    {"text": "sil<[50]> {app} б+ольше не меш+ает", "style": "ironic", "humor": 0.3, "emotion": "good", "slot": "core"},
+    {"text": "Убр+ал {app} с экр+ана", "style": "friendly", "humor": 0.1, "emotion": "good", "slot": "core"},
+    {"text": "Сд+елано sil<[100]> {app} закр+ыт", "style": "formal", "emotion": "neutral", "slot": "core"},
+    {"text": "{app} убр+ан sil<[100]> Как и просили", "style": "friendly", "humor": 0.1, "emotion": "good", "slot": "core"},
+    {"text": "sil<[50]> {app} закр+ыт sil<[100]> Наконец-то тишин+а", "style": "ironic", "humor": 0.4, "emotion": "good", "slot": "core"}
+  ],
+  "APP_CLOSED_ALL": [
+    {"text": "Закр+ыл все окна и прогр+аммы", "style": "normal", "emotion": "good", "slot": "core"},
+    {"text": "Всё закр+ыто", "style": "normal", "emotion": "good", "slot": "core"},
+    {"text": "Оч+истил раб+очий стол sil<[100]> всё закр+ыл", "style": "normal", "emotion": "good", "slot": "core"},
+    {"text": "sil<[50]> Гот+ово sil<[100]> всё закр+ыл", "style": "formal", "emotion": "neutral", "slot": "core"},
+    {"text": "Раб+очий стол ч+истый sil<[100]> Как в п+ервый день", "style": "ironic", "humor": 0.3, "emotion": "good", "slot": "core"},
+    {"text": "sil<[50]> Всё закр+ыл sil<[100]> Након+ец-то тишин+а", "style": "friendly", "humor": 0.2, "emotion": "good", "slot": "core"},
+    {"text": "Закр+ыл всё sil<[100]> что смог", "style": "normal", "emotion": "neutral", "slot": "core"},
+    {"text": "sil<[50]> Оч+истил sil<[100]> ни одн+ого окн+а не осталось", "style": "formal", "emotion": "neutral", "slot": "core"}
+  ],
+  "APP_NOT_RUNNING": [
+    {"text": "{app} и так не зап+ущен", "style": "normal", "emotion": "neutral", "slot": "core"},
+    {"text": "Он и не был откр+ыт", "style": "normal", "emotion": "neutral", "slot": "core"},
+    {"text": "sil<[50]> {app} и не зап+ущен", "style": "normal", "emotion": "neutral", "slot": "core"},
+    {"text": "{app} и так закр+ыт", "style": "friendly", "humor": 0.1, "emotion": "good", "slot": "core"},
+    {"text": "sil<[50]> А {app} и не раб+отал", "style": "ironic", "humor": 0.3, "emotion": "good", "slot": "core"},
+    {"text": "{app} и не запуск+ался sil<[100]> Нечего закрыв+ать", "style": "normal", "emotion": "neutral", "slot": "core"},
+    {"text": "sil<[50]> {app} и так не раб+отает sil<[100]> Всё в пор+ядке", "style": "friendly", "humor": 0.2, "emotion": "good", "slot": "core"},
+    {"text": "{app} и не откр+ывался sil<[100]> Т+ак что закрыв+ать н+ечего", "style": "formal", "emotion": "neutral", "slot": "core"}
+  ],
+  "APP_CLOSE_FAIL": [
+    {"text": "Не получ+илось закрыть {app}", "style": "normal", "emotion": "neutral", "slot": "core"},
+    {"text": "sil<[50]> {app} не подда+ётся закрытию", "style": "ironic", "humor": 0.2, "emotion": "neutral", "slot": "core"},
+    {"text": "{app} не закр+ылся sil<[100]> Попр+обуйте вручную", "style": "formal", "emotion": "neutral", "slot": "core"},
+    {"text": "sil<[50]> {app} упр+ямится sil<[100]> Не закр+ывается", "style": "ironic", "humor": 0.4, "emotion": "neutral", "slot": "core"},
+    {"text": "Не см+ог закрыть {app}", "style": "normal", "emotion": "neutral", "slot": "core"},
+    {"text": "sil<[50]> {app} не х+очет закрыв+аться sil<[100]> Упрямый", "style": "ironic", "humor": 0.4, "emotion": "neutral", "slot": "core"},
+    {"text": "{app} не поддался sil<[100]> Может, закр+оете вручную?", "style": "friendly", "humor": 0.1, "emotion": "neutral", "slot": "core"}
+  ],
+  "APP_OPEN_CLARIFY": [
+    {"text": "Как+ую прогр+амму открыть?", "style": "normal", "emotion": "neutral", "slot": "core"},
+    {"text": "Что +именно запуст+ить?", "style": "normal", "emotion": "neutral", "slot": "core"},
+    {"text": "sil<[50]> Как+ую прогр+амму?", "style": "friendly", "humor": 0.1, "emotion": "good", "slot": "core"},
+    {"text": "Ут+очните назв+ание sil<[100]> Что открыть?", "style": "formal", "emotion": "neutral", "slot": "core"},
+    {"text": "sil<[50]> Не ул+овил sil<[100]> Что зап+устить-то?", "style": "friendly", "humor": 0.2, "emotion": "good", "slot": "core"},
+    {"text": "Как+ую прогр+амму вы имеете в вид+у?", "style": "formal", "emotion": "neutral", "slot": "core"},
+    {"text": "sil<[50]> Назв+ание прогр+аммы забыли?", "style": "ironic", "humor": 0.3, "emotion": "good", "slot": "core"}
+  ],
+  "APP_CLOSE_CLARIFY": [
+    {"text": "Как+ую прогр+амму закрыть?", "style": "normal", "emotion": "neutral", "slot": "core"},
+    {"text": "Что +именно выключить?", "style": "normal", "emotion": "neutral", "slot": "core"},
+    {"text": "sil<[50]> Как+ую прогр+амму?", "style": "friendly", "humor": 0.1, "emotion": "good", "slot": "core"},
+    {"text": "Ут+очните назв+ание sil<[100]> Что закрыть?", "style": "formal", "emotion": "neutral", "slot": "core"},
+    {"text": "sil<[50]> Не ул+овил sil<[100]> Что закрыть-то?", "style": "friendly", "humor": 0.2, "emotion": "good", "slot": "core"},
+    {"text": "Как+ую прогр+амму вы имеете в вид+у?", "style": "formal", "emotion": "neutral", "slot": "core"},
+    {"text": "sil<[50]> Назв+ание прогр+аммы забыли?", "style": "ironic", "humor": 0.3, "emotion": "good", "slot": "core"}
+  ],
+  "APP_UNKNOWN": [
+    {"text": "Не п+онял sil<[100]> как+ую прогр+амму открыть или закрыть", "style": "normal", "emotion": "neutral", "slot": "core"},
+    {"text": "sil<[50]> Как+ую прогр+амму?", "style": "normal", "emotion": "neutral", "slot": "core"},
+    {"text": "Ут+очните назв+ание прогр+аммы", "style": "formal", "emotion": "neutral", "slot": "core"},
+    {"text": "sil<[50]> Не ул+овил sil<[100]> Что открыть-то?", "style": "friendly", "humor": 0.1, "emotion": "good", "slot": "core"},
+    {"text": "Как+ую прогр+амму вы имеете в вид+у?", "style": "formal", "emotion": "neutral", "slot": "core"},
+    {"text": "sil<[50]> Назв+ание прогр+аммы забыли?", "style": "ironic", "humor": 0.3, "emotion": "good", "slot": "core"},
+    {"text": "Так+ой прогр+аммы я пок+а не зн+аю", "style": "normal", "emotion": "neutral", "slot": "core"},
+    {"text": "Не нашёл так+ую прогр+амму в сп+иске", "style": "normal", "emotion": "neutral", "slot": "core"},
+    {"text": "sil<[50]> Хм sil<[100]> Так+ого у мен+я в сп+иске нет", "style": "ironic", "humor": 0.3, "emotion": "neutral", "slot": "core"}
+  ]
+}

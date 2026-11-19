@@ -29,6 +29,10 @@
    Раньше: искал только data/setfit_train.json. Если его удалить
    (перейдя полностью на data/intents/*.json), скрипт падал с
    sys.exit. Теперь: ищет data/intents/ ИЛИ data/setfit_train.json.
+
+── APP_OPEN / APP_CLOSE (2026-11-19) ────────────────────────────
+   PROBES: +4 фразы на APP_OPEN/APP_CLOSE и 1 граничная
+   («выключи музыку» → MUSIC_STOP, а не APP_CLOSE).
 """
 
 import argparse
@@ -68,6 +72,8 @@ DEFAULT_BASE = "cointegrated/rubert-tiny2"
 
 # Контрольные фразы: рискованные пары + то, что проверяли руками.
 # FIX (2026-11-13): +4 на REMINDER_* (ADD/WHEN/LIST/DONE).
+# APP_OPEN/APP_CLOSE (2026-11-19): +4 на новые интенты и граничная
+# «выключи музыку» (MUSIC_STOP, а не APP_CLOSE).
 PROBES = [
     # музыка / общие
     ("включи мою музыку",              "MUSIC_WAVE"),
@@ -81,6 +87,12 @@ PROBES = [
     ("когда к врачу",                    "REMINDER_WHEN"),
     ("мои напоминания",                  "REMINDER_LIST"),
     ("готово позвонить маме",            "REMINDER_DONE"),
+    # управление программами (2026-11-19)
+    ("открой хром",                    "APP_OPEN"),
+    ("запусти браузер",                "APP_OPEN"),
+    ("закрой хром",                    "APP_CLOSE"),
+    ("выключи браузер",                "APP_CLOSE"),
+    ("выключи музыку",                 "MUSIC_STOP"),
 ]
 
 

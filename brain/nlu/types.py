@@ -60,6 +60,12 @@
 #   Дата/время парсится в скиле через brain/datetime_parser.py
 #   (parse_when для add, parse_date_only для list).
 #   Entity для REMINDER_* не извлекается в NLU (парсинг — в скиле).
+#
+# ── APP_OPEN / APP_CLOSE (2026-11-19) ─────────────────────────────
+#   «открой/запусти [программу]» → APP_OPEN.
+#   «закрой/выключи [программу]» → APP_CLOSE.
+#   Entity для APP_* не извлекается в NLU (имя программы — сырой текст,
+#   резолвинг в скиле через config/apps.json / алиасы).
 
 from dataclasses import dataclass, field
 from enum import Enum
@@ -117,6 +123,10 @@ class Intent(str, Enum):
     # Очистка
     CLEANUP_DISK = "CLEANUP_DISK"
     CLEANUP_RECYCLE = "CLEANUP_RECYCLE"
+
+    # Управление программами (2026-11-19)
+    APP_OPEN = "APP_OPEN"            # открой/запусти [программу]
+    APP_CLOSE = "APP_CLOSE"          # закрой/выключи [программу]
 
     # Smalltalk
     SMALLTALK = "SMALLTALK"

@@ -26,6 +26,10 @@
 #   зарегистрирован, все четыре интента идут в него.
 #   action ставит reminders decision engine (add/when/list/done)
 #   или скил сам по command.intent, если decision engine нет.
+#
+# ── APP_OPEN / APP_CLOSE (2026-11-19) ───────────────────────────
+#   Оба интента → "apps". AppsDecisionEngine выставляет action
+#   (open_app / close_app), skill выполняет.
 
 from brain.nlu.types import Command, Intent
 from brain.skills import base as skills_base
@@ -63,6 +67,9 @@ _INTENT_TO_SKILL: dict[Intent, str | None] = {
     Intent.REMINDER_DONE: "reminders",
     Intent.CLEANUP_DISK: "cleanup",
     Intent.CLEANUP_RECYCLE: "cleanup_recycle",
+    # Управление программами (2026-11-19): оба → apps.
+    Intent.APP_OPEN: "apps",
+    Intent.APP_CLOSE: "apps",
     Intent.SMALLTALK: "smalltalk",
     Intent.LLM_QUESTION: "llm",
     Intent.UNKNOWN: None,

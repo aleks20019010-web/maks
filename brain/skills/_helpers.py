@@ -4,8 +4,10 @@
 # ── UI_BRIDGE (2026-11-18) ──────────────────────────────────────
 #   respond_and_say: после ipc.put(TTS_INBOX, msg) ответ Макса
 #   дублируется в UI-чат через shared.ui_bridge.append_chat("assistant", ...).
-#   Логируется только основной путь (Путь 1), fallback (Путь 2) — без
-#   чат-лога, т.к. это аварийная фраза без привязки к Personality.
+#   Дублируются ОБА пути: Путь 1 (Personality) и Путь 2 (fallback-фраза).
+#   Путь 2 — аварийная фраза без привязки к Personality, но пользователь
+#   её слышит, значит она должна быть и в чате — иначе история в UI
+#   расходится с тем, что реально сказано.
 
 from shared import ipc
 from shared import protocol
@@ -71,7 +73,8 @@ def respond_and_say(intent, sync=True, is_event=False, **kw) -> int | None:
     когда TTS начнёт эту фразу, state_file["phrase_seq"] станет > base_seq.
     Если фраза не отправлена, возвращает None.
 
-    UI_BRIDGE: после успешной отправки в TTS ответ дублируется в UI-чат.
+    UI_BRIDGE: после успешной отправки в TTS ответ дублируется в UI-чат
+    (оба пути: Personality и fallback).
     """
     if _engine is None:
         log(f"helpers.respond_and_say({intent}): engine не установлен", tag="BRAIN", level="WARN")
@@ -114,6 +117,11 @@ def respond_and_say(intent, sync=True, is_event=False, **kw) -> int | None:
         if text:
             base_seq = _current_tts_seq()
             ipc.put(protocol.TTS_INBOX, protocol.say(text, sync=sync))
+
+            # ── UI_BRIDGE (2026-11-18): fallback тоже дублируем в чат ──
+            from shared.ui_bridge import append_chat
+            append_chat("assistant", text, meta=intent)
+
             metrics.inc("tts_said")
             return base_seq
     except Exception as e:

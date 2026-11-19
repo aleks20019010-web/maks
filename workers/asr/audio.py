@@ -1,5 +1,18 @@
 # workers/asr/audio.py
 # Аудио-буферизация, ресемплинг, VAD-сегментатор и прогрев аудиоустройства.
+#
+# ── VAD TUNING (2026-11-19) ─────────────────────────────────────
+#   Порог срабатывания ниже, закрытие фразы быстрее:
+#     VAD_END_SILENCE_SEC: 0.5  → 0.38  (быстрее финализируем сегмент)
+#     VAD_RATIO:           3.0  → 2.0   (после AEC 3.0 — слишком высоко
+#                                        для спокойной речи)
+#     VAD_MIN_RMS:         0.004 → 0.0025
+#     VAD_MIN_SPEECH_SEC:  0.15 → 0.12  (короткие «да/нет» не теряем)
+#   Плюс асимметричное обновление noise: вверх — медленно (alpha=0.005),
+#   вниз — быстрее (alpha=0.03). Раньше 0.98/0.02 симметрично, и всплеск
+#   голоса в начале фразы задирал noise → порог рос → VAD «глох» на
+#   остаток фразы.
+#   SegmentStore: maxlen 12 → 24 (глубина очереди сегментов).
 
 import collections
 import threading
@@ -11,11 +24,11 @@ from shared import config as cfg
 from shared.log import log
 
 
-VAD_END_SILENCE_SEC = getattr(cfg, "VAD_END_SILENCE_SEC", 0.5)
-VAD_RATIO = getattr(cfg, "VAD_RATIO", 3.0)
-VAD_MIN_RMS = getattr(cfg, "VAD_MIN_RMS", 0.004)
+VAD_END_SILENCE_SEC = getattr(cfg, "VAD_END_SILENCE_SEC", 0.38)  # было 0.5 — быстрее закрываем сегмент после команды
+VAD_RATIO = getattr(cfg, "VAD_RATIO", 2.0)                       # было 3.0 — после AEC 3.0 слишком высоко для спокойной речи
+VAD_MIN_RMS = getattr(cfg, "VAD_MIN_RMS", 0.0025)                # было 0.004
 VAD_MAX_SEG_SEC = getattr(cfg, "VAD_MAX_SEG_SEC", 8.0)
-VAD_MIN_SPEECH_SEC = 0.15
+VAD_MIN_SPEECH_SEC = 0.12
 VAD_DEBUG = getattr(cfg, "VAD_DEBUG", False)
 
 SEG_PAD_BEFORE_SEC = 0.25
@@ -147,7 +160,11 @@ class Segmenter:
                     self.sil_n = 0
                     self.len_n = 1
                 else:
-                    self.noise = 0.98 * self.noise + 0.02 * rms
+                    # Быстро опускаем шум в тишине, но очень медленно поднимаем
+                    # на пред-речевых звуках: иначе всплеск голоса в начале
+                    # фразы задирает noise → растёт порог → VAD глохнет.
+                    alpha = 0.005 if rms > self.noise else 0.03
+                    self.noise = (1.0 - alpha) * self.noise + alpha * rms
                 continue
 
             self.len_n += 1
@@ -171,7 +188,7 @@ class SegmentStore:
         self.sr = rate
         self.segmenter = Segmenter(rate)
         self._feed_lock = threading.Lock()
-        self._segments = collections.deque(maxlen=12)
+        self._segments = collections.deque(maxlen=24)
         self._seg_lock = threading.Lock()
 
     def feed_audio(self, f32: np.ndarray, on_segment=None):

@@ -5,7 +5,8 @@
 #   1. Exact-match с фразой из config/intent_routes.json → (intent, 1.0).
 #   2. ONNX (models/setfit_intents_onnx/model.onnx) → (intent, confidence).
 #   3. Пост-правила (VOLUME_UP/DOWN, CLEANUP_DISK/RECYCLE,
-#      SMALLTALK/SYSTEM_STATUS, LLM_QUESTION/MUSIC_NOW_PLAYING).
+#      SMALLTALK/SYSTEM_STATUS, LLM_QUESTION/MUSIC_NOW_PLAYING,
+#      APP_OPEN/APP_CLOSE).
 #   4. Fuzzy fallback (difflib, порог 0.8) — если ONNX не уверен.
 #
 # UNKNOWN — если всё ниже порога.
@@ -34,6 +35,16 @@
 #   CV показал: CLEANUP_RECYCLE F1 0.705 (std 0.373), 3 ошибки
 #   RECYCLE → DISK на «ведро»/«мусорное ведро». Пост-правила чинят
 #   «мусорк», но «ведро» — нет. Теперь чинят.
+#
+# ── APP_OPEN / APP_CLOSE (2026-11-19) ──────────────────────────
+#   Пост-правило разводит APP_OPEN и APP_CLOSE по глаголу:
+#   «открой/запусти/подними/стартуй» → APP_OPEN,
+#   «закрой/выключи/заверши/убей/сверни» → APP_CLOSE.
+#   Срабатывает только если ONNX уже выбрал один из этих двух
+#   интентов — чтобы не перехватывать чужие («включи музыку» →
+#   MUSIC_PLAY). Порядок: CLOSE проверяется первым, потому что
+#   «выключи» содержит подстроку «включи» (не пересекается, но
+#   на всякий случай).
 
 import json
 import threading
@@ -161,6 +172,9 @@ _RECYCLE_WORDS = ("корзин", "мусорк", "ведр")   # FIX: + "вед
 _DISK_WORDS = ("диск",)
 _SMALLTALK_AS_SYSTEM = ("как дела", "как жизнь", "как настроение", "как ты")
 _LLM_QUESTION_WORDS = ("что такое", "что значит", "объясни", "почему")
+# APP_OPEN / APP_CLOSE (2026-11-19): разводим по глаголу.
+_APP_OPEN_WORDS = ("открой", "открыть", "запусти", "запустить", "подними", "стартуй")
+_APP_CLOSE_WORDS = ("закрой", "закрыть", "выключи", "выключить", "заверши", "убей", "сверни")
 
 
 def _apply_post_rules(text: str, intent: Intent) -> Intent:
@@ -186,6 +200,15 @@ def _apply_post_rules(text: str, intent: Intent) -> Intent:
     if intent == Intent.MUSIC_NOW_PLAYING:
         if any(w in t for w in _LLM_QUESTION_WORDS):
             return Intent.LLM_QUESTION
+
+    # APP_OPEN / APP_CLOSE (2026-11-19): только если ONNX уже выбрал
+    # один из этих двух интентов. CLOSE — первым: «выключи» не должно
+    # улететь в OPEN.
+    if intent in (Intent.APP_OPEN, Intent.APP_CLOSE):
+        if any(w in t for w in _APP_CLOSE_WORDS):
+            return Intent.APP_CLOSE
+        if any(w in t for w in _APP_OPEN_WORDS):
+            return Intent.APP_OPEN
 
     return intent
 

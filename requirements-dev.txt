@@ -1,0 +1,19 @@
+# ============================================================
+# Макс — тесты и обучение (не нужно для обычной работы)
+# pip install -r requirements-dev.txt
+# ============================================================
+-r requirements.txt
+
+# Тесты
+pytest>=7.0.0
+
+# Обучение и экспорт классификатора интентов
+# (train_setfit.py, export_onnx.py, test_onnx.py).
+# setfit тянет torch (тяжёлый, ~2+ ГБ) — на рабочую машину не ставить.
+setfit
+datasets
+scikit-learn
+transformers
+
+# Скрипт сравнения ASR (test_asr_compare.py)
+soundfile
