@@ -1,18 +1,12 @@
 # workers/ui/avatar_widget.py
-# Плазменное 3D-ядро Макса на QPainter — версия «60 FPS + максимум детализации».
+# Плазменное 3D-ядро Макса на QPainter (60 FPS, векторная геометрия numpy).
 #
-# Что изменилось относительно прошлой версии (визуал сохранён, детализация выше):
-#   - вся геометрия (филаменты, петли, частицы) считается векторно в numpy,
-#     а не циклами Python -> в разы меньше CPU на кадр, освободившийся бюджет
-#     потрачен на качество: 64 сегмента на филамент (было 44), 28 на петлю (было 20),
-#     круглые стыки/окончания линий (RoundJoin/RoundCap) вместо «ломаных» углов;
-#   - таймер 60 FPS (PreciseTimer) + реальный dt: скорость анимации не зависит от FPS;
-#   - туманность рендерится в буфер под реальное разрешение экрана (учёт DPI);
-#   - таймер останавливается, когда виджет скрыт/окно свёрнуто;
-#   - цвета сходятся к палитре точно (round вместо int);
-#   - speech_level затухает во всех состояниях.
-#
-# Диагностика: MaksAvatarWidget.SHOW_FPS = True рисует в углу FPS и время кадра.
+# 5 визуальных состояний:
+#   - idle      (Ожидание)      : спокойное пульсирующее ядро
+#   - listening (Прослушивание) : внешняя оболочка раскрывается, появляются волны
+#   - thinking  (Размышление)   : внутренние линии активно перестраиваются
+#   - speaking  (Разговор)      : световые импульсы синхронизируются с речью
+#   - music     (Музыка)        : сфера реагирует на частоты и ритм
 
 import math
 import random
@@ -29,29 +23,31 @@ from PySide6.QtWidgets import QWidget
 # ── Настройки качества ────────────────────────────────────────────────
 TARGET_FPS = 60
 FIL_COUNT = 32
-FIL_STEPS = 64          # сегментов на филамент
+FIL_STEPS = 64
 LOOP_COUNT = 14
-LOOP_SEGS = 28          # сегментов на корональную петлю
+LOOP_SEGS = 28
 PARTICLE_COUNT = 180
 NEBULA_BLOBS = 18
 FOV = 2.85
 
 _STATE_PALETTES = {
     "idle":      (QColor("#2563eb"), QColor("#9333ea"), QColor("#e0f2fe")),
-    "listening": (QColor("#0284c7"), QColor("#6366f1"), QColor("#ffffff")),
+    "listening": (QColor("#0284c7"), QColor("#38bdf8"), QColor("#ffffff")),
     "thinking":  (QColor("#4f46e5"), QColor("#c026d3"), QColor("#fae8ff")),
     "speaking":  (QColor("#0ea5e9"), QColor("#a855f7"), QColor("#ffffff")),
+    "music":     (QColor("#0d9488"), QColor("#8b5cf6"), QColor("#f0fdfa")),
     "happy":     (QColor("#0d9488"), QColor("#6366f1"), QColor("#f0fdfa")),
     "error":     (QColor("#d97706"), QColor("#dc2626"), QColor("#fef3c7")),
 }
 
 _SPEED_MUL = {
-    "thinking": 1.85,
+    "idle": 0.75,
+    "listening": 1.15,
+    "thinking": 2.15,
     "speaking": 1.45,
-    "listening": 1.25,
+    "music": 1.35,
     "happy": 1.20,
     "error": 0.85,
-    "idle": 1.0,
 }
 
 _SOLID = Qt.PenStyle.SolidLine
@@ -59,7 +55,6 @@ _ROUND_CAP = Qt.PenCapStyle.RoundCap
 _ROUND_JOIN = Qt.PenJoinStyle.RoundJoin
 
 
-# ── Утилиты ───────────────────────────────────────────────────────────
 def _clamp_alpha(val: float) -> int:
     return max(0, min(255, int(val)))
 
@@ -87,21 +82,17 @@ def _poly(xs: np.ndarray, ys: np.ndarray) -> QPolygonF:
 
 
 def _rate(rate_per_frame_40: float, dt: float) -> float:
-    """Коэффициент сглаживания, не зависящий от FPS (калибровка — 40 FPS)."""
     return 1.0 - (1.0 - rate_per_frame_40) ** (dt * 40.0)
 
 
-# ── Геометрия (numpy, без Qt) ─────────────────────────────────────────
+# ── Векторная геометрия (numpy) ───────────────────────────────────────
 class _Geometry:
-    """Векторные расчёты филаментов, петель и частиц. Qt здесь не нужен."""
-
     def __init__(self):
         self._build_filaments()
         self._build_loops()
         self._build_particles()
         self._build_nebula()
 
-    # --- построение параметров (rng-семена те же, что в старой версии) ---
     def _build_filaments(self):
         rng = random.Random(101)
         rows = []
@@ -129,12 +120,11 @@ class _Geometry:
         self._f_speed = col("speed")
         self._f_amp = c("turb_amp")
         self._f_scale = c("scale_r")
-        self._f_ct = np.cos(c("tilt_z"))
-        self._f_st = np.sin(c("tilt_z"))
-        self._f_cxt = np.cos(c("tilt_x"))
-        self._f_sxt = np.sin(c("tilt_x"))
+        self._f_tilt_z = col("tilt_z")
+        self._f_tilt_x = col("tilt_x")
 
         T = np.linspace(0.0, math.tau, FIL_STEPS + 1)[None, :]
+        self._T = T
         self._sinT = np.sin(T)
         self._cosT = np.cos(T)
         self._sin2T = np.sin(2.0 * T)
@@ -211,7 +201,6 @@ class _Geometry:
             })
         self.nebula_blobs = blobs
 
-    # --- проекция ---
     @staticmethod
     def project(x, y, z, rot_x, rot_y, cx, cy, radius):
         cos_y, sin_y = math.cos(rot_y), math.sin(rot_y)
@@ -225,24 +214,31 @@ class _Geometry:
         factor = FOV / np.maximum(1.1, FOV - z2)
         return cx + x1 * radius * factor, cy + y2 * radius * factor, z2
 
-    # --- филаменты: (FIL_COUNT, FIL_STEPS+1) ---
-    def filaments(self, phase, rot_x, rot_y, cx, cy, radius):
-        amp = self._f_amp
+    def filaments(self, phase, rot_x, rot_y, cx, cy, radius, think_morph: float = 0.0):
+        # В режиме thinking линии активно меняют турбулентность и перестраивают орбиты
+        amp = self._f_amp * (1.0 + think_morph * 1.35)
+        reconfig = think_morph * 0.85 * np.sin(phase * 1.4 + self._f_phase)
+
         turb = (
-            np.sin(self._TF + (phase * 1.8 + self._f_phase)[:, None]) * amp
+            np.sin(self._TF + (phase * (1.8 + think_morph * 1.4) + self._f_phase)[:, None]) * amp
             + np.cos(self._TF17 - phase * 1.3) * (amp * 0.45)
         )
         r_local = (self._sinT + turb * self._sin2T) * self._f_scale
 
         x0 = r_local * self._cosT
         y0 = r_local * self._sinT
-        z0 = np.sin(self._T2 + (phase + self._f_phase)[:, None]) * 0.28 + turb
+        z0 = np.sin(self._T2 + (phase + self._f_phase)[:, None]) * (0.28 + think_morph * 0.22) + turb
 
-        y1 = y0 * self._f_cxt - z0 * self._f_sxt
-        z1 = y0 * self._f_sxt + z0 * self._f_cxt
+        tx = (self._f_tilt_x + reconfig)[:, None]
+        tz = (self._f_tilt_z - reconfig * 0.7)[:, None]
+        cxt, sxt = np.cos(tx), np.sin(tx)
+        ct, st = np.cos(tz), np.sin(tz)
 
-        x2 = x0 * self._f_ct - y1 * self._f_st
-        y2 = x0 * self._f_st + y1 * self._f_ct
+        y1 = y0 * cxt - z0 * sxt
+        z1 = y0 * sxt + z0 * cxt
+
+        x2 = x0 * ct - y1 * st
+        y2 = x0 * st + y1 * ct
 
         rot = phase * self._f_speed + self._f_phase
         ca = np.cos(rot)[:, None]
@@ -253,24 +249,30 @@ class _Geometry:
         sx, sy, _ = self.project(x3, y2, z3, rot_x, rot_y, cx, cy, radius)
         return sx, sy
 
-    # --- петли: (LOOP_COUNT, LOOP_SEGS+1) + pulse (LOOP_COUNT,) ---
-    def loops(self, phase, energy, cx, cy, radius):
+    def loops(self, phase, energy, cx, cy, radius, music_bands=(0.0, 0.0, 0.0)):
+        bass, mid, high = music_bands
         ang = self._l_angle + phase * 0.13 * self._l_dir
         pulse = np.maximum(0.0, 0.55 + 0.45 * np.sin(phase * self._l_speed + self._l_phase))
-        arch_h = radius * self._l_height * (0.65 + 0.65 * pulse + energy * 0.48)
+
+        # Частотная модуляция петель под музыку
+        freq_boost = (
+            bass * 0.45 * np.cos(self._l_angle * 2.0 + phase)
+            + mid * 0.40 * np.sin(self._l_angle * 4.0 - phase * 1.7)
+            + high * 0.35 * np.sin(self._l_angle * 7.0 + phase * 2.5)
+        )
+        arch_h = radius * self._l_height * (0.65 + 0.65 * pulse + energy * 0.48 + np.maximum(0.0, freq_boost))
 
         theta = ang[:, None] + (self._u - 0.5) * self._l_span
         ripple = (
             np.sin(self._u * (math.pi * 5.0) + phase * 2.2 + self._l_phase[:, None])
-            * (self._l_kink * radius) * self._arch
+            * (self._l_kink * radius * (1.0 + high * 1.4)) * self._arch
         )
         r = radius * 0.95 + arch_h[:, None] * self._arch_pow + ripple
         return cx + np.cos(theta) * r, cy + np.sin(theta) * r, pulse
 
-    # --- частицы: (PARTICLE_COUNT,) ---
-    def particles(self, phase, rot_x, rot_y, cx, cy, radius):
+    def particles(self, phase, rot_x, rot_y, cx, cy, radius, spread: float = 1.0):
         t = phase * self._p_speed + self._p_toff
-        r_local = np.sin(t) * self._p_rk
+        r_local = np.sin(t) * self._p_rk * spread
         x0 = r_local * np.cos(t)
         y0 = r_local * np.sin(t)
         z0 = np.sin(t * 2.0 + self._p_phase) * 0.25
@@ -306,6 +308,18 @@ class MaksAvatarWidget(QWidget):
         self._smooth_energy = 0.0
         self._frame_idx = 0
 
+        # Плавные веса состояний (0..1) для бесшовных переходов
+        self._w_listen = 0.0
+        self._w_think = 0.0
+        self._w_speak = 0.0
+        self._w_music = 0.0
+
+        # Аудио-реактивность (музыка: бас / середина / верх / бит)
+        self._music_bass = 0.0
+        self._music_mid = 0.0
+        self._music_high = 0.0
+        self._music_beat = 0.0
+
         self._rot_y = 0.0
         self._rot_x = 0.24
         self._mouse_norm: tuple[float, float] | None = None
@@ -332,6 +346,13 @@ class MaksAvatarWidget(QWidget):
 
     def set_speech_level(self, level: float):
         self._speech_level = max(0.0, min(1.0, float(level)))
+
+    def set_music_spectrum(self, bass: float, mid: float, high: float, beat: float = 0.0):
+        """Передать мгновенные полосы частот (0..1) и импульс бита для режима music."""
+        self._music_bass = max(0.0, min(1.0, float(bass)))
+        self._music_mid = max(0.0, min(1.0, float(mid)))
+        self._music_high = max(0.0, min(1.0, float(high)))
+        self._music_beat = max(0.0, min(1.0, float(beat)))
 
     # ── События Qt ────────────────────────────────────────────────────
     def showEvent(self, event):
@@ -367,9 +388,15 @@ class MaksAvatarWidget(QWidget):
             return
 
         speed_mul = _SPEED_MUL.get(self._state, 1.0)
-
         self._phase += dt * 1.85 * speed_mul
         self._frame_idx += 1
+
+        # Плавная интерполяция весов 5 состояний
+        k_morph = _rate(0.14, dt)
+        self._w_listen += ((1.0 if self._state == "listening" else 0.0) - self._w_listen) * k_morph
+        self._w_think += ((1.0 if self._state == "thinking" else 0.0) - self._w_think) * k_morph
+        self._w_speak += ((1.0 if self._state == "speaking" else 0.0) - self._w_speak) * k_morph
+        self._w_music += ((1.0 if self._state == "music" else 0.0) - self._w_music) * k_morph
 
         t_pri, t_sec, t_core = _STATE_PALETTES.get(self._state, _STATE_PALETTES["idle"])
         k_col = _rate(0.10, dt)
@@ -377,18 +404,37 @@ class MaksAvatarWidget(QWidget):
         self._c_sec = _lerp_color(self._c_sec, t_sec, k_col)
         self._c_core = _lerp_color(self._c_core, t_core, k_col)
 
-        if self._state == "speaking":
-            mod = 0.45 + 0.55 * abs(math.sin(self._phase * 4.6))
-            target_energy = min(1.0, (self._speech_level * 1.25 + 0.25) * mod)
-        elif self._state == "thinking":
-            target_energy = 0.50 + 0.20 * math.sin(self._phase * 2.6)
-        elif self._state == "listening":
-            target_energy = 0.36
-        else:
-            target_energy = 0.12 + 0.06 * math.sin(self._phase * 1.2)
+        # Если музыка играет, но внешний анализатор частот не передал спектр —
+        # генерируем живой процедурный ритм и гармоники, чтобы сфера «дышала» под музыку
+        if self._state == "music" and (self._music_bass + self._music_mid + self._music_high) < 0.02:
+            beat_wave = max(0.0, math.sin(self._phase * 3.4)) ** 4
+            self._music_bass = 0.25 + 0.65 * beat_wave
+            self._music_mid = 0.30 + 0.45 * abs(math.sin(self._phase * 2.1 + 0.8))
+            self._music_high = 0.20 + 0.50 * abs(math.cos(self._phase * 5.3))
+            self._music_beat = beat_wave
 
-        # уровень речи затухает всегда: если TTS перестал слать значения — не «залипнет»
-        self._speech_level *= 0.92 ** (dt * 40.0)
+        if self._state == "speaking":
+            # Световые импульсы синхронизируются с огибающей речи
+            syllable = 0.35 + 0.65 * abs(math.sin(self._phase * 5.2))
+            speech_env = max(self._speech_level, 0.38 * syllable)
+            target_energy = min(1.0, speech_env * 1.15)
+        elif self._state == "music":
+            target_energy = min(1.0, 0.22 + self._music_bass * 0.55 + self._music_beat * 0.35)
+        elif self._state == "thinking":
+            target_energy = 0.52 + 0.22 * math.sin(self._phase * 3.1)
+        elif self._state == "listening":
+            target_energy = 0.34 + 0.08 * math.sin(self._phase * 2.0)
+        else:
+            # Ожидание: спокойное пульсирующее ядро
+            target_energy = 0.10 + 0.07 * math.sin(self._phase * 1.1)
+
+        # Затухание входных аудио-уровней
+        decay = 0.90 ** (dt * 40.0)
+        self._speech_level *= decay
+        self._music_bass *= decay
+        self._music_mid *= decay
+        self._music_high *= decay
+        self._music_beat *= 0.85 ** (dt * 40.0)
 
         self._smooth_energy += (target_energy - self._smooth_energy) * _rate(0.28, dt)
 
@@ -402,7 +448,6 @@ class MaksAvatarWidget(QWidget):
             goal = 0.24 + math.sin(self._phase * 0.28) * 0.12
             self._rot_x += (goal - self._rot_x) * _rate(0.05, dt)
 
-        # туманность обновляем через кадр (она медленная), рендер — здесь, не в paintEvent
         if self._frame_idx % 2 == 0:
             self._render_nebula_layer()
 
@@ -468,12 +513,16 @@ class MaksAvatarWidget(QWidget):
         cx = w * 0.5
         cy = h * 0.5
         base_r = min(w, h) * 0.375
-        radius = base_r * (1.0 + self._smooth_energy * 0.055)
+
+        # В состоянии listening внешняя оболочка раскрывается;
+        # в состоянии music сфера пульсирует под бас/ритм
+        shell_expand = 1.0 + self._w_listen * 0.16 + self._w_music * (self._music_bass * 0.12)
+        radius = base_r * (1.0 + self._smooth_energy * 0.055) * shell_expand
 
         p.setCompositionMode(QPainter.CompositionMode.CompositionMode_Plus)
 
         # 1. Внешнее гало
-        halo_r = radius * (1.48 + self._smooth_energy * 0.16)
+        halo_r = radius * (1.48 + self._smooth_energy * 0.16 + self._w_listen * 0.14)
         halo = QRadialGradient(QPointF(cx, cy), halo_r)
         halo.setColorAt(0.0, _rgba(self._c_pri, 72))
         halo.setColorAt(0.52, _rgba(self._c_sec, 38))
@@ -482,35 +531,40 @@ class MaksAvatarWidget(QWidget):
         p.setBrush(halo)
         p.drawEllipse(QPointF(cx, cy), halo_r, halo_r)
 
-        # 2. Энергетические волны при разговоре
-        if self._state == "speaking" or self._smooth_energy > 0.28:
-            self._draw_energy_ripples(p, cx, cy, radius)
+        # 2. Волны: в listening (раскрытие и приём) и в speaking (световые импульсы речи)
+        if self._w_listen > 0.05 or self._w_speak > 0.05:
+            self._draw_wave_rings(p, cx, cy, radius)
 
-        # 3. Корональные магнитные петли
+        # 3. Частотный контур сферы в режиме music
+        if self._w_music > 0.05:
+            self._draw_music_contour(p, cx, cy, radius)
+
+        # 4. Корональные магнитные петли
         self._draw_prominence_loops(p, cx, cy, radius)
 
-        # 4. Туманность
+        # 5. Туманность
         if self._nebula_buf is not None:
             target_rect = QRectF(cx - radius * 1.06, cy - radius * 1.06,
                                  radius * 2.12, radius * 2.12)
             p.drawImage(target_rect, self._nebula_buf)
 
-        # 5. Сферическая оболочка Френеля
+        # 6. Сферическая оболочка Френеля (раскрывается при listening)
+        shell_edge_alpha = 175 + self._w_listen * 55
         shell = QRadialGradient(QPointF(cx, cy), radius)
         shell.setColorAt(0.0, _rgba(self._c_pri, 12))
-        shell.setColorAt(0.74, _rgba(self._c_sec, 42))
-        shell.setColorAt(0.955, _rgba(self._c_core, 175))
+        shell.setColorAt(0.74 - self._w_listen * 0.08, _rgba(self._c_sec, 42 + self._w_listen * 24))
+        shell.setColorAt(0.955, _rgba(self._c_core, shell_edge_alpha))
         shell.setColorAt(1.0, QColor(0, 0, 0, 0))
         p.setBrush(shell)
         p.drawEllipse(QPointF(cx, cy), radius, radius)
 
-        # 6. Турбулентные 3D-филаменты
+        # 7. Турбулентные 3D-филаменты (активно перестраиваются при thinking)
         self._draw_plasma_filaments(p, cx, cy, radius)
 
-        # 7. Потоки микрочастиц
+        # 8. Потоки микрочастиц
         self._draw_stream_particles(p, cx, cy, radius)
 
-        # 8. Двойная сингулярность в центре
+        # 9. Ядро и световые импульсы речи в центре
         self._draw_core_singularity(p, cx, cy, radius)
 
         if self.SHOW_FPS:
@@ -526,23 +580,61 @@ class MaksAvatarWidget(QWidget):
         p.setPen(QColor(255, 255, 255, 200))
         p.drawText(8, 16, f"paint {self._paint_ms:.1f} ms  (~{1000.0 / max(self._paint_ms, 1e-3):.0f} fps max)")
 
-    def _draw_energy_ripples(self, p: QPainter, cx: float, cy: float, radius: float):
+    def _draw_wave_rings(self, p: QPainter, cx: float, cy: float, radius: float):
+        """Волны при прослушивании (listening) и световые импульсы при разговоре (speaking)."""
         p.setBrush(Qt.BrushStyle.NoBrush)
+        active_w = max(self._w_listen, self._w_speak)
+        speed = 0.42 if self._w_listen >= self._w_speak else 0.78
+        amp = 0.45 + self._smooth_energy * 0.85
+
         for k in range(3):
-            prog = (self._phase * 0.55 + k * 0.33) % 1.0
-            r = radius * (0.96 + prog * 0.52)
-            alpha = _clamp_alpha((1.0 - prog) * 105 * self._smooth_energy)
+            prog = (self._phase * speed + k * 0.33) % 1.0
+            r = radius * (0.94 + prog * (0.58 * self._w_listen + 0.45 * self._w_speak))
+            alpha = _clamp_alpha((1.0 - prog) * 125 * active_w * amp)
             if alpha <= 2:
                 continue
-            col = _lerp_color(self._c_pri, self._c_sec, prog)
+            col = _lerp_color(self._c_pri, self._c_core, prog * 0.75)
             col.setAlpha(alpha)
-            p.setPen(QPen(col, 1.4))
+            width = 1.3 + self._w_speak * self._smooth_energy * 1.4
+            p.setPen(QPen(col, width))
             p.drawEllipse(QPointF(cx, cy), r, r)
+
+    def _draw_music_contour(self, p: QPainter, cx: float, cy: float, radius: float):
+        """Замкнутая частотно-ритмическая волна вокруг сферы в режиме music."""
+        steps = 96
+        angles = np.linspace(0.0, math.tau, steps + 1)
+        b = self._music_bass
+        m = self._music_mid
+        h = self._music_high
+
+        wave = (
+            b * 0.085 * np.sin(angles * 3.0 + self._phase * 2.2)
+            + m * 0.060 * np.cos(angles * 6.0 - self._phase * 3.5)
+            + h * 0.040 * np.sin(angles * 11.0 + self._phase * 5.8)
+        )
+        rr = radius * (1.01 + wave)
+        xs = cx + np.cos(angles) * rr
+        ys = cy + np.sin(angles) * rr
+        poly = _poly(xs, ys)
+
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        outer_col = _rgba(self._c_sec, 70 * self._w_music * (0.4 + b))
+        p.setPen(_pen(outer_col, 4.0))
+        p.drawPolyline(poly)
+
+        inner_col = _rgba(self._c_core, 175 * self._w_music * (0.4 + m + h * 0.5))
+        p.setPen(_pen(inner_col, 1.5))
+        p.drawPolyline(poly)
 
     def _draw_prominence_loops(self, p: QPainter, cx: float, cy: float, radius: float):
         p.setBrush(Qt.BrushStyle.NoBrush)
         geo = self._geo
-        xs, ys, pulse = geo.loops(self._phase, self._smooth_energy, cx, cy, radius)
+        bands = (
+            self._music_bass * self._w_music,
+            self._music_mid * self._w_music,
+            self._music_high * self._w_music,
+        )
+        xs, ys, pulse = geo.loops(self._phase, self._smooth_energy, cx, cy, radius, music_bands=bands)
         pulse_l = pulse.tolist()
 
         for i in range(LOOP_COUNT):
@@ -561,12 +653,14 @@ class MaksAvatarWidget(QWidget):
     def _draw_plasma_filaments(self, p: QPainter, cx: float, cy: float, radius: float):
         p.setBrush(Qt.BrushStyle.NoBrush)
         geo = self._geo
-        xs, ys = geo.filaments(self._phase, self._rot_x, self._rot_y, cx, cy, radius)
+        xs, ys = geo.filaments(
+            self._phase, self._rot_x, self._rot_y, cx, cy, radius,
+            think_morph=self._w_think,
+        )
 
         energy = self._smooth_energy
-        energy_boost = 0.25 + energy * 0.45
+        energy_boost = 0.25 + energy * 0.45 + self._w_think * 0.20
 
-        # цвета одинаковы для всех филаментов одного типа — считаем один раз за кадр
         aura = {
             False: _rgba(self._c_pri, 38 + energy * 28),
             True: _rgba(self._c_sec, 38 + energy * 28),
@@ -574,14 +668,14 @@ class MaksAvatarWidget(QWidget):
         main = {}
         for is_sec, base in ((False, self._c_pri), (True, self._c_sec)):
             c = _lerp_color(base, self._c_core, energy_boost)
-            c.setAlpha(_clamp_alpha(105 + energy * 75))
+            c.setAlpha(_clamp_alpha(105 + energy * 75 + self._w_think * 35))
             main[is_sec] = c
         hot_col = _rgba(self._c_core, 150 + energy * 85)
 
         for i in range(FIL_COUNT):
             poly = _poly(xs[i], ys[i])
             is_sec = geo.fil_is_sec[i]
-            width = geo.fil_width[i]
+            width = geo.fil_width[i] * (1.0 + self._w_think * 0.22)
 
             p.setPen(_pen(aura[is_sec], width * 2.6))
             p.drawPolyline(poly)
@@ -596,7 +690,10 @@ class MaksAvatarWidget(QWidget):
     def _draw_stream_particles(self, p: QPainter, cx: float, cy: float, radius: float):
         p.setPen(Qt.PenStyle.NoPen)
         geo = self._geo
-        sx, sy, alpha, rad = geo.particles(self._phase, self._rot_x, self._rot_y, cx, cy, radius)
+        spread = 1.0 + self._w_listen * 0.12 - self._w_think * 0.08
+        sx, sy, alpha, rad = geo.particles(
+            self._phase, self._rot_x, self._rot_y, cx, cy, radius, spread=spread
+        )
 
         sec = self._c_sec
         core = self._c_core
@@ -610,8 +707,13 @@ class MaksAvatarWidget(QWidget):
             p.drawEllipse(QPointF(x, y), r, r)
 
     def _draw_core_singularity(self, p: QPainter, cx: float, cy: float, radius: float):
-        pulse = 0.88 + 0.26 * math.sin(self._phase * 2.9) + self._smooth_energy * 0.52
-        core_r = radius * 0.36 * pulse
+        # Спокойное дыхание в idle; яркие световые импульсы при speaking и ритме music
+        idle_breath = 0.92 + 0.14 * math.sin(self._phase * 1.4)
+        speak_imp = self._w_speak * self._smooth_energy * 0.65
+        music_imp = self._w_music * self._music_beat * 0.45
+        pulse = idle_breath + speak_imp + music_imp + self._smooth_energy * 0.22
+
+        core_r = radius * 0.34 * pulse
 
         c_w = _rgba(self._c_core, 245)
         c_s = _rgba(self._c_sec, 155)
@@ -621,8 +723,9 @@ class MaksAvatarWidget(QWidget):
         p.setPen(Qt.PenStyle.NoPen)
         for sign in (-1.0, 1.0):
             ang = self._phase * 0.85 + (0.0 if sign > 0 else math.pi)
-            ox = cx + math.cos(ang) * radius * 0.085
-            oy = cy + math.sin(ang) * radius * 0.048
+            orbit_k = 0.085 * (1.0 - self._w_speak * 0.4)
+            ox = cx + math.cos(ang) * radius * orbit_k
+            oy = cy + math.sin(ang) * radius * (orbit_k * 0.56)
 
             g = QRadialGradient(QPointF(ox, oy), core_r)
             g.setColorAt(0.0, c_w)
@@ -632,10 +735,11 @@ class MaksAvatarWidget(QWidget):
             p.setBrush(g)
             p.drawEllipse(QPointF(ox, oy), core_r, core_r)
 
-        pin_r = radius * 0.14 * pulse
+        # Световой импульс речи в самом центре ядра
+        pin_r = radius * (0.13 + self._w_speak * self._smooth_energy * 0.14) * pulse
         pin = QRadialGradient(QPointF(cx, cy), pin_r)
-        pin.setColorAt(0.0, QColor(255, 255, 255, 250))
-        pin.setColorAt(0.45, _rgba(self._c_core, 160))
+        pin.setColorAt(0.0, QColor(255, 255, 255, 252))
+        pin.setColorAt(0.45, _rgba(self._c_core, 175))
         pin.setColorAt(1.0, transparent)
         p.setBrush(pin)
         p.drawEllipse(QPointF(cx, cy), pin_r, pin_r)

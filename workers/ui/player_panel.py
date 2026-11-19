@@ -2,6 +2,16 @@
 # Верхняя часть окна (3/4 высоты):
 #   - Автопереключение между 3D-голограммой Макса (когда музыка выключена
 #     или Макс говорит/слушает ответ) и музыкальным плеером с эквалайзером.
+#
+# ── AVATAR STATE PRIORITY (2026-11-19) ─────────────────────────
+#   update_state() выставляет состояние аватара по приоритету:
+#     speaking → listening → music → idle.
+#   Раньше использовалось "happy" для playing — у MaksAvatarWidget
+#   такого состояния нет, и аватар падал в idle. Теперь "music".
+#   Если у SpectrumVisualizerWidget есть спектр (bars/levels) —
+#   усреднённые bass/mid/high пробрасываются в
+#   avatar.set_music_spectrum(...). Если аудиозахвата нет —
+#   MaksAvatarWidget сам плавно анимирует ритм в состоянии "music".
 
 import time
 from PySide6.QtCore import Qt, QSize
@@ -381,7 +391,9 @@ class PlayerPanel(AmbientGlassCard):
     def update_state(self, st: dict, music_alive: bool, tts_speaking: bool, expecting: bool):
         music_active = music_alive and bool(st.get("playing") or st.get("paused"))
 
-        # Определяем состояние аватара
+        # Приоритет: speaking → listening → music → idle
+        # (раньше при playing ставили "happy" — у MaksAvatarWidget такого
+        #  состояния нет, и он падал в idle)
         if tts_speaking:
             av_state = "speaking"
             self.wave_widget.set_state("speaking", "#22d3ee")
@@ -393,7 +405,7 @@ class PlayerPanel(AmbientGlassCard):
             self.lbl_status_text.setText("Жду ответ...")
             self.lbl_avatar_caption.setText("Слушаю вас...")
         elif music_alive and st.get("playing"):
-            av_state = "happy"
+            av_state = "music"
             self.wave_widget.set_state("music", "#818cf8")
             self.lbl_status_text.setText("Макс слушает («Макс...»)")
             self.lbl_avatar_caption.setText("Играет музыка")
@@ -404,6 +416,16 @@ class PlayerPanel(AmbientGlassCard):
             self.lbl_avatar_caption.setText("Скажите «Макс...» или напишите команду")
 
         self.avatar.set_state(av_state)
+
+        # Проброс спектра в аватар: если у визуализатора есть спектр
+        # (bass/mid/high/beat) — передаём. Если нет — аватар сам плавно
+        # анимирует ритм в состоянии "music".
+        if av_state == "music" and self._is_playing:
+            spectrum = self._read_avatar_spectrum()
+            if spectrum is not None:
+                bass, mid, high, beat = spectrum
+                self.avatar.set_music_spectrum(bass, mid, high, beat)
+
         self.avatar.set_speech_level(self.visualizer.audio_level if tts_speaking else 0.0)
 
         # Сбрасываем ручной режим "avatar", если музыка полностью остановилась
@@ -477,6 +499,29 @@ class PlayerPanel(AmbientGlassCard):
                 self._update_progress_widgets()
 
         self.visualizer.set_playing(self._is_playing)
+
+    def _read_avatar_spectrum(self) -> tuple[float, float, float, float] | None:
+        """Усреднить низкие/средние/высокие из визуализатора.
+
+        Если у SpectrumVisualizerWidget нет публичного API спектра —
+        возвращаем None, и MaksAvatarWidget сам плавно анимирует ритм
+        в состоянии "music".
+        """
+        try:
+            bars = getattr(self.visualizer, "bars", None) or getattr(self.visualizer, "levels", None)
+            if not bars:
+                return None
+            n = len(bars)
+            if n < 3:
+                return None
+            third = max(1, n // 3)
+            low = sum(bars[:third]) / third
+            mid = sum(bars[third:2 * third]) / max(1, third)
+            high = sum(bars[2 * third:]) / max(1, n - 2 * third)
+            beat = 1.0 if getattr(self.visualizer, "beat", False) else 0.0
+            return float(low), float(mid), float(high), beat
+        except Exception:
+            return None
 
     def tick_progress(self):
         if self._is_playing and self._dur_ms > 0:
