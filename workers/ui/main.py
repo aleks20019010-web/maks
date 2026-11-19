@@ -3,6 +3,18 @@
 #   - 3/4 окна: PlayerPanel (плеер, визуализатор, пресеты EQ)
 #   - 1/4 окна: ChatPanel (компактный диалог и быстрые команды)
 #   - Системный трей и фоновый опрос состояния воркеров
+#
+# ── AVATAR TELEMETRY (2026-11-19) ──────────────────────────────
+#   _poll_state читает data/avatar_telemetry.json:
+#     mic_level, tts_level, emotion, last_active_ts.
+#   Опрос ускорен до 60 мс — для плавной синхронизации уровня речи
+#   и микрофона с аватар-виджетом. is_sleeping = 3 минуты бездействия.
+#
+# ── OPENGL (2026-11-20) ────────────────────────────────────────
+#   QT_OPENGL / QT_ANGLE_PLATFORM не выставляем: Qt 6 на Windows сам
+#   берёт аппаратный OpenGL встроенной графики (Intel/AMD/NVIDIA)
+#   через ANGLE/D3D11 по умолчанию. Если понадобится аварийный
+#   обход — задать QT_OPENGL=software в окружении снаружи.
 
 import os
 import signal
@@ -21,7 +33,7 @@ from PySide6.QtWidgets import (
 from shared import ipc
 from shared import runtime_state as rt
 from shared.log import log
-from shared.ui_bridge import read_music_ui
+from shared.ui_bridge import read_music_ui, read_avatar_telemetry
 from workers.ui.chat_panel import ChatPanel
 from workers.ui.player_panel import PlayerPanel
 from workers.ui.theme import APP_STYLESHEET, make_app_icon
@@ -40,9 +52,10 @@ class MaksMainWindow(QMainWindow):
         self.setStyleSheet(APP_STYLESHEET)
         self._setup_tray()
 
+        # 60 мс — плавная синхронизация mic/tts level с аватаром
         self._poll_timer = QTimer(self)
         self._poll_timer.timeout.connect(self._poll_state)
-        self._poll_timer.start(250)
+        self._poll_timer.start(60)
 
         self._tick_timer = QTimer(self)
         self._tick_timer.timeout.connect(self.player_panel.tick_progress)
@@ -138,7 +151,22 @@ class MaksMainWindow(QMainWindow):
         ts = float(st.get("ts", 0.0) or 0.0)
         music_alive = (time.time() - ts) < 5.0
 
-        self.player_panel.update_state(st, music_alive, tts_speaking, expecting)
+        # ── AVATAR TELEMETRY (2026-11-19) ──
+        telem = read_avatar_telemetry()
+        mic_level = float(telem.get("mic_level", 0.0) or 0.0)
+        tts_level = float(telem.get("tts_level", 0.0) or 0.0)
+        emotion = str(telem.get("emotion", "neutral") or "neutral")
+        last_active = float(telem.get("last_active_ts", time.time()) or time.time())
+        is_sleeping = (time.time() - last_active) > 180.0  # 3 минуты бездействия → sleep
+
+        self.player_panel.update_state(
+            st, music_alive, tts_speaking, expecting,
+            mic_level=mic_level,
+            tts_level=tts_level,
+            emotion=emotion,
+            last_active_ts=last_active,
+            is_sleeping=is_sleeping,
+        )
         self.chat_panel.poll(music_alive, tts_alive)
 
 

@@ -1,5 +1,16 @@
 # shared/ui_bridge.py
 # Мост между воркерами (music, brain, tts) и окном UI.
+#
+# ── AVATAR TELEMETRY (2026-11-19) ──────────────────────────────
+#   update_avatar_telemetry(**fields) — атомарно обновляет общий JSON
+#   (mic_rms, tts_rms, emotion, music_bands) в data/avatar_telemetry.json.
+#   read_avatar_telemetry() — читает его для UI-виджета аватара.
+#   Поля:
+#     mic_rms     — RMS микрофона (0..1), пишет asr worker
+#     tts_rms     — RMS текущего TTS-аудио (0..1), пишет tts worker
+#     emotion     — текущая эмоция ("idle"|"listening"|"speaking"|"music"|"sleep"|"curious")
+#     music_bands — [low, mid, high, beat] (0..1), пишет music worker
+#   Любая запись/чтение молча игнорирует ошибки — телеметрия не критична.
 
 import json
 import os
@@ -13,6 +24,8 @@ from shared import config as cfg
 
 MUSIC_UI_FILE = os.path.join(cfg.DATA_DIR, "music_ui.json")
 CHAT_LOG_FILE = os.path.join(cfg.DATA_DIR, "ui_chat.jsonl")
+
+_TELEMETRY_FILE = cfg.RUNTIME_DIR / "avatar_telemetry.json"
 
 _chat_lock = threading.Lock()
 
@@ -137,3 +150,43 @@ def read_chat_history(limit: int = 100) -> list[dict]:
     except Exception:
         return []
     return list(out)
+
+
+# ── AVATAR TELEMETRY (2026-11-19) ──────────────────────────────
+def update_avatar_telemetry(**fields) -> None:
+    """Атомарно обновить поля телеметрии аватара.
+
+    Поля:
+      mic_rms     (0..1) — RMS микрофона, пишет asr worker
+      tts_rms     (0..1) — RMS текущего TTS-аудио, пишет tts worker
+      emotion     (str)  — "idle"|"listening"|"speaking"|"music"|"sleep"|"curious"
+      music_bands (list) — [low, mid, high, beat], пишет music worker
+    """
+    data = {}
+    try:
+        if _TELEMETRY_FILE.exists():
+            with open(_TELEMETRY_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+    except Exception:
+        data = {}
+
+    data.update(fields)
+    data["ts"] = time.time()
+    tmp = _TELEMETRY_FILE.with_suffix(".tmp")
+    try:
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False)
+        tmp.replace(_TELEMETRY_FILE)
+    except Exception:
+        pass
+
+
+def read_avatar_telemetry() -> dict:
+    """Прочитать телеметрию аватара. {} — если файла ещё нет или ошибка."""
+    try:
+        if _TELEMETRY_FILE.exists():
+            with open(_TELEMETRY_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+    except Exception:
+        pass
+    return {}

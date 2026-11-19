@@ -36,6 +36,7 @@ class ActivityWaveWidget(QWidget):
         speed = {
             "speaking": 0.42,
             "listening": 0.34,
+            "curious": 0.30,
             "music": 0.28,
             "idle": 0.10,
         }.get(self._mode, 0.12)
@@ -56,6 +57,7 @@ class ActivityWaveWidget(QWidget):
         amp_scale = {
             "speaking": 1.0,
             "listening": 0.85,
+            "curious": 0.78,
             "music": 0.72,
             "idle": 0.22,
         }.get(self._mode, 0.25)
@@ -77,8 +79,8 @@ class ActivityWaveWidget(QWidget):
 class SpectrumVisualizerWidget(QWidget):
     """28-полосный спектроанализатор с пиками (peak-hold) и WASAPI Loopback FFT.
 
-    Дополнительно отдаёт общий уровень звука (audio_level) для синхронизации
-    губ аватара с реальной громкостью речи/музыки.
+    Дополнительно отдаёт общий уровень звука (audio_level) и частотно-ритмические
+    характеристики (bass, mid, high, beat, mood) в 3D-аватар.
     """
 
     def __init__(self, num_bars: int = 28, parent=None):
@@ -96,6 +98,8 @@ class SpectrumVisualizerWidget(QWidget):
         self._lock = threading.Lock()
         self._stop_evt = threading.Event()
         self._audio_level = 0.0
+        self._bass_avg = 0.0
+        self._on_spectrum = None
 
         self._start_loopback_capture()
 
@@ -107,6 +111,9 @@ class SpectrumVisualizerWidget(QWidget):
     def audio_level(self) -> float:
         return self._audio_level
 
+    def set_spectrum_callback(self, cb):
+        self._on_spectrum = cb
+
     def set_playing(self, playing: bool):
         self._is_playing = playing
 
@@ -115,6 +122,20 @@ class SpectrumVisualizerWidget(QWidget):
 
     def shutdown(self):
         self._stop_evt.set()
+
+    def get_music_features(self) -> tuple[float, float, float, float, float]:
+        """Вернуть (bass, mid, high, beat, mood) из текущих 28 полос FFT."""
+        n = self._num_bars
+        b_end = max(1, n // 4)
+        m_end = max(b_end + 1, (n * 3) // 4)
+        bass = sum(self._levels[:b_end]) / b_end
+        mid = sum(self._levels[b_end:m_end]) / max(1, m_end - b_end)
+        high = sum(self._levels[m_end:]) / max(1, n - m_end)
+
+        self._bass_avg += (bass - self._bass_avg) * 0.12
+        beat = max(0.0, min(1.0, (bass - self._bass_avg) * 3.8))
+        mood = max(0.0, min(1.0, bass * 0.55 + beat * 0.45 + high * 0.35))
+        return float(bass), float(mid), float(high), float(beat), float(mood)
 
     def _start_loopback_capture(self):
         def worker():
@@ -201,6 +222,12 @@ class SpectrumVisualizerWidget(QWidget):
                     self._peak_hold[i] -= 1
                 else:
                     self._peaks[i] = max(0.0, self._peaks[i] - 0.035)
+
+        if self._is_playing and self._on_spectrum is not None:
+            try:
+                self._on_spectrum(*self.get_music_features())
+            except Exception:
+                pass
 
         self.update()
 

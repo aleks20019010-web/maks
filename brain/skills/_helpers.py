@@ -8,6 +8,15 @@
 #   Путь 2 — аварийная фраза без привязки к Personality, но пользователь
 #   её слышит, значит она должна быть и в чате — иначе история в UI
 #   расходится с тем, что реально сказано.
+#
+# ── AVATAR TELEMETRY (2026-11-19) ──────────────────────────────
+#   При отправке ответа пробрасываем emotion из Personality в
+#   ui_bridge.update_avatar_telemetry(emotion=..., last_active_ts=...).
+#   UI-аватар переключает палитру/анимацию под эмоцию.
+#   last_active_ts обновляется при каждом ответе Макса — по нему UI
+#   решает, когда уходить в sleep.
+
+import time
 
 from shared import ipc
 from shared import protocol
@@ -75,6 +84,8 @@ def respond_and_say(intent, sync=True, is_event=False, **kw) -> int | None:
 
     UI_BRIDGE: после успешной отправки в TTS ответ дублируется в UI-чат
     (оба пути: Personality и fallback).
+    AVATAR TELEMETRY: emotion из Personality пробрасывается в
+    update_avatar_telemetry(emotion=..., last_active_ts=...).
     """
     if _engine is None:
         log(f"helpers.respond_and_say({intent}): engine не установлен", tag="BRAIN", level="WARN")
@@ -102,6 +113,15 @@ def respond_and_say(intent, sync=True, is_event=False, **kw) -> int | None:
             from shared.ui_bridge import append_chat
             append_chat("assistant", text, meta=intent)
 
+            # ── AVATAR TELEMETRY (2026-11-19): эмоция + активность ──
+            emotion = _extract_attr(response, "emotion")
+            if emotion:
+                try:
+                    from shared.ui_bridge import update_avatar_telemetry
+                    update_avatar_telemetry(emotion=str(emotion), last_active_ts=time.time())
+                except Exception as e:
+                    log(f"helpers.respond_and_say telemetry: {e}", tag="BRAIN", level="DEBUG")
+
             metrics.inc("tts_said")
             explain = getattr(response, "explain", None)
             if explain:
@@ -121,6 +141,13 @@ def respond_and_say(intent, sync=True, is_event=False, **kw) -> int | None:
             # ── UI_BRIDGE (2026-11-18): fallback тоже дублируем в чат ──
             from shared.ui_bridge import append_chat
             append_chat("assistant", text, meta=intent)
+
+            # ── AVATAR TELEMETRY: fallback тоже считается активностью ──
+            try:
+                from shared.ui_bridge import update_avatar_telemetry
+                update_avatar_telemetry(last_active_ts=time.time())
+            except Exception:
+                pass
 
             metrics.inc("tts_said")
             return base_seq

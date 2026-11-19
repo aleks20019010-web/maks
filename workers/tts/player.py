@@ -1,5 +1,13 @@
 # workers/tts/player.py
 # VLC-плеер для TTS с переиспользуемым MediaPlayer (без переоткрытия WASAPI на каждую фразу).
+#
+# ── TTS TELEMETRY (2026-11-19) ────────────────────────────────
+#   При play_tts_file() заранее считаем RMS-огибающую файла (по 45 мс окнам
+#   через wave/audioread) и в фоновом потоке во время проигрывания
+#   обновляем update_avatar_telemetry(tts_level=...). Огибающая — 0..1
+#   после нормализации rms/0.18. Когда VLC закончил — tts_level=0.0.
+#   Если файл не читается (MP3 без ffmpeg, битый и т.п.) — телеметрия
+#   молчит, TTS всё равно играет.
 
 import os
 import threading
@@ -9,9 +17,14 @@ import vlc
 
 from shared import config as cfg
 from shared.log import log
+from shared.ui_bridge import update_avatar_telemetry
 
 
 TTS_VOLUME = 100
+
+# TTS TELEMETRY (2026-11-19): окно огибающей и частота обновления.
+_TTS_TELEMETRY_WINDOW_SEC = 0.045
+_TTS_TELEMETRY_NORM = 0.18
 
 _vlc_instance = None
 _vlc_player = None
@@ -97,6 +110,89 @@ def _call_with_timeout(fn, timeout: float, label: str):
     return result_box["value"], False
 
 
+# ── TTS TELEMETRY (2026-11-19): огибающая аудиофайла ─────────
+def _envelope_from_file(file_path: str) -> tuple[list[float], float, int]:
+    """Вернуть (огибающая, длительность_сек, шаг_мс).
+
+    Огибающая — список RMS по окнам 45 мс (float, 0..1 после /0.18).
+    Пустой список — файл не читается (MP3 без ffmpeg, битый и т.п.).
+    """
+    try:
+        import wave
+        import numpy as np
+
+        if file_path.lower().endswith(".wav"):
+            with wave.open(file_path, "rb") as wf:
+                sr = wf.getframerate()
+                ch = wf.getnchannels()
+                sw = wf.getsampwidth()
+                frames = wf.readframes(wf.getnframes())
+            if sw == 2:
+                arr = np.frombuffer(frames, dtype=np.int16)
+            elif sw == 4:
+                arr = np.frombuffer(frames, dtype=np.int32)
+            else:
+                return [], 0.0, 45
+            if ch > 1:
+                arr = arr.reshape(-1, ch).mean(axis=1)
+            audio = arr.astype(np.float32) / 32768.0 if sw == 2 else arr.astype(np.float32) / 2147483648.0
+        else:
+            # MP3/OGG и пр. — пробуем через audioread (если установлен)
+            try:
+                import audioread
+                import numpy as np
+                chunks = []
+                with audioread.audio_open(file_path) as f:
+                    sr = f.samplerate
+                    ch = f.channels
+                    for buf in f:
+                        chunks.append(buf)
+                if not chunks:
+                    return [], 0.0, 45
+                raw = b"".join(chunks)
+                arr = np.frombuffer(raw, dtype=np.int16)
+                if ch > 1:
+                    arr = arr.reshape(-1, ch).mean(axis=1)
+                audio = arr.astype(np.float32) / 32768.0
+            except Exception:
+                return [], 0.0, 45
+
+        win = max(1, int(_TTS_TELEMETRY_WINDOW_SEC * sr))
+        n_win = len(audio) // win
+        if n_win <= 0:
+            return [], 0.0, int(_TTS_TELEMETRY_WINDOW_SEC * 1000)
+
+        env: list[float] = []
+        for i in range(n_win):
+            w = audio[i * win:(i + 1) * win]
+            rms = float(np.sqrt(np.mean(w * w)))
+            env.append(min(1.0, max(0.0, rms / _TTS_TELEMETRY_NORM)))
+        return env, len(audio) / sr, int(_TTS_TELEMETRY_WINDOW_SEC * 1000)
+    except Exception:
+        return [], 0.0, int(_TTS_TELEMETRY_WINDOW_SEC * 1000)
+
+
+def _telemetry_worker(env: list[float], step_ms: int, stop_evt: threading.Event, player):
+    """Фоновый поток: во время проигрывания шлёт tts_level по огибающей."""
+    t0 = time.time()
+    i = 0
+    try:
+        while not stop_evt.is_set():
+            if player.get_state() not in (vlc.State.Playing, vlc.State.Paused):
+                break
+            elapsed_ms = (time.time() - t0) * 1000.0
+            target = int(elapsed_ms / max(1, step_ms))
+            if target < 0:
+                target = 0
+            while i <= target and i < len(env):
+                i += 1
+            lvl = env[i - 1] if i > 0 else 0.0
+            update_avatar_telemetry(tts_level=round(lvl, 3))
+            time.sleep(step_ms / 1000.0)
+    finally:
+        update_avatar_telemetry(tts_level=0.0)
+
+
 def _play_with_player(p, media, file_path: str, rate: str | None, start_timeout: float, play_timeout: float) -> tuple[bool, bool]:
     """Вернуть (ok, stuck_in_opening)."""
     try:
@@ -138,20 +234,34 @@ def _play_with_player(p, media, file_path: str, rate: str | None, start_timeout:
             tag="TTS", level="WARN")
         return False, True
 
-    t_play = time.time()
-    while (time.time() - t_play) < play_timeout:
-        s = p.get_state()
-        if s in (vlc.State.Ended, vlc.State.Stopped):
-            return True, False
-        if s == vlc.State.Error:
-            log(f"tts: play error state=Error file={os.path.basename(file_path)}",
-                tag="TTS", level="ERROR")
-            return False, False
-        time.sleep(0.05)
+    # TTS TELEMETRY: запускаем фоновый поток огибающей на время проигрывания.
+    stop_evt = threading.Event()
+    env, _, step_ms = _envelope_from_file(file_path)
+    if env:
+        threading.Thread(
+            target=_telemetry_worker,
+            args=(env, step_ms, stop_evt, p),
+            daemon=True,
+            name="tts-telemetry",
+        ).start()
 
-    log(f"tts: play timeout {play_timeout:.1f}s file={os.path.basename(file_path)}",
-        tag="TTS", level="WARN")
-    return False, False
+    t_play = time.time()
+    try:
+        while (time.time() - t_play) < play_timeout:
+            s = p.get_state()
+            if s in (vlc.State.Ended, vlc.State.Stopped):
+                return True, False
+            if s == vlc.State.Error:
+                log(f"tts: play error state=Error file={os.path.basename(file_path)}",
+                    tag="TTS", level="ERROR")
+                return False, False
+            time.sleep(0.05)
+
+        log(f"tts: play timeout {play_timeout:.1f}s file={os.path.basename(file_path)}",
+            tag="TTS", level="WARN")
+        return False, False
+    finally:
+        stop_evt.set()
 
 
 def play_tts_file(file_path: str, rate: str | None = None) -> bool:
@@ -198,3 +308,8 @@ def play_tts_file(file_path: str, rate: str | None = None) -> bool:
                 media.release()
             except Exception:
                 pass
+        # Гарантированно сбрасываем tts_level, даже если play() не дошёл до _telemetry_worker
+        try:
+            update_avatar_telemetry(tts_level=0.0)
+        except Exception:
+            pass

@@ -14,6 +14,12 @@
 # ── ducking.is_speaking (2026-11-19) ──────────────────────────
 #   В главном цикле читаем ducking.is_speaking (кэш в памяти), а не
 #   ducking.tts_speaking() (диск). Обновляется в run_worker каждые 50 мс.
+#
+# ── MIC TELEMETRY (2026-11-19) ────────────────────────────────
+#   RMS микрофона (16 кГц float32 после AEC) → ui_bridge.update_avatar_telemetry
+#   не чаще 20 раз в секунду (раз в 50 мс). UI-аватар читает mic_level
+#   и визуально реагирует на громкость голоса пользователя.
+#   Нормализация: разговорный RMS 0.004..0.094 → 0..1.
 
 import io
 import json
@@ -46,6 +52,7 @@ from shared import protocol
 from shared import config as cfg
 from shared.log import log
 from shared.sources import CommandSource
+from shared.ui_bridge import update_avatar_telemetry
 from workers.asr.audio import Ring, SegmentStore, VAD_DEBUG, resample, run_silence_worker
 from workers.asr.ducking import DuckingController
 from workers.asr.recognizer import GigaAMController
@@ -305,6 +312,10 @@ def main():
     mic_on_logged = False
     last_hw_reload = time.time()
 
+    # ── MIC TELEMETRY (2026-11-19): агрегатор RMS для UI-аватара ──
+    last_mic_ui_at = 0.0
+    mic_rms_acc = 0.0
+
     try:
         while not _shutdown.is_set():
             now = time.time()
@@ -324,6 +335,18 @@ def main():
                     continue
                 f32 = a16.astype(np.float32) / 32768.0
                 ring.push(f32)
+
+                # ── MIC TELEMETRY: RMS → mic_level (0..1), не чаще 20 Гц ──
+                rms = float(np.sqrt(np.mean(f32 * f32)))
+                # Нормализуем разговорный уровень (0.005..0.12 → 0..1)
+                norm_mic = min(1.0, max(0.0, (rms - 0.004) / 0.09))
+                if norm_mic > mic_rms_acc:
+                    mic_rms_acc = norm_mic
+                if (now - last_mic_ui_at) >= 0.05:
+                    last_mic_ui_at = now
+                    update_avatar_telemetry(mic_level=round(mic_rms_acc, 3))
+                    mic_rms_acc = 0.0
+
                 if not speaking_now:
                     seg_store.feed_audio(
                         f32,
