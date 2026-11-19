@@ -37,6 +37,26 @@ from shared.music_words import (
 )
 
 
+# ── Языковые модификаторы (ось Язык) ─────────────────────────
+_LANG_MODIFIERS = {
+    # Русский
+    "русская": "russian", "русскую": "russian", "русский": "russian",
+    "русские": "russian", "русского": "russian", "русской": "russian",
+    "отечественная": "russian", "отечественную": "russian", "отечественный": "russian",
+    "наша": "russian", "нашу": "russian", "наши": "russian", "наше": "russian",
+    # Зарубежный
+    "зарубежная": "not-russian", "зарубежную": "not-russian", "зарубежный": "not-russian",
+    "зарубежные": "not-russian", "зарубежного": "not-russian",
+    "иностранная": "not-russian", "иностранную": "not-russian", "иностранный": "not-russian",
+    "английская": "not-russian", "английскую": "not-russian", "английский": "not-russian",
+}
+
+_GENERIC_MUSIC_WORDS = {
+    "музыку", "музыка", "музыки", "музыке",
+    "песни", "песню", "песен", "треки", "треков",
+}
+
+
 # ── Загрузка каталогов (с отслеживанием mtime) ───────────────
 _aliases_cache: dict = {}
 _aliases_mtime: float = -1.0
@@ -354,13 +374,16 @@ class MusicEntityExtractor:
                 q = re.sub(rf"\b{re.escape(hint)}\b", " ", q)
             q = re.sub(r"\s+", " ", q).strip(" ,.!?-")
 
-            if not q:
+            if not q or q in _GENERIC_MUSIC_WORDS:
                 return None
 
-            if q in ("музыку", "музыка", "музыки", "музыке"):
-                return None
+            # Отрезаем хвостовое «музыку» / «песни», если перед ним есть определение
+            # («русскую музыку» → «русскую», «русский рок музыку» → «русский рок»)
+            words = q.split()
+            if len(words) >= 2 and words[-1] in _GENERIC_MUSIC_WORDS:
+                q = " ".join(words[:-1]).strip()
 
-            return q
+            return q or None
 
         except Exception as e:
             log(f"entity.music.extract_candidate: {e}", tag="BRAIN", level="WARN")
@@ -382,6 +405,39 @@ class MusicEntityExtractor:
             local_artists, local_tracks = _load_local_index()
 
             cand_lower = candidate.lower().strip()
+
+            # ── Выцепляем языковой модификатор (ось Язык) ──
+            detected_lang: str | None = None
+            words = cand_lower.split()
+            remaining_words = []
+            for w in words:
+                if w in _LANG_MODIFIERS and detected_lang is None:
+                    detected_lang = _LANG_MODIFIERS[w]
+                else:
+                    remaining_words.append(w)
+
+            # Если остался только язык («русскую» / «нашу» / «зарубежную») → волна с фильтром!
+            if detected_lang and not remaining_words:
+                return Entity.found(
+                    "wave_lang",
+                    {"language": detected_lang},
+                    1.0,
+                    "lang_modifier",
+                )
+
+            # Если есть и язык, и остаток (например «русский рок») — ищем остаток («рок»)
+            if detected_lang and remaining_words:
+                sub_cand = " ".join(remaining_words)
+                sub_ent = self.match(sub_cand, intent)
+                if sub_ent.state == EntityState.FOUND:
+                    return Entity.found(
+                        sub_ent.type,
+                        {"value": sub_ent.value, "language": detected_lang},
+                        sub_ent.match_confidence,
+                        f"lang+{sub_ent.source}",
+                    )
+                # Если остаток не распознался как жанр/артист — отправляем в поиск целиком
+                return Entity.found("search", candidate, 0.85, "lang_search_fallback")
 
             # 0. «мою музыку» / «мои лайки» / «мне нравится»
             if any(phrase in cand_lower for phrase in ("мою музыку", "мои лайки", "мне нравится")):

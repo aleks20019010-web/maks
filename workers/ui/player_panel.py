@@ -1,19 +1,21 @@
 # workers/ui/player_panel.py
-# Верхняя часть окна (3/4 высоты): статус Макса, крупная обложка, название/артист,
-# 28-полосный спектроанализатор, прогресс-бар, кнопки управления, громкость и пресеты EQ.
+# Верхняя часть окна (3/4 высоты):
+#   - Автопереключение между 3D-голограммой Макса (когда музыка выключена
+#     или Макс говорит/слушает ответ) и музыкальным плеером с эквалайзером.
 
 import time
 from PySide6.QtCore import Qt, QSize
 from PySide6.QtGui import QColor, QPixmap
 from PySide6.QtWidgets import (
     QComboBox, QGraphicsDropShadowEffect, QHBoxLayout,
-    QLabel, QPushButton, QSlider, QVBoxLayout,
+    QLabel, QPushButton, QSlider, QStackedWidget, QVBoxLayout, QWidget,
 )
 
 from shared import ipc
 from shared import protocol
 from shared.log import log
 from shared.sources import CommandSource
+from workers.ui.avatar_widget import MaksAvatarWidget
 from workers.ui.covers import CoverLoader
 from workers.ui.theme import make_vector_icon
 from workers.ui.widgets import (
@@ -23,7 +25,7 @@ from workers.ui.widgets import (
 )
 
 
-COVER_SIZE = 188
+COVER_SIZE = 180
 
 _FALLBACK_EQ_PRESETS = [
     (0, "Ровный"), (1, "Классика"), (2, "Клуб"), (3, "Танцевальный"),
@@ -72,7 +74,7 @@ def _mode_label(mode: str) -> str:
 
 
 class PlayerPanel(AmbientGlassCard):
-    """Панель плеера, занимающая 3/4 высоты окна."""
+    """Верхняя панель (3/4 высоты): голографический аватар Макса + музыкальный плеер."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -81,6 +83,7 @@ class PlayerPanel(AmbientGlassCard):
         self._pos_ms = 0
         self._vol_dragging = False
         self._last_vol_sent_at = 0.0
+        self._force_view: str | None = None  # None = авто, "avatar" / "player" = вручную
 
         self._icon_play = make_vector_icon("play", 24, "#ffffff")
         self._icon_pause = make_vector_icon("pause", 24, "#ffffff")
@@ -93,14 +96,14 @@ class PlayerPanel(AmbientGlassCard):
     def _build_ui(self):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 14, 20, 16)
-        layout.setSpacing(10)
+        layout.setSpacing(8)
 
-        # 1. Верхняя статусная строка
+        # 1. Общая верхняя статусная строка
         status_row = QHBoxLayout()
         status_row.setSpacing(8)
 
         self.wave_widget = ActivityWaveWidget()
-        self.lbl_status_text = QLabel("Макс слушает («Макс...»)")
+        self.lbl_status_text = QLabel("Макс на связи")
         self.lbl_status_text.setStyleSheet(
             "color: #e2e8f0; font-size: 12px; font-weight: 600; background: transparent;"
         )
@@ -112,16 +115,50 @@ class PlayerPanel(AmbientGlassCard):
         self.lbl_mode_badge = QLabel("Ожидание")
         self.lbl_mode_badge.setObjectName("modeBadge")
 
+        self.btn_switch_view = QPushButton("Плеер")
+        self.btn_switch_view.setObjectName("chipBtn")
+        self.btn_switch_view.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_switch_view.setToolTip("Переключить вид: Аватар / Плеер")
+        self.btn_switch_view.clicked.connect(self._toggle_manual_view)
+
         status_row.addWidget(self.wave_widget)
         status_row.addWidget(self.lbl_status_text)
         status_row.addStretch(1)
         status_row.addWidget(self.lbl_source_badge)
         status_row.addWidget(self.lbl_mode_badge)
+        status_row.addWidget(self.btn_switch_view)
         layout.addLayout(status_row)
 
-        layout.addStretch(1)
+        # 2. Стек представлений: [0] Аватар Макса | [1] Музыкальный плеер
+        self.stack = QStackedWidget()
+        self.stack.setStyleSheet("background: transparent;")
 
-        # 2. Крупная обложка трека по центру
+        # ── Страница 0: Голограмма Макса ──────────────────────────────
+        avatar_page = QWidget()
+        avatar_page.setStyleSheet("background: transparent;")
+        av_layout = QVBoxLayout(avatar_page)
+        av_layout.setContentsMargins(0, 4, 0, 4)
+        av_layout.setSpacing(6)
+
+        self.avatar = MaksAvatarWidget()
+        av_layout.addWidget(self.avatar, 1)
+
+        self.lbl_avatar_caption = QLabel("Готов к работе")
+        self.lbl_avatar_caption.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.lbl_avatar_caption.setStyleSheet(
+            "color: #94a3b8; font-size: 12px; font-weight: 500; background: transparent;"
+        )
+        av_layout.addWidget(self.lbl_avatar_caption)
+
+        # ── Страница 1: Музыкальный плеер ─────────────────────────────
+        player_page = QWidget()
+        player_page.setStyleSheet("background: transparent;")
+        p_layout = QVBoxLayout(player_page)
+        p_layout.setContentsMargins(0, 2, 0, 0)
+        p_layout.setSpacing(8)
+
+        p_layout.addStretch(1)
+
         cover_row = QHBoxLayout()
         cover_row.addStretch(1)
         self.lbl_cover = QLabel()
@@ -138,9 +175,8 @@ class PlayerPanel(AmbientGlassCard):
 
         cover_row.addWidget(self.lbl_cover)
         cover_row.addStretch(1)
-        layout.addLayout(cover_row)
+        p_layout.addLayout(cover_row)
 
-        # 3. Название и исполнитель
         self.lbl_title = QLabel("Ничего не играет")
         self.lbl_title.setObjectName("trackTitle")
         self.lbl_title.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -150,17 +186,15 @@ class PlayerPanel(AmbientGlassCard):
         self.lbl_artist.setObjectName("trackArtist")
         self.lbl_artist.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        layout.addWidget(self.lbl_title)
-        layout.addWidget(self.lbl_artist)
+        p_layout.addWidget(self.lbl_title)
+        p_layout.addWidget(self.lbl_artist)
 
-        # 4. Визуализатор спектра (28 полос + peak-hold)
         vis_row = QHBoxLayout()
-        vis_row.setContentsMargins(10, 4, 10, 2)
+        vis_row.setContentsMargins(10, 2, 10, 2)
         self.visualizer = SpectrumVisualizerWidget(28)
         vis_row.addWidget(self.visualizer)
-        layout.addLayout(vis_row)
+        p_layout.addLayout(vis_row)
 
-        # 5. Полоса прогресса и тайминги
         prog_col = QVBoxLayout()
         prog_col.setSpacing(4)
         prog_col.setContentsMargins(6, 2, 6, 2)
@@ -181,9 +215,8 @@ class PlayerPanel(AmbientGlassCard):
         time_row.addStretch(1)
         time_row.addWidget(self.lbl_dur)
         prog_col.addLayout(time_row)
-        layout.addLayout(prog_col)
+        p_layout.addLayout(prog_col)
 
-        # 6. Кнопки управления воспроизведением
         ctrl_row = QHBoxLayout()
         ctrl_row.setSpacing(14)
         ctrl_row.addStretch(1)
@@ -238,11 +271,10 @@ class PlayerPanel(AmbientGlassCard):
         ctrl_row.addWidget(self.btn_next)
         ctrl_row.addWidget(self.btn_like)
         ctrl_row.addStretch(1)
-        layout.addLayout(ctrl_row)
+        p_layout.addLayout(ctrl_row)
 
-        # 7. Нижняя панель: громкость + выбор пресета эквалайзера
         bottom_row = QHBoxLayout()
-        bottom_row.setContentsMargins(14, 6, 14, 0)
+        bottom_row.setContentsMargins(14, 4, 14, 0)
         bottom_row.setSpacing(8)
 
         lbl_vol_icon = QLabel()
@@ -277,11 +309,26 @@ class PlayerPanel(AmbientGlassCard):
         bottom_row.addWidget(self.lbl_vol_val)
         bottom_row.addSpacing(10)
         bottom_row.addWidget(self.eq_combo)
-        layout.addLayout(bottom_row)
+        p_layout.addLayout(bottom_row)
 
-        layout.addStretch(1)
+        p_layout.addStretch(1)
+
+        self.stack.addWidget(avatar_page)  # index 0
+        self.stack.addWidget(player_page)  # index 1
+        layout.addWidget(self.stack, 1)
 
     # ── Управление ────────────────────────────────────────────────────
+    def _toggle_manual_view(self):
+        if self.stack.currentIndex() == 0:
+            self._force_view = "player"
+            self.stack.setCurrentIndex(1)
+            self.btn_switch_view.setText("Макс")
+        else:
+            self._force_view = "avatar"
+            self.stack.setCurrentIndex(0)
+            self.btn_switch_view.setText("Плеер")
+            self.set_accent_color(QColor("#0ea5e9"))
+
     def send_music_ctrl(self, action: str, **kwargs):
         try:
             ipc.put(protocol.MUSIC_INBOX, protocol.music_control(action, **kwargs))
@@ -326,25 +373,64 @@ class PlayerPanel(AmbientGlassCard):
     def _on_cover_loaded(self, key: str, pix: QPixmap, accent: QColor):
         if key == self._cover_loader.current_key:
             self.lbl_cover.setPixmap(pix)
-            self.set_accent_color(accent)
+            if self.stack.currentIndex() == 1:
+                self.set_accent_color(accent)
             self.visualizer.set_accent_color(accent)
 
     # ── Обновление состояния от главного окна ─────────────────────────
     def update_state(self, st: dict, music_alive: bool, tts_speaking: bool, expecting: bool):
+        music_active = music_alive and bool(st.get("playing") or st.get("paused"))
+
+        # Определяем состояние аватара
         if tts_speaking:
+            av_state = "speaking"
             self.wave_widget.set_state("speaking", "#22d3ee")
             self.lbl_status_text.setText("Макс говорит...")
+            self.lbl_avatar_caption.setText("Отвечаю...")
         elif expecting:
+            av_state = "listening"
             self.wave_widget.set_state("listening", "#f59e0b")
             self.lbl_status_text.setText("Жду ответ...")
+            self.lbl_avatar_caption.setText("Слушаю вас...")
         elif music_alive and st.get("playing"):
+            av_state = "happy"
             self.wave_widget.set_state("music", "#818cf8")
             self.lbl_status_text.setText("Макс слушает («Макс...»)")
+            self.lbl_avatar_caption.setText("Играет музыка")
         else:
+            av_state = "idle"
             self.wave_widget.set_state("idle", "#4ade80")
             self.lbl_status_text.setText("Макс слушает («Макс...»)")
+            self.lbl_avatar_caption.setText("Скажите «Макс...» или напишите команду")
 
-        if music_alive and (st.get("playing") or st.get("paused")):
+        self.avatar.set_state(av_state)
+        self.avatar.set_speech_level(self.visualizer.audio_level if tts_speaking else 0.0)
+
+        # Сбрасываем ручной режим "avatar", если музыка полностью остановилась
+        # (чтобы при следующем запуске трека плеер снова открылся сам)
+        if not music_active and self._force_view == "avatar":
+            self._force_view = None
+
+        # Автовыбор страницы с учётом ручного переключения
+        if tts_speaking or expecting:
+            target_idx = 0
+        elif self._force_view == "avatar":
+            target_idx = 0
+        elif self._force_view == "player":
+            target_idx = 1
+        elif music_active:
+            target_idx = 1
+        else:
+            target_idx = 0
+
+        if self.stack.currentIndex() != target_idx:
+            self.stack.setCurrentIndex(target_idx)
+            self.btn_switch_view.setText("Макс" if target_idx == 1 else "Плеер")
+            if target_idx == 0:
+                self.set_accent_color(QColor("#0ea5e9"))
+
+        # Обновление данных плеера
+        if music_active:
             self._is_playing = bool(st.get("playing"))
             self._dur_ms = int(st.get("dur_ms", 0) or 0)
             self._pos_ms = int(st.get("pos_ms", 0) or 0)

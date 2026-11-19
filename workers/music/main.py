@@ -47,6 +47,11 @@ FIX (день 29, вечер, #2): _handle_play в отдельном поток
   control "eq_preset" {preset: int|None} → music.set_equalizer_preset().
   None или < 0 — выключить эквалайзер. Список пресетов UI получает
   отдельно (см. workers/music/player.py::get_vlc_eq_presets).
+
+── WAVE LANG (2026-11-19): запоминаем язык волны ──────────────────
+  state.wave_language = language в ветке "wave" и в _reset_playback_state().
+  sources.py при докидывании похожих треков читает state.wave_language,
+  чтобы не смешивать русскую и зарубежную волну.
 """
 
 import sys
@@ -72,6 +77,7 @@ def _reset_playback_state():
         state.queued_track_ids.clear()
     state.playlist_index = 0
     state.playlist_mode = None
+    state.wave_language = None
     warm_up_prefetch()
 
 
@@ -234,6 +240,7 @@ def _handle_play(name: str, data: dict):
 
     elif name == "wave":
         language = data.get("language")
+        state.wave_language = language
         if modes.queue_wave(language=language):
             playback.play_index(0)
 

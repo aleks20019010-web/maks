@@ -188,7 +188,10 @@ class MusicSkill(Skill):
         ent = getattr(command, "entity", None)
 
         if action == "play_wave":
-            result["language"] = None
+            if ent and isinstance(ent.value, dict):
+                result["language"] = ent.value.get("language")
+            else:
+                result["language"] = None
             return result
         if action in ("play_liked", "play_local_liked", "dislike"):
             return result
@@ -237,12 +240,22 @@ class MusicSkill(Skill):
             result["mood"] = ent.value
             return result
         if action == "play_genre":
-            result["genre"] = ent.value
+            if isinstance(ent.value, dict):
+                genre_val = ent.value.get("value", "")
+                lang_val = ent.value.get("language")
+            else:
+                genre_val = ent.value
+                lang_val = None
+
+            if not genre_val:
+                return None
+            result["genre"] = genre_val
+            result["language"] = lang_val
             try:
                 from workers.music._shared import GENRE_ALIASES
-                result["station"] = GENRE_ALIASES.get(ent.value, f"genre:{ent.value}")
+                result["station"] = GENRE_ALIASES.get(genre_val, f"genre:{genre_val}")
             except Exception:
-                result["station"] = f"genre:{ent.value}"
+                result["station"] = f"genre:{genre_val}"
             return result
 
         return None
@@ -349,6 +362,8 @@ class MusicSkill(Skill):
             language = result.get("language")
             if language == "russian":
                 bseq = _respond_and_say("PLAY_PLAYLIST", name="русскую волну")
+            elif language == "not-russian":
+                bseq = _respond_and_say("PLAY_PLAYLIST", name="зарубежную волну")
             else:
                 bseq = _respond_and_say("PLAY_PLAYLIST", name="мою волну")
             _send_music_after_tts(protocol.play_wave, language=language, seq=seq, base_seq=bseq)

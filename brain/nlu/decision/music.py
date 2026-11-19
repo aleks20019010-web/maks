@@ -53,6 +53,7 @@ _TYPE_TO_ACTION: dict[str, str] = {
     "mood": "play_mood",
     "search": "play_search",
     "local_liked": "play_local_liked",
+    "wave_lang": "play_wave",
 }
 
 

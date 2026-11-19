@@ -75,7 +75,11 @@ class ActivityWaveWidget(QWidget):
 
 
 class SpectrumVisualizerWidget(QWidget):
-    """28-полосный спектроанализатор с пиками (peak-hold) и WASAPI Loopback FFT."""
+    """28-полосный спектроанализатор с пиками (peak-hold) и WASAPI Loopback FFT.
+
+    Дополнительно отдаёт общий уровень звука (audio_level) для синхронизации
+    губ аватара с реальной громкостью речи/музыки.
+    """
 
     def __init__(self, num_bars: int = 28, parent=None):
         super().__init__(parent)
@@ -91,12 +95,17 @@ class SpectrumVisualizerWidget(QWidget):
         self._accent = QColor("#6366f1")
         self._lock = threading.Lock()
         self._stop_evt = threading.Event()
+        self._audio_level = 0.0
 
         self._start_loopback_capture()
 
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._tick)
         self._timer.start(33)
+
+    @property
+    def audio_level(self) -> float:
+        return self._audio_level
 
     def set_playing(self, playing: bool):
         self._is_playing = playing
@@ -110,7 +119,6 @@ class SpectrumVisualizerWidget(QWidget):
     def _start_loopback_capture(self):
         def worker():
             try:
-                import time
                 import warnings
                 import numpy as np
                 import soundcard as sc
@@ -136,9 +144,6 @@ class SpectrumVisualizerWidget(QWidget):
                 self._has_real_audio = True
                 with mic.recorder(samplerate=sr, channels=1, blocksize=block) as rec:
                     while not self._stop_evt.is_set():
-                        if not self._is_playing:
-                            time.sleep(0.08)
-                            continue
                         data = rec.record(numframes=block)
                         if data is None or len(data) < block:
                             continue
@@ -151,8 +156,12 @@ class SpectrumVisualizerWidget(QWidget):
                             boost = 0.85 + (i / self._num_bars) * 1.35
                             bands.append(min(1.0, (val * boost) ** 0.65))
 
+                        rms = float(np.sqrt(np.mean(mono ** 2)))
+                        level = min(1.0, (rms * 14.0) ** 0.75)
+
                         with self._lock:
                             self._fft_target = bands
+                            self._audio_level = level
             except Exception:
                 self._has_real_audio = False
 

@@ -38,11 +38,19 @@
 #   local_index.json: точное совпадение artist → fuzzy (rapidfuzz,
 #   token_set_ratio ≥ 80). Используется в _handle_play("artist") и
 #   _handle_play("search") как быстрый локальный путь до Яндекса.
+#
+# ── WAVE LANG FILTER (2026-11-19) ───────────────────────────────
+#   _is_russian_track() — определяет русскоязычность по кириллице
+#   в artist/title/имени файла или по жанровым подсказкам.
+#   get_local_random_track() читает state.wave_language и при
+#   "russian"/"not-russian" фильтрует кандидатов (если после фильтра
+#   пусто — оставляем исходный список, чтобы не молчать).
 
 import os
 import json
 import glob
 import random
+import re
 import threading
 from datetime import datetime
 
@@ -58,6 +66,25 @@ try:
     from mutagen import File as MutagenFile
 except ImportError:
     MutagenFile = None
+
+
+# ── Языковая эвристика (2026-11-19) ─────────────────────────
+_CYRILLIC_RE = re.compile(r"[а-яё]", re.IGNORECASE)
+_RUS_GENRE_HINTS = ("rus", "russian", "shanson", "bard", "рус", "шансон", "бард")
+
+
+def _is_russian_track(track_meta: dict) -> bool:
+    """Определить по тегам и имени файла, русскоязычный ли трек."""
+    artist = track_meta.get("artist") or ""
+    title = track_meta.get("title") or ""
+    genre = (track_meta.get("genre") or "").lower()
+    fname = os.path.basename(track_meta.get("path") or "")
+
+    if _CYRILLIC_RE.search(artist) or _CYRILLIC_RE.search(title) or _CYRILLIC_RE.search(fname):
+        return True
+    if any(hint in genre for hint in _RUS_GENRE_HINTS):
+        return True
+    return False
 
 
 # ── JSON-кэш индекса (2026-11-08, #2) ──────────────────────
@@ -368,6 +395,17 @@ def get_local_random_track():
         ]
     if not candidates:
         return None
+
+    # ── WAVE LANG FILTER (2026-11-19) ──
+    lang = getattr(state, "wave_language", None)
+    if lang == "russian":
+        lang_filtered = [t for t in candidates if _is_russian_track(t)]
+        if lang_filtered:
+            candidates = lang_filtered
+    elif lang == "not-russian":
+        lang_filtered = [t for t in candidates if not _is_russian_track(t)]
+        if lang_filtered:
+            candidates = lang_filtered
 
     t = random.choice(candidates)
     with state.session_played_lock:
