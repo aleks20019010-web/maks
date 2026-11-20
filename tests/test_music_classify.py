@@ -1,9 +1,9 @@
 # tests/test_music_classify.py
-def test_classify_play_artist():
+def test_classify_play_search_for_artist():
     from brain.skills.music.classify import classify
     r = classify("включи арию")
     assert r is not None
-    assert r["action"] == "play_artist"
+    assert r["action"] == "play_search"
 
 def test_classify_play_wave():
     from brain.skills.music.classify import classify

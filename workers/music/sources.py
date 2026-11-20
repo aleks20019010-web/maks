@@ -496,7 +496,7 @@ def get_next_source_track():
             if not artist_name:
                 artist_name = getattr(cur, "artist", "") or ""
             if artist_name:
-                from workers.music.local import _load_index_sync, LocalTrack
+                from workers.music.local import _load_index_sync
                 data = _load_index_sync()
                 all_tracks = data.get("tracks", []) if isinstance(data, dict) else []
                 # Уже в playlist (path) — не добавляем повторно.

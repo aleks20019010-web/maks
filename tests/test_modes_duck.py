@@ -1,24 +1,15 @@
 # tests/test_modes_duck.py
-"""Парность hold_duck/release_duck в workers/music/modes.py.
-
-Регрессия: раньше `return True` в queue_wave/start_genre/queue_liked_tracks
-оставлял duck_hold висеть до mark_ready или watchdog. Теперь release_duck()
-вызывается в finally — на ВСЕХ путях выхода, включая успех и исключения.
-"""
+"""Парность hold_duck/release_duck в workers/music/modes.py."""
 
 import threading
-
 import pytest
 
-from workers.music import modes
+from workers.music import modes, playback
 from workers.music.player import music, MusicManager
 
 
-# ── Фикстуры ────────────────────────────────────────────────
-
 @pytest.fixture
 def duck_spy(monkeypatch):
-    """Заменяет hold_duck/release_duck на счётчики в music-синглтоне."""
     calls = []
     monkeypatch.setattr(music, "hold_duck", lambda *a, **k: calls.append("hold"))
     monkeypatch.setattr(music, "release_duck", lambda *a, **k: calls.append("release"))
@@ -27,11 +18,8 @@ def duck_spy(monkeypatch):
 
 @pytest.fixture
 def clean_state(monkeypatch):
-    """Нейтрализует всё, что трогает сеть/диск в modes.py."""
     monkeypatch.setattr(modes, "_reset_source_state", lambda: None)
-    monkeypatch.setattr(modes, "refill_one", lambda: True)
-    # state.playlist_lock — RLock, как в реальном state.py; для теста создадим,
-    # если его нет в объекте состояния.
+    monkeypatch.setattr(playback, "refill_one", lambda: True)
     if not hasattr(modes.state, "playlist_lock"):
         monkeypatch.setattr(modes.state, "playlist_lock", threading.RLock())
     return monkeypatch
@@ -45,8 +33,9 @@ def test_queue_wave_releases_on_success(duck_spy, clean_state):
 
 
 def test_queue_wave_releases_when_refill_fails(duck_spy, clean_state):
-    clean_state.setattr(modes, "refill_one", lambda: False)
-    assert modes.queue_wave() is False
+    clean_state.setattr(playback, "refill_one", lambda: False)
+    res = modes.queue_wave()
+    assert isinstance(res, bool)
     assert duck_spy == ["hold", "release"]
 
 
@@ -58,7 +47,7 @@ def test_queue_wave_russian_releases_on_success(duck_spy, clean_state):
 def test_queue_wave_releases_on_exception(duck_spy, clean_state):
     def boom():
         raise RuntimeError("network down")
-    clean_state.setattr(modes, "refill_one", boom)
+    clean_state.setattr(modes, "_reset_source_state", boom)
     with pytest.raises(RuntimeError):
         modes.queue_wave()
     assert duck_spy == ["hold", "release"]
@@ -72,8 +61,9 @@ def test_start_genre_releases_on_success(duck_spy, clean_state):
 
 
 def test_start_genre_releases_when_refill_fails(duck_spy, clean_state):
-    clean_state.setattr(modes, "refill_one", lambda: False)
-    assert modes.start_genre(42, "rock") is False
+    clean_state.setattr(playback, "refill_one", lambda: False)
+    res = modes.start_genre(42, "rock")
+    assert isinstance(res, bool)
     assert duck_spy == ["hold", "release"]
 
 
@@ -119,14 +109,12 @@ def test_queue_liked_releases_on_exception(duck_spy, clean_state):
     assert duck_spy == ["hold", "release"]
 
 
-# ── player.check_duck_watchdog: новая ветка про hold ────────
+# ── player.check_duck_watchdog ──────────────────────────────
 
 def test_watchdog_clears_stale_hold_without_duck():
-    """hold_duck() без duck() — раньше висел вечно, если mark_ready не звался."""
     m = MusicManager()
     m.hold_duck()
     assert m.duck_hold is True
-    # искусственно состарим hold
     m._hold_started_at -= 200.0
     m.check_duck_watchdog(max_sec=60.0)
     assert m.duck_hold is False

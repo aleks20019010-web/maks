@@ -3,16 +3,14 @@
 #   FOUND(artist) → EXECUTE(play_artist)
 #   FOUND(genre)  → EXECUTE(play_genre)
 #   FOUND(mood)   → EXECUTE(play_mood)
+#   FOUND(search) → EXECUTE(play_search)
 #   ABSENT        → EXECUTE(play_wave)
-#   UNRESOLVED    → CLARIFY(unresolved_artist)
-#   AMBIGUOUS     → CLARIFY(ambiguous_artist)
-#
-# Тесты не зависят от aliases.json / mood_aliases.json:
-#   Entity создаётся вручную, decision только превращает её в Decision.
+#   UNRESOLVED    → EXECUTE(play_search) (умный fallback без переспроса)
+#   AMBIGUOUS     → EXECUTE(play_search)
 
 from brain.nlu.decision.music import get
 from brain.nlu.types import (
-    Command, DecisionAction, Entity, EntityCandidate, EntityState, Intent,
+    Command, DecisionAction, Entity, EntityCandidate, Intent,
 )
 
 
@@ -28,7 +26,6 @@ def _command(intent=Intent.MUSIC_PLAY, entity=None) -> Command:
     )
 
 
-# ── FOUND → EXECUTE ─────────────────────────────────────────
 def test_found_artist_execute_play_artist():
     ent = Entity.found("artist", "Ария", 1.0, "alias")
     d = get().resolve(_command(entity=ent))
@@ -51,7 +48,6 @@ def test_found_mood_execute_play_mood():
     assert d.command.action == "play_mood"
 
 
-# ── ABSENT → EXECUTE(play_wave) ─────────────────────────────
 def test_absent_execute_play_wave():
     ent = Entity.absent()
     d = get().resolve(_command(entity=ent))
@@ -60,46 +56,36 @@ def test_absent_execute_play_wave():
 
 
 def test_none_entity_execute_play_wave():
-    # entity=None → считаем ABSENT → play_wave
     d = get().resolve(_command(entity=None))
     assert d.action == DecisionAction.EXECUTE
     assert d.command.action == "play_wave"
 
 
-# ── UNRESOLVED → CLARIFY ────────────────────────────────────
-def test_unresolved_clarify():
+def test_unresolved_goes_to_play_search():
     ent = Entity.unresolved("орион", 0.0)
     d = get().resolve(_command(entity=ent))
-    assert d.action == DecisionAction.CLARIFY
-    assert d.clarify is not None
-    assert d.clarify.phrase_set == "MUSIC_CLARIFY_UNRESOLVED_ARTIST"
-    assert d.clarify.kwargs.get("candidate") == "орион"
+    assert d.action == DecisionAction.EXECUTE
+    assert d.command.action == "play_search"
 
 
-# ── AMBIGUOUS → CLARIFY ─────────────────────────────────────
-def test_ambiguous_clarify():
+def test_ambiguous_goes_to_play_search():
     candidates = [
         EntityCandidate("artist", "Ария", 0.80, "fuzzy"),
         EntityCandidate("artist", "Кипелов", 0.78, "fuzzy"),
     ]
     ent = Entity.ambiguous(candidates)
     d = get().resolve(_command(entity=ent))
-    assert d.action == DecisionAction.CLARIFY
-    assert d.clarify is not None
-    assert d.clarify.phrase_set == "MUSIC_CLARIFY_AMBIGUOUS"
-    assert "Ария" in d.clarify.kwargs.get("candidates", "")
+    assert d.action == DecisionAction.EXECUTE
+    assert d.command.action == "play_search"
 
 
-# ── MUSIC_WAVE → EXECUTE(play_wave) ─────────────────────────
 def test_music_wave_execute_play_wave():
     d = get().resolve(_command(intent=Intent.MUSIC_WAVE, entity=None))
     assert d.action == DecisionAction.EXECUTE
     assert d.command.action == "play_wave"
 
 
-# ── unknown entity.type → FALLBACK ─────────────────────────
 def test_found_unknown_type_fallback():
-    # type="date" для музыки — неизвестен → FALLBACK, не молчим
     ent = Entity.found("date", "2026-10-31", 1.0, "x")
     d = get().resolve(_command(entity=ent))
     assert d.action == DecisionAction.FALLBACK

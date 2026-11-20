@@ -134,10 +134,14 @@ class MaksMainWindow(QMainWindow):
                 2000,
             )
         else:
+            self._poll_timer.stop()
+            self._tick_timer.stop()
             self.player_panel.shutdown()
             event.accept()
 
     def _quit_ui(self):
+        self._poll_timer.stop()
+        self._tick_timer.stop()
         self.player_panel.shutdown()
         self.tray.hide()
         QApplication.quit()
@@ -165,7 +169,7 @@ class MaksMainWindow(QMainWindow):
         tts_level = float(telem.get("tts_level", 0.0) or 0.0)
         emotion = str(telem.get("emotion", "neutral") or "neutral")
         last_active = float(telem.get("last_active_ts", time.time()) or time.time())
-        is_sleeping = (time.time() - last_active) > 180.0  # 3 минуты бездействия → sleep
+        is_sleeping = (time.time() - last_active) > 180.0
 
         self.player_panel.update_state(
             st, music_alive, tts_speaking, expecting,
@@ -174,6 +178,13 @@ class MaksMainWindow(QMainWindow):
             emotion=emotion,
             last_active_ts=last_active,
             is_sleeping=is_sleeping,
+        )
+
+        is_playing = music_alive and bool(st.get("playing") or st.get("paused"))
+        self.chat_panel.set_audio_info(
+            st.get("bitrate", ""),
+            st.get("sample_rate", ""),
+            is_playing,
         )
         self.chat_panel.poll(music_alive, tts_alive)
 

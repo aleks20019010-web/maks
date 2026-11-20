@@ -1,180 +1,138 @@
-# Макс — голосовой дворецкий
+# Макс — локальный голосовой ассистент
 
-Голосовой ассистент на русском. Музыка (Яндекс.Музыка), погода (OpenWeatherMap), статус системы, напоминания, ритуалы, очистка диска, LLM-ответы (AITUNNEL).
+Голосовой дворецкий и медиацентр для Windows с гибридным распознаванием речи (Vosk + GigaAM-v3 + AEC), NLU-пайплайном, эмоциональным ядром личности и десктопным интерфейсом на Qt 6 (PySide6).
+
+## Ключевые возможности
+
+* **Гибридный ASR и эхоподавление:** аппаратно-программное подавление эха (`echoff`), мгновенный детектор wake-word и быстрых команд (`Vosk`), верификация и распознавание свободной речи (`GigaAM-v3 ONNX`), умное приглушение музыки (`audio ducking`) на время речи.
+* **NLU-пайплайн и навыки:** нормализация текста, классификация интентов (`SetFit ONNX` + правила), извлечение сущностей (артисты, жанры, настроения, радио, даты/таймеры), многошаговые диалоги (`pending`).
+* **Ядро личности (`PersonalityCore`):** динамическое внутреннее состояние (`mood`, `energy`, `valence`, `arousal`), поток сессии (`mind_stream`), сборка ответов из слотов (`opening + core + closing`), просодия и словарь ударений для TTS.
+* **Музыка и аудио:** Яндекс.Музыка (Моя волна, артисты, жанры, лайки, кэширование треков), локальная медиатека с индексацией (`local_index.json`), интернет-радио, 7 пресетов эквалайзера VLC, система привычек и оценки пропусков (`appraisal`).
+* **Графический интерфейс (Qt 6):** тёмная космическая тема со стеклянным эффектом, живой аватар с реакцией на микрофон, TTS, ритм музыки и эмоции (включая режим сна), зеркальный анализатор спектра, управление плеером, пресеты EQ, компактный чат и системный трей.
+* **Системные и бытовые навыки:** погода (OpenWeatherMap), напоминания (по таймеру и по дате/времени), статус системы, безопасная очистка диска C, диалоговый LLM-скилл (AITUNNEL / OpenAI-compatible API).
+
+---
 
 ## Требования
 
-- Windows 10/11
-- Python 3.10+
-- VLC (для музыки и TTS)
-- Vosk-модель `vosk-model-small-ru-0.22` в `models/`
-- Токен Яндекс.Музыки в `config/token.txt` (для музыки)
-- Токен Яндекс.Облака в `config/yandex_key.txt` + `config/yandex_folder.txt` (для TTS)
-- Токен AITUNNEL в `config/llm_key.txt` (для LLM, опционально)
-- Ключ OpenWeatherMap в `config/weather_key.txt` (для погоды)
+* **ОС:** Windows 10 / 11
+* **Python:** 3.10 – 3.12
+* **VLC Media Player** (используется для воспроизведения музыки, радио и TTS)
+* **Модели распознавания речи (в `models/`):**
+  * `vosk-model-small-ru-0.22` (для wake-word и hot-words)
+  * `gigaam-v3-rnnt` (загружается автоматически через `onnx-asr` при первом запуске или прогреве)
+* **Ключи и токены (в `config/`):**
+  * `config/token.txt` — OAuth-токен Яндекс.Музыки
+  * `config/yandex_key.txt` + `config/yandex_folder.txt` — API-ключ и `folder_id` Яндекс.Облака (SpeechKit TTS)
+  * `config/weather_key.txt` — API-ключ OpenWeatherMap (погода)
+  * `config/llm_key.txt` — токен AITUNNEL (для LLM-ответов, опционально)
 
-## Установка
+---
 
-1. Клонировать репозиторий:
-git clone https://github.com/aleks20019010-web/maks.git
-cd maks
+## Установка и запуск
 
-text
+1. **Клонировать репозиторий и установить зависимости:**
+   ```bash
+   git clone [https://github.com/aleks20019010-web/maks.git](https://github.com/aleks20019010-web/maks.git)
+   cd maks
+   pip install -r requirements.txt
+Установить VLC (если не установлен):
 
-2. Установить зависимости:
-pip install -r requirements.txt
-
-text
-
-3. Установить VLC (если нет):
+Bash
 winget install VideoLAN.VLC
+Скачать модель Vosk (vosk-model-small-ru-0.22) с alphacephei.com/vosk/models и распаковать в папку models/.
 
-text
+Настроить внешние пути в config/paths.json:
 
-4. Скачать Vosk-модель `vosk-model-small-ru-0.22` в `models/`:
-https://alphacephei.com/vosk/models
-
-5. Создать `config/paths.json` — внешние пути (музыка, VLC):
-
-```json
+JSON
 {
   "music_dir": "D:\\Music",
   "vlc_path": "C:\\Program Files\\VideoLAN\\VLC\\vlc.exe"
 }
-Создать токены:
+Создать файлы токенов в папке config/:
 
-config/token.txt — токен Яндекс.Музыки (одна строка)
+config/token.txt — токен Яндекс.Музыки (одна строка без пробелов)
 
 config/yandex_key.txt — API-ключ Яндекс.Облака (TTS)
 
 config/yandex_folder.txt — folder_id Яндекс.Облака (TTS)
 
-config/llm_key.txt — токен AITUNNEL (LLM, опционально)
-
 config/weather_key.txt — ключ OpenWeatherMap (погода)
 
-(Опционально) config/secrets.json — если используешь Jellyfin:
+config/llm_key.txt — токен AITUNNEL (опционально)
 
-json
-{"jellyfin_key": "..."}
-Запустить:
+Запуск и остановка:
 
-text
+DOS
 .\start.bat
-Остановить: .\stop.bat или Ctrl+C в окне supervisor.
+При запуске стартуют супервизор и воркеры (asr, tts, music, brain, ui).
 
-Структура
-brain/ — ядро (router, skills, composer, appraisal, reminders, pending)
+Окно интерфейса сворачивается в системный трей при закрытии; полная остановка — через .\stop.bat или Ctrl+C в консоли супервизора.
 
-personality_core/ — личность (engine, prosody, style, self_state, mind_stream, phrase, policy, character, identity)
+Структура проекта
+Plaintext
+maks/
+├── brain/                  # Мозг ассистента: router, NLU-пайплайн, навыки (skills),
+│   │                       # appraisal (оценка пропусков), reminders, pending, liked_tracks
+│   └── nlu/                # normalizer, intent (SetFit ONNX), entity (music/time), decision, pipeline
+├── personality_core/       # Ядро личности: engine, self_state, mind_stream, composer,
+│   │                       # prosody, style, phrase, policy, character, identity, rules/
+├── memory/                 # Долговременная память: история прослушиваний, привычки, веса артистов
+├── workers/                # Изолированные воркеры:
+│   ├── asr/                # echoff AEC, Ring/Segmenter VAD, Vosk, GigaAM-v3, ducking
+│   ├── tts/                # Синтез речи (Yandex SpeechKit), кэш фраз, телеметрия уровня голоса
+│   ├── music/              # VLC-плеер, Яндекс.Музыка, локальный индекс, радио, эквалайзер
+│   └── ui/                 # Десктоп-интерфейс на PySide6 (PlayerPanel, ChatPanel, Avatar, Visualizer)
+├── shared/                 # Конфигурация, IPC-очереди, протокол сообщений, логирование, ui_bridge
+├── responses/              # База фраз и шаблонов слотов (composer.json, music, weather, llm, ...)
+├── config/                 # Конфиги воркеров, алиасы артистов/жанров/радио, character/identity
+├── tools/                  # Вспомогательные скрипты (очистка диска, индексация, прогрев кэша)
+├── tests/                  # Набор юнит-тестов pytest (259 тестов)
+├── start.bat / stop.bat    # Скрипты запуска и остановки ассистента
+└── warmup_tts.py           # Прогрев кэша синтеза речи
+Примеры голосовых команд
+Музыка и радио:
 
-memory/ — память (engine, storage, aggregates, reader, writer)
+«Макс, включи музыку» / «включи мою волну» / «включи русскую музыку»
 
-workers/ — asr (Vosk), tts (Yandex), music (VLC + Яндекс.Музыка)
+«Макс, включи Арию» / «включи рок» / «включи что-нибудь бодрое»
 
-shared/ — config, protocol, ipc, log, metrics, yandex, state, sources
+«Макс, включи радио Максимум» / «включи мои лайки»
 
-responses/ — JSON фразы (composer, openings, music, weather, system, smalltalk, llm, …)
+«Дальше» / «Назад» / «Пауза» / «Продолжи» / «Стоп» (работают без wake-word)
 
-config/ — настройки (workers.json, identity.json, music_words.json, aliases.json, genre_aliases.json, genre_tags.json, radio_stations.json, radio_aliases.json, weather.json, personality.json)
+«Громче» / «Тише» / «Громкость 50»
 
-docs/ — architecture.md, llm_design.md, итоги_.md, план_.md
+«Макс, что играет» / «мне нравится» / «мне не нравится»
 
-tools/ — cleanup_c.ps1, prepare_github.py, test_*.py (скрипты-проверки LLM)
+Напоминания и время:
 
-tests/ — pytest-тесты (appraisal, phrase, habits, artist_weight)
+«Макс, напомни через 15 минут проверить духовку»
 
-warmup_tts.py — в корне (прогрев TTS-кэша).
+«Макс, напомни 29 октября в 10:00 записаться к врачу»
 
-Голосовые команды
-«Макс, включи музыку» / «включи Арию» / «включи рок» / «включи лампу»
+«Макс, какие напоминания» / «удали напоминание про врача»
 
-«Макс, пауза» / «продолжи» / «стоп» / «дальше» / «назад»
+Погода, система и диалог:
 
-«Макс, громче» / «тише» / «громкость 50»
+«Макс, какая погода» / «погода на завтра»
 
-«Макс, что играет» / «что за песня»
+«Макс, статус системы» / «почисти диск C»
 
-«Макс, какая погода»
+«Макс, расскажи, почему небо голубое» (передача свободного вопроса в LLM)
 
-«Макс, статус» / «как дела»
+Тестирование
+Запуск всех юнит-тестов:
 
-«Макс, напомни ...» / «когда ...»
+Bash
+python -m pytest tests/ -v
+Покрытие (259 тестов):
 
-«Макс, почисти диск C»
+NLU и классификация: test_normalizer, test_intent, test_intent_music, test_entity_music, test_decision_music, test_decision_system, test_decision_weather, test_pipeline, test_skill_resolver, test_music_words, test_music_classify, test_weather_intent, test_datetime_parser, test_time_bucket
 
-«Макс, привет» / «спасибо» / «кто ты» / «как дела»
+Личность, память и навыки: test_context, test_phrase, test_appraisal, test_artist_weight, test_habits, test_relationship, test_reminders, test_controls, test_cleanup_recycle, test_llm_parser, test_llm_skill, test_llm_whitelist
 
-🎵 Музыка (Яндекс.Музыка)
-Макс использует неофициальную Python-библиотеку yandex-music (автор MarshalX) для доступа к API Яндекс.Музыки.
-
-Важно: это неофициальный API. Яндекс может изменить его в любой момент, и библиотека может перестать работать.
-
-Настройка
-Установи библиотеку: pip install yandex-music (уже в requirements)
-
-Получи OAuth-токен Яндекс.Музыки. Проще всего через Device Flow.
-
-Положи токен в config/token.txt (одна строка, без пробелов).
-
-Как это работает
-При старте workers/music/main.py вызывает shared/yandex.py::init().
-
-Клиент yandex_music.Client(token).init() авторизуется и получает доступ к аккаунту.
-
-Поиск артиста/трека → получение download_info → скачивание mp3 через yandex-music-downloader.
-
-Скачанные файлы кэшируются локально (повторно не качаются).
-
-Ограничения
-Токен привязан к аккаунту. Если сменить аккаунт — нужен новый токен.
-
-Без подписки Яндекс.Плюс качество может быть ниже.
-
-Скачивание музыки через сторонний клиент может нарушать условия сервиса Яндекса (используй на свой риск).
-
-При сбое Яндекс.API (таймаут, 5xx) — трек может не скачаться.
-
-🧠 LLM (диалог)
-Макс использует AITUNNEL (агрегатор OpenAI-совместимых моделей) для ответов на вопросы, которые не понял router.
-
-Модель: deepseek-v4-flash-0731
-
-Токен: config/llm_key.txt
-
-Таймаут: 15 секунд
-
-Провайдер: сортировка по latency (provider: {"sort": "latency"})
-
-Потоки: llm_worker + tts_worker (brain не блокируется)
-
-Отмена: «стоп» / «хватит» в диалоге → cancel_all() + закрытие сессии (история очищается)
-
-Если токена нет — LLM-скил не работает, router говорит «Не понял».
-
-🧹 Очистка диска
-«Макс, почисти диск C» → dry-run → «Могу освободить: безопасно — X ГБ; корзина — Y ГБ. Очистить безопасное?» → «да» → чистка.
-
-По умолчанию чистит только безопасное:
-
-%TEMP%, %LOCALAPPDATA%\Temp, C:\Windows\Temp
-
-Windows Update Download, CBS/DISM логи
-
-Jellyfin transcodes
-
-Не чистит (только с флагами .ps1):
-
-Корзина (-IncludeRecycleBin)
-
-Windows.old — откат Windows (-IncludeWindowsOld, опасно)
-
-Prefetch — не трогаем вообще (ускоряет запуск)
-
-Тесты
-text
-pytest tests/ -v
-20 тестов: appraisal (4), artist_weight (5), habits (4), phrase (7).
+ASR и музыкальный воркер: test_wake, test_hot_words, test_asr_duck, test_modes_duck, test_music_player_duck, test_play_index, test_playback_no_release_duck
 
 Лицензия
 MIT

@@ -1,14 +1,4 @@
 # tests/test_pipeline.py
-# Контракт NLUPipeline:
-#   normalize → intent → entity → decision → Command
-#
-# Тесты с МОКОМ intent.resolve (не зависят от эмбеддингов/IndexedRouter).
-# Pipeline тестируется как ОРКЕСТРАТОР, а не как эмбеддинги.
-# Эмбеддинги — отдельно, вручную (intent.resolve), не в pytest.
-#
-# Фикстура _fixed_catalogs: тесты не зависят от config/aliases.json.
-#   (aliases.json меняется в рантайме: remember_alias дописывает артистов.)
-
 import pytest
 
 from brain.nlu import pipeline as nlu_pipeline
@@ -27,20 +17,25 @@ FIXED_GENRES = {"рок": "genre:rusrock"}
 
 @pytest.fixture(autouse=True)
 def _fixed_catalogs(monkeypatch):
-    """Тесты не зависят от config/aliases.json (он меняется в рантайме)."""
+    from workers.music import local as music_local
     monkeypatch.setattr(entity_music, "_aliases_cache", FIXED_ALIASES)
     monkeypatch.setattr(entity_music, "_genres_cache", FIXED_GENRES)
+    monkeypatch.setattr(music_local, "_index_cache", {"tracks": []})
+    if hasattr(entity_music, "_local_artists_cache"):
+        monkeypatch.setattr(entity_music, "_local_artists_cache", set())
+    if hasattr(entity_music, "search_local"):
+        monkeypatch.setattr(entity_music, "search_local", lambda q: None)
+    if hasattr(entity_music, "_search_local_track"):
+        monkeypatch.setattr(entity_music, "_search_local_track", lambda q: None)
 
 
 def _mock_intent(monkeypatch, intent: Intent, confidence: float = 0.9):
-    """Подменить intent.resolve на фиксированный (без эмбеддингов)."""
     monkeypatch.setattr(
         intent_module, "resolve",
         lambda text: (intent, confidence),
     )
 
 
-# ── MUSIC_PLAY + mood → EXECUTE(play_mood) ──────────────────
 def test_pipeline_mood_execute_play_mood(monkeypatch):
     _mock_intent(monkeypatch, Intent.MUSIC_PLAY)
     ctx = NLUContext()
@@ -52,7 +47,6 @@ def test_pipeline_mood_execute_play_mood(monkeypatch):
     assert d.command.entity.value == "Энергичное"
 
 
-# ── MUSIC_PLAY + artist → EXECUTE(play_artist) ──────────────
 def test_pipeline_artist_execute_play_artist(monkeypatch):
     _mock_intent(monkeypatch, Intent.MUSIC_PLAY)
     ctx = NLUContext()
@@ -64,7 +58,6 @@ def test_pipeline_artist_execute_play_artist(monkeypatch):
     assert d.command.entity.value == "Ария"
 
 
-# ── MUSIC_PLAY + genre → EXECUTE(play_genre) ────────────────
 def test_pipeline_genre_execute_play_genre(monkeypatch):
     _mock_intent(monkeypatch, Intent.MUSIC_PLAY)
     ctx = NLUContext()
@@ -75,7 +68,6 @@ def test_pipeline_genre_execute_play_genre(monkeypatch):
     assert d.command.entity.type == "genre"
 
 
-# ── MUSIC_PLAY + ABSENT → EXECUTE(play_wave) ────────────────
 def test_pipeline_absent_execute_play_wave(monkeypatch):
     _mock_intent(monkeypatch, Intent.MUSIC_PLAY)
     ctx = NLUContext()
@@ -84,17 +76,14 @@ def test_pipeline_absent_execute_play_wave(monkeypatch):
     assert d.command.action == "play_wave"
 
 
-# ── MUSIC_PLAY + UNRESOLVED → CLARIFY ───────────────────────
-def test_pipeline_unresolved_clarify(monkeypatch):
+def test_pipeline_unknown_artist_goes_to_play_search(monkeypatch):
     _mock_intent(monkeypatch, Intent.MUSIC_PLAY)
     ctx = NLUContext()
     d = nlu_pipeline.process("включи орион", context=ctx)
-    assert d.action == DecisionAction.CLARIFY
-    assert d.clarify is not None
-    assert d.clarify.phrase_set == "MUSIC_CLARIFY_UNRESOLVED_ARTIST"
+    assert d.action == DecisionAction.EXECUTE
+    assert d.command.action == "play_search"
 
 
-# ── UNKNOWN → FALLBACK ──────────────────────────────────────
 def test_pipeline_unknown_fallback(monkeypatch):
     _mock_intent(monkeypatch, Intent.UNKNOWN, confidence=0.2)
     ctx = NLUContext()
@@ -102,7 +91,6 @@ def test_pipeline_unknown_fallback(monkeypatch):
     assert d.action == DecisionAction.FALLBACK
 
 
-# ── SMALLTALK → FALLBACK (нет decision_engine) ─────────────
 def test_pipeline_smalltalk_fallback(monkeypatch):
     _mock_intent(monkeypatch, Intent.SMALLTALK)
     ctx = NLUContext()
@@ -110,7 +98,6 @@ def test_pipeline_smalltalk_fallback(monkeypatch):
     assert d.action == DecisionAction.FALLBACK
 
 
-# ── MUSIC_WAVE → EXECUTE(play_wave) ────────────────────────
 def test_pipeline_wave_execute_play_wave(monkeypatch):
     _mock_intent(monkeypatch, Intent.MUSIC_WAVE)
     ctx = NLUContext()

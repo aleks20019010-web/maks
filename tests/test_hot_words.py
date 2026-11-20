@@ -1,64 +1,53 @@
 # tests/test_hot_words.py
 # A2: hot words с контекстом.
-#
-# Проверяем:
-#   - _hot_word_appropriate: YES/NO при expecting_input → True
-#   - _hot_word_appropriate: YES/NO без expecting_input → False
-#   - _hot_word_appropriate: next/prev/pause/stop → True (всегда)
-#   - _hot_word_appropriate: «громкость X» → True (всегда)
-#   - _hot_word_appropriate: «что играет» → False (не hot word)
-#   - classify: «нет» → None (отказ, не музыка)
-#   - router-страховка: YES/NO без pending → игнор
 
 import pytest
 
-from workers.asr.main import _hot_word_appropriate
+from shared import runtime_state as rt
+from workers.asr.text_utils import CommandFilter, hot_word_appropriate
 from brain.skills.music.classify import classify
 
 
-# ── _hot_word_appropriate ──────────────────────────────────────
+# ── hot_word_appropriate + CommandFilter ───────────────────────
 
 def test_yes_no_appropriate_with_pending(monkeypatch):
     """YES/NO при expecting_input → True."""
-    from workers.asr import main as asr_main
-    monkeypatch.setattr(asr_main, "_is_expecting_input", lambda: True)
-    assert _hot_word_appropriate("да") is True
-    assert _hot_word_appropriate("нет") is True
-    assert _hot_word_appropriate("ок") is True
+    monkeypatch.setattr(rt, "exists", lambda flag: flag == rt.FLAG_EXPECTING_INPUT)
+    assert hot_word_appropriate("да") is True
+    assert hot_word_appropriate("нет") is True
+    assert hot_word_appropriate("ок") is True
 
 
 def test_yes_no_not_appropriate_without_pending(monkeypatch):
     """YES/NO без expecting_input → False."""
-    from workers.asr import main as asr_main
-    monkeypatch.setattr(asr_main, "_is_expecting_input", lambda: False)
-    assert _hot_word_appropriate("да") is False
-    assert _hot_word_appropriate("нет") is False
-    assert _hot_word_appropriate("ок") is False
+    monkeypatch.setattr(rt, "exists", lambda flag: False)
+    assert hot_word_appropriate("да") is False
+    assert hot_word_appropriate("нет") is False
+    assert hot_word_appropriate("ок") is False
 
 
 def test_control_words_always_appropriate(monkeypatch):
     """Управление плеером → True всегда."""
-    from workers.asr import main as asr_main
-    monkeypatch.setattr(asr_main, "_is_expecting_input", lambda: False)
-    assert _hot_word_appropriate("дальше") is True
-    assert _hot_word_appropriate("пауза") is True
-    assert _hot_word_appropriate("стоп") is True
-    assert _hot_word_appropriate("громче") is True
+    monkeypatch.setattr(rt, "exists", lambda flag: False)
+    assert hot_word_appropriate("дальше") is True
+    assert hot_word_appropriate("пауза") is True
+    assert hot_word_appropriate("стоп") is True
+    assert hot_word_appropriate("громче") is True
 
 
 def test_volume_always_appropriate(monkeypatch):
     """«громкость X» → True всегда."""
-    from workers.asr import main as asr_main
-    monkeypatch.setattr(asr_main, "_is_expecting_input", lambda: False)
-    assert _hot_word_appropriate("громкость 50") is True
-    assert _hot_word_appropriate("громкость пятьдесят") is True
+    monkeypatch.setattr(rt, "exists", lambda flag: False)
+    assert hot_word_appropriate("громкость 50") is True
+    assert hot_word_appropriate("громкость пятьдесят") is True
 
 
-def test_now_playing_not_appropriate(monkeypatch):
-    """«что играет» → False (не hot word)."""
-    from workers.asr import main as asr_main
-    monkeypatch.setattr(asr_main, "_is_expecting_input", lambda: False)
-    assert _hot_word_appropriate("что играет") is False
+def test_now_playing_not_command_word():
+    """«что играет» → False (не hot word в CommandFilter)."""
+    cf = CommandFilter()
+    cf.update_hot_words({"дальше", "пауза", "стоп", "громче", "тише"})
+    assert cf.is_command_word("что играет") is False
+    assert cf.is_command_word("дальше") is True
 
 
 # ── classify: REFUSAL_WORDS ───────────────────────────────────
@@ -71,10 +60,10 @@ def test_classify_refusal_none():
 
 
 def test_classify_not_refusal():
-    """«включи арию» → play_artist."""
+    """«включи арию» → play_search."""
     r = classify("включи арию")
     assert r is not None
-    assert r["action"] == "play_artist"
+    assert r["action"] == "play_search"
 
 
 # ── router-страховка ──────────────────────────────────────────
@@ -84,9 +73,7 @@ def test_router_yes_no_without_pending(monkeypatch):
     from brain import router, pending
     from shared.sources import CommandSource
 
-    # Мокаем pending.get → None
     monkeypatch.setattr(pending, "get", lambda key: None)
-    # Мокаем respond_and_say — не должен вызываться
     called = []
     monkeypatch.setattr(router, "_respond_and_say",
                         lambda *a, **kw: called.append(a))

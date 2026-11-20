@@ -1,63 +1,41 @@
 # tests/test_wake.py
-# Тесты A2: Vosk-wake (ViolaWake убран).
-#
-# Vosk кормится всегда, _find_wake_word ищет «макс» в тексте.
-# Нашёл → play_beep(), after = команда после «макс».
-#
-# Проверяем:
-#   - _find_wake_word: «макс» в начале / в середине / нет.
-#   - границы слов: «макароны» ≠ «макс».
+# Тесты A2: Vosk-wake (after_wake в workers.asr.text_utils).
 
 import pytest
 
-from workers.asr.main import _find_wake_word
+from workers.asr.text_utils import after_wake
 
-
-# ── _find_wake_word ───────────────────────────────────────────
 
 def test_wake_word_at_start():
-    """«макс включи киша» → wake=«макс», after=«включи киша»."""
-    wake, after = _find_wake_word("макс включи киша")
-    assert wake == "макс"
-    assert after == "включи киша"
+    """«макс включи киша» → «включи киша»."""
+    assert after_wake("макс включи киша") == "включи киша"
 
 
 def test_wake_word_at_middle():
-    """«слушай макс включи киша» → wake=«макс», after=«включи киша»."""
-    wake, after = _find_wake_word("слушай макс включи киша")
-    assert wake == "макс"
-    assert after == "включи киша"
+    """«слушай макс включи киша» → «включи киша»."""
+    assert after_wake("слушай макс включи киша") == "включи киша"
 
 
 def test_wake_word_only():
-    """«макс» → wake=«макс», after=«»."""
-    wake, after = _find_wake_word("макс")
-    assert wake == "макс"
-    assert after == ""
+    """«макс» → «»."""
+    assert after_wake("макс") == ""
 
 
 def test_wake_word_not_found():
-    """«включи киша» → wake=None, after=None."""
-    wake, after = _find_wake_word("включи киша")
-    assert wake is None
-    assert after is None
+    """«включи киша» → None."""
+    assert after_wake("включи киша") is None
 
 
 def test_wake_word_makarony():
-    """«макароны» → wake=None (границы слов, не «мак»)."""
-    wake, after = _find_wake_word("макароны вкусные")
-    assert wake is None
+    """«макароны» → None (границы слов, не «мак»)."""
+    assert after_wake("макароны вкусные") is None
 
 
 def test_wake_word_maksu():
-    """«максу» → wake=«максу» (границы слов)."""
-    wake, after = _find_wake_word("максу включи киша")
-    assert wake == "максу"
-    assert after == "включи киша"
+    """«максу» → «включи киша» (нечёткое совпадение с «макс»)."""
+    assert after_wake("максу включи киша") == "включи киша"
 
 
 def test_wake_word_with_punctuation():
-    """«Макс, включи киша» → wake=«макс», after=«включи киша»."""
-    wake, after = _find_wake_word("Макс, включи киша")
-    assert wake == "макс"
-    assert after == "включи киша"
+    """«Макс, включи киша» → «включи киша»."""
+    assert after_wake("Макс, включи киша") == "включи киша"

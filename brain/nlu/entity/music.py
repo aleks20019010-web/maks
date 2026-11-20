@@ -10,6 +10,11 @@
 #   5. genre_aliases.json (точные + падежи)
 #   6. fuzzy по mood + local_artists + aliases + genres (порог 0.80 для артистов)
 #   7. fallback в play_search (локальный поиск → Яндекс.Музыка)
+#
+# ── FIX (2026-11-20): жанр важнее одноимённого локального трека ──
+#   В match() блок GENRE (точное совпадение) поднят выше блока
+#   LOCAL_INDEX (названия треков). Теперь «рок» → genre:rusrock,
+#   даже если в local_index.json есть трек «НАИВ — Рок».
 
 import json
 import os
@@ -476,13 +481,13 @@ class MusicEntityExtractor:
                 if name:
                     return Entity.found("artist", name, 1.0, "alias")
 
-            # 5. LOCAL_INDEX (названия треков) — точное совпадение
-            if cand_lower in local_tracks:
-                return Entity.found("search", local_tracks[cand_lower], 0.98, "local_track")
-
-            # 6. GENRE — точное совпадение
+            # 5. GENRE — точное совпадение (жанр важнее одноимённого трека «Рок» / «Поп»)
             if cand_lower in genres:
                 return Entity.found("genre", cand_lower, 1.0, "genre_alias")
+
+            # 6. LOCAL_INDEX (названия треков) — точное совпадение
+            if cand_lower in local_tracks:
+                return Entity.found("search", local_tracks[cand_lower], 0.98, "local_track")
 
             # 7. Падежи (mood / local_artists / aliases / genre)
             for variant in _all_case_variants(cand_lower):
