@@ -53,6 +53,25 @@
 #   APP_UNKNOWN (нет объекта). Это отдельное массовое действие
 #   (launcher.close_all_apps). Фразы-триггеры — точные, чтобы
 #   случайно не поймать «закрой хром» (там APP_CLOSE через NLU).
+#
+# ── FIX (2026-11-20): YES/NO с учётом NLUContext pending ────────
+#   Раньше: router-страховка «YES/NO без pending → игнор» проверяла
+#   только brain.pending (PENDING_ASK / PENDING_OFFER / cleanup*).
+#   Но pending может жить и в NLUContext (brain/nlu/context.py) —
+#   когда pipeline поставил CLARIFY и ждёт уточнения («На когда
+#   поставить?»). В этом случае «да» или «нет» — это ответ на
+#   уточнение, его нельзя игнорировать: pipeline сам разберётся
+#   (в т.ч. через is_cancel → CLARIFY(CANCELLED)).
+#   Теперь: nlu_has_pending = nlu_context_mod.get().get_pending() is not None;
+#   если True — пропускаем страховку и идём дальше в pipeline.
+#
+# ── FIX (2026-11-20): атомарный pending.pop в _handle_pending_music ──
+#   Раньше: pending.get(key) → проверка → pending.pop(key) в каждой
+#   ветке. Между get и pop мог влезть другой поток (ASR + UI одновременно
+#   прислали YES/NO) и обработать тот же pending дважды, или pop в ветке
+#   пропуститься из-за исключения. Теперь: один pending.pop(key) в
+#   начале функции, дальше работаем с локальной p. Атомарно и без
+#   дублирующихся веток pop.
 
 import threading
 import time
@@ -125,10 +144,12 @@ def process_command(command: str, source: CommandSource = CommandSource.VOICE):
 
     # ── A2: router-страховка. YES/NO без pending → игнор ──
     if cmd_lower in YES_WORDS or cmd_lower in NO_WORDS:
-        if pending.get(PENDING_ASK) is None and pending.get(PENDING_OFFER) is None:
-            # FIX (этап 1.1): YES/NO может быть ответом на cleanup/cleanup_recycle
-            # (brain.pending, ключи "cleanup"/"cleanup_recycle"). Раньше —
-            # безусловный игнор, «да» на «Очистить безопасное?» терялось.
+        nlu_has_pending = nlu_context_mod.get().get_pending() is not None
+        if (
+            not nlu_has_pending
+            and pending.get(PENDING_ASK) is None
+            and pending.get(PENDING_OFFER) is None
+        ):
             if _handle_pending_confirm(cmd_lower):
                 return None
             log(f"router: YES/NO без pending → игнор «{command}»", tag="BRAIN")
@@ -270,18 +291,14 @@ def _try_llm_fallback(command: str) -> bool:
 
 # ── pending (ask + offer) ─────────────────────────────────────
 def _handle_pending_music(cmd_lower: str) -> bool:
-    p = pending.get(PENDING_ASK)
-    key = PENDING_ASK
-    if p is None:
-        p = pending.get(PENDING_OFFER)
-        key = PENDING_OFFER
+    key = PENDING_ASK if pending.get(PENDING_ASK) is not None else PENDING_OFFER
+    p = pending.pop(key)
     if p is None:
         return False
 
     has_davai, rest = _extract_davai(cmd_lower)
 
     if (has_davai and not rest) or cmd_lower in YES_WORDS:
-        pending.pop(key)
         if key == PENDING_OFFER:
             _respond_and_say("SMALLTALK_MUSIC_ACCEPT")
             ipc.put(protocol.MUSIC_INBOX, protocol.play_wave(language=None))
@@ -290,7 +307,6 @@ def _handle_pending_music(cmd_lower: str) -> bool:
         return True
 
     if has_davai and rest:
-        pending.pop(key)
         if key == PENDING_OFFER:
             from brain.skills.music import skill as music_skill
             music_skill.MusicSkill().handle(rest)
@@ -299,14 +315,12 @@ def _handle_pending_music(cmd_lower: str) -> bool:
         return True
 
     if cmd_lower in NO_WORDS:
-        pending.pop(key)
         if key == PENDING_OFFER:
             _respond_and_say("SMALLTALK_MUSIC_DECLINE")
         else:
             _decline_pending(p.data)
         return True
 
-    pending.pop(key)
     log(f"router: pending {key} сброшен (другая команда)", tag="BRAIN")
     return False
 

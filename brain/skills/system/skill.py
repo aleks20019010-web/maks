@@ -1,17 +1,7 @@
-﻿"""System: навык «статус» — CPU, RAM, диски.
-
-- build_text() — собирает данные + плейсхолдеры для фразы. Без отправки.
-- SystemSkill.handle() — ACK + сбор + случайная фраза из responses/system.json
-  с подстановкой {CPU}, {RAM}, {DISK} + отправка в TTS и MAX.
-
-Речь — через ipc.put(TTS_INBOX, protocol.say(text, rate=..., emotion=...)).
-
-NLU-путь: router передаёт Command (skill.name in ("music","controls","weather","system")).
-Fast-path убран: can_handle → False. SystemSkill.handle принимает Command | str;
-text не используется (сбор CPU/RAM/дисков не зависит от текста).
-"""
+﻿"""System: навык «статус» — CPU, RAM, диски."""
 
 import json
+import threading
 import time
 import random
 from pathlib import Path
@@ -21,6 +11,7 @@ from shared import ipc
 from shared import protocol
 from shared import metrics
 from shared import config as cfg
+from shared.ui_bridge import append_chat
 from brain.skills.base import Skill, register
 from brain.skills.system.cpu.collect import collect as collect_cpu
 from brain.skills.system.cpu.phrase import phrase as phrase_cpu
@@ -33,12 +24,10 @@ from brain.skills.system import max_sender
 
 TRIGGERS = {"статус", "система", "отчёт", "состояние"}
 
-# Кэш фраз (загружается один раз).
 _phrases_cache = None
 
 
 def _load_phrases() -> dict:
-    """Загрузить responses/system.json. Кэш в памяти."""
     global _phrases_cache
     if _phrases_cache is not None:
         return _phrases_cache
@@ -55,7 +44,6 @@ def _load_phrases() -> dict:
 
 
 def _pick_phrase(key: str, fallback: str) -> dict:
-    """Выбрать случайную фразу из списка. Fallback — если ключа нет."""
     phrases = _load_phrases().get(key, [])
     if not phrases:
         return {"text": fallback, "rate": "-5%", "emotion": "neutral"}
@@ -63,7 +51,6 @@ def _pick_phrase(key: str, fallback: str) -> dict:
 
 
 def _format_phrase(phrase_dict: dict, placeholders: dict) -> tuple[str, dict]:
-    """Подставить плейсхолдеры в текст. Вернуть (text, {rate, emotion})."""
     text = phrase_dict.get("text", "")
     for key, value in placeholders.items():
         text = text.replace(f"{{{key}}}", value)
@@ -75,7 +62,6 @@ def _format_phrase(phrase_dict: dict, placeholders: dict) -> tuple[str, dict]:
 
 
 def build_text() -> dict:
-    """Собирает данные из трёх подпакетов. НЕ отправляет и НЕ говорит."""
     try:
         cpu_phrase = phrase_cpu(collect_cpu())
     except Exception as e:
@@ -121,52 +107,25 @@ def _status_key(status: str) -> str:
     return "STATUS_MAX_ERROR"
 
 
-class SystemSkill(Skill):
-    name = "system"
-    priority = 5
-
-    def can_handle(self, text: str) -> bool:
-        # Fast-path убран: system — через NLU (decision/system).
-        # NLU intent SYSTEM_STATUS → resolver → system → decision → EXECUTE(status)
-        # → router → SystemSkill.handle(Command).
-        return False
-
-    def handle(self, command=None) -> str | None:
-        """Command | str — оба принимаем.
-
-        text не используется: SystemSkill собирает CPU/RAM/диски
-        независимо от текста. command (NLU-путь) игнорируется по содержимому.
-        """
-        metrics.inc("system_status")
-
-        # 1. ACK — «Сию минуту, сэр. Собираю данные.»
-        ack_phrase = _pick_phrase("STATUS_ACK", "Сию минуту, сэр.")
-        ack_text, ack_style = _format_phrase(ack_phrase, {})
-        log(f"system: ACK: {ack_text}", tag="SYSTEM", level="INFO")
-        ipc.put(protocol.TTS_INBOX, protocol.say(
-            ack_text,
-            rate=ack_style["rate"],
-            emotion=ack_style["emotion"],
-        ))
-
-        # 2. Пауза, чтобы ACK прозвучал. TTS worker может перебить —
-        # sleep(2) страховка. Потом — очередь в TTS, если понадобится.
-        time.sleep(2)
-
-        # 3. Собираем данные — cpu_collect блокирует 3 сек.
+def _collect_and_report() -> None:
+    try:
+        time.sleep(1.5)
         built = build_text()
         placeholders = built["placeholders"]
         max_text = built["max_text"]
 
-        # 4. Отправляем в MAX.
-        status = max_sender.send(max_text)
+        status = max_sender.send(max_text, build_fn=build_text)
         key = _status_key(status)
 
-        # 5. Говорим реальный статус — случайная фраза.
         phrase_dict = _pick_phrase(key, "Сэр, статус готов. Полный отчёт — в MAX.")
         full_text, style = _format_phrase(phrase_dict, placeholders)
 
         log(f"system: {full_text} (max={status})", tag="SYSTEM", level="INFO")
+
+        try:
+            append_chat("assistant", full_text, meta="system")
+        except Exception:
+            pass
 
         ipc.put(protocol.TTS_INBOX, protocol.say(
             full_text,
@@ -174,9 +133,39 @@ class SystemSkill(Skill):
             emotion=style["emotion"],
         ))
         metrics.inc("tts_said")
+    except Exception as e:
+        log(f"system: _collect_and_report error: {e}", tag="SYSTEM", level="ERROR")
 
+
+class SystemSkill(Skill):
+    name = "system"
+    priority = 5
+
+    def can_handle(self, text: str) -> bool:
+        return False
+
+    def handle(self, command=None) -> str | None:
+        metrics.inc("system_status")
+
+        ack_phrase = _pick_phrase("STATUS_ACK", "Сию минуту, сэр.")
+        ack_text, ack_style = _format_phrase(ack_phrase, {})
+        log(f"system: ACK: {ack_text}", tag="SYSTEM", level="INFO")
+        try:
+            append_chat("assistant", ack_text, meta="system")
+        except Exception:
+            pass
+        ipc.put(protocol.TTS_INBOX, protocol.say(
+            ack_text,
+            rate=ack_style["rate"],
+            emotion=ack_style["emotion"],
+        ))
+
+        threading.Thread(
+            target=_collect_and_report,
+            daemon=True,
+            name="system-status-worker",
+        ).start()
         return None
 
 
-# ── Регистрация ───────────────────────────────────────────────
 register(SystemSkill())

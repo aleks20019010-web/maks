@@ -10,6 +10,25 @@ FIX (2026-11-08): all_audio_files → из local_index.json (0.05 сек) вме
   glob (8 сек на 3000 файлов). local.py строит JSON при первом запуске
   (8 сек) или обновляет в фоне (8 сек, не блокирует). Повторный запуск —
   JSON (0.05 сек). Первый «включи музыку» — 0.05 сек (не 8).
+
+── FIX (2026-11-20): не кешировать пустой индекс навсегда ──────
+  Раньше: files = [...]; _cache = files. Если _load_index вернул
+  пустой tracks (битый JSON, MUSIC_DIR ещё пустой, индекс строится
+  в фоне), _cache = [] запоминался навсегда. Все последующие вызовы
+  all_audio_files() без force_refresh возвращали [] — «локальных
+  треков нет» до перезапуска процесса.
+
+  Теперь: _cache обновляется только если files непустой. Пустой
+  индекс → возвращаем [], но НЕ кешируем; следующий вызов снова
+  попробует _load_index. Стоимость — один лишний вызов
+  _load_index() на каждый запрос, пока индекс пуст. Как только
+  в индексе появятся треки — закешируется.
+
+  trade-off: если индекс реально пуст (нет музыки вообще), каждый
+  поиск будет дёргать _load_index. Но _load_index кеширует сам
+  (см. local.py), так что это дешёвая операция — чтение JSON
+  или возврат in-memory словаря. Дешевле, чем «музыка не играет
+  до перезапуска».
 """
 
 import os
@@ -29,6 +48,10 @@ def all_audio_files(force_refresh=False):
 
     FIX (2026-11-08): из local_index.json (0.05 сек) вместо glob (8 сек).
     Fallback: glob (если local.py не импортируется — циклический импорт?).
+
+    FIX (2026-11-20): пустой индекс не кешируем. Иначе один пустой
+    ответ (индекс ещё строится / битый / MUSIC_DIR пуст) — и до
+    перезапуска процесса «локальных треков нет».
     """
     global _cache
     with _cache_lock:
@@ -40,7 +63,8 @@ def all_audio_files(force_refresh=False):
             from workers.music.local import _load_index
             idx = _load_index(force_refresh=force_refresh)
             files = [t["path"] for t in idx.get("tracks", [])]
-            _cache = files
+            if files:
+                _cache = files
             return files
         except Exception as e:
             print(f"⚠ audio_cache: индекс недоступен ({e}) — fallback glob")

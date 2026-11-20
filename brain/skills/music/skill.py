@@ -1,13 +1,5 @@
 # brain/skills/music/skill.py
 # MusicSkill — тонкая обёртка. Понимает Command, шлёт в music_inbox.
-#
-# Логика озвучки:
-#   - Плейлисты/потоки (wave, genre, mood, radio, liked, local_liked):
-#     озвучиваются сразу здесь («Включаю мою волну» и т.д.), старт музыки
-#     ждёт начала TTS (phrase_seq > base_seq), чтобы сработал duck.
-#   - Точечные запросы (play_artist, play_track, play_search):
-#     здесь не озвучиваются; взводится одноразовый флаг _announce_next_track,
-#     и brain/main.py озвучивает первый реально запустившийся трек один раз.
 
 import json
 import os
@@ -28,41 +20,50 @@ from shared.time_bucket import time_bucket
 
 PENDING_KEY = "music_ask"
 
-# Сколько ждать старта TTS после отправки фразы (synth 1–2с + запас).
 _TTS_START_WAIT_SEC = 5.0
-# Шаг polling state_file (20мс).
 _TTS_POLL_SEC = 0.02
+_ANNOUNCE_TTL_SEC = 15.0
 
-# Счётчик музыкальных запросов для защиты от гонки потоков при быстрой смене треков
 _dispatch_seq = 0
 _dispatch_lock = threading.Lock()
 
-# Одноразовый флаг: озвучить только первый стартовавший трек (для artist/track/search)
 _announce_next_track = False
+_announce_armed_at = 0.0
 _announce_lock = threading.Lock()
+
+_radio_cache: dict = {}
+_radio_mtime: float = -1.0
 
 
 def arm_first_track_announce() -> None:
-    """Разрешить озвучку ровно одного следующего события music_started."""
-    global _announce_next_track
+    """Разрешить озвучку ровно одного следующего события music_started (TTL 15с)."""
+    global _announce_next_track, _announce_armed_at
     with _announce_lock:
         _announce_next_track = True
+        _announce_armed_at = time.time()
 
 
 def disarm_first_track_announce() -> None:
     """Отменить ожидание озвучки следующего трека."""
-    global _announce_next_track
+    global _announce_next_track, _announce_armed_at
     with _announce_lock:
         _announce_next_track = False
+        _announce_armed_at = 0.0
 
 
 def consume_first_track_announce() -> bool:
-    """Проверить и атомарно сбросить флаг озвучки первого трека."""
-    global _announce_next_track
+    """Проверить и атомарно сбросить флаг озвучки первого трека (с учётом TTL)."""
+    global _announce_next_track, _announce_armed_at
     with _announce_lock:
         val = _announce_next_track
+        armed_at = _announce_armed_at
         _announce_next_track = False
-        return val
+        _announce_armed_at = 0.0
+        if not val:
+            return False
+        if (time.time() - armed_at) > _ANNOUNCE_TTL_SEC:
+            return False
+        return True
 
 
 def _next_dispatch_seq() -> int:
@@ -78,16 +79,23 @@ def _current_dispatch_seq() -> int:
 
 
 def _load_radio_stations() -> dict:
+    global _radio_cache, _radio_mtime
     path = os.path.join(cfg.BASE_DIR, "config", "radio_stations.json")
     if not os.path.exists(path):
-        return {}
+        _radio_cache = {}
+        _radio_mtime = -1.0
+        return _radio_cache
     try:
+        mtime = os.path.getmtime(path)
+        if mtime == _radio_mtime:
+            return _radio_cache
         with open(path, "r", encoding="utf-8-sig") as f:
             data = json.load(f)
-        return data if isinstance(data, dict) else {}
+        _radio_cache = data if isinstance(data, dict) else {}
+        _radio_mtime = mtime
     except Exception as e:
         log(f"music: _load_radio_stations: {e}", tag="BRAIN", level="WARN")
-        return {}
+    return _radio_cache
 
 
 def _pick_random_radio() -> str | None:
@@ -108,7 +116,6 @@ def _station_name(station_key: str) -> str:
 
 
 def _wait_tts_started(base_seq: int, timeout: float = _TTS_START_WAIT_SEC) -> bool:
-    """Ждать, пока phrase_seq в state_file станет больше base_seq."""
     t0 = time.time()
     while time.time() - t0 < timeout:
         try:
@@ -122,7 +129,6 @@ def _wait_tts_started(base_seq: int, timeout: float = _TTS_START_WAIT_SEC) -> bo
 
 
 def _send_music_after_tts(protocol_fn, *args, seq: int, base_seq: int | None = None, **kwargs):
-    """Отправить music-команду ПОСЛЕ старта TTS-фразы (phrase_seq > base_seq)."""
     def _run():
         if base_seq is not None:
             ok = _wait_tts_started(base_seq)
@@ -216,7 +222,8 @@ class MusicSkill(Skill):
             artist = cur.get("artist", "")
             title = cur.get("title", "")
             if not (artist or title):
-                return None
+                result["empty"] = True
+                return result
             result["artist"] = artist
             result["title"] = title
             return result
@@ -253,7 +260,10 @@ class MusicSkill(Skill):
             result["language"] = lang_val
             try:
                 from workers.music._shared import GENRE_ALIASES
-                result["station"] = GENRE_ALIASES.get(genre_val, f"genre:{genre_val}")
+                if lang_val == "russian" and f"русский {genre_val}" in GENRE_ALIASES:
+                    result["station"] = GENRE_ALIASES[f"русский {genre_val}"]
+                else:
+                    result["station"] = GENRE_ALIASES.get(genre_val, f"genre:{genre_val}")
             except Exception:
                 result["station"] = f"genre:{genre_val}"
             return result
@@ -301,7 +311,6 @@ class MusicSkill(Skill):
 
     def _ask(self, phrase_key: str, kind: str,
              data: dict, phrase_kwargs: dict | None = None) -> bool:
-        """Задать уточняющий вопрос и поставить pending. False — если TTS не сработал."""
         kwargs = phrase_kwargs or {}
         base_seq = _respond_and_say(phrase_key, **kwargs)
         if base_seq is None:
@@ -329,7 +338,6 @@ class MusicSkill(Skill):
     def _dispatch(self, action: str, result: dict):
         seq = _next_dispatch_seq()
 
-        # ── 1. Точечные запросы: молчим сейчас, озвучим 1-й трек по факту старта ──
         if action == "play_artist":
             arm_first_track_announce()
             ipc.put(protocol.MUSIC_INBOX, protocol.play_artist(result["artist"]))
@@ -342,13 +350,14 @@ class MusicSkill(Skill):
             arm_first_track_announce()
             ipc.put(protocol.MUSIC_INBOX, protocol.play_search(result["query"]))
 
-        # ── 2. Потоки и плейлисты: озвучиваем сразу, отдельные треки не объявляем ──
         elif action == "play_genre":
             disarm_first_track_announce()
             genre = result["genre"]
+            lang = result.get("language")
+            label = f"русский {genre}" if lang == "russian" else genre
             station = result.get("station", "")
-            bseq = _respond_and_say("PLAY_GENRE", genre=genre)
-            _send_music_after_tts(protocol.play_genre, genre, station=station, seq=seq, base_seq=bseq)
+            bseq = _respond_and_say("PLAY_GENRE", genre=label)
+            _send_music_after_tts(protocol.play_genre, label, station=station, seq=seq, base_seq=bseq)
 
         elif action == "play_mood":
             disarm_first_track_announce()
@@ -394,8 +403,10 @@ class MusicSkill(Skill):
             bseq = _respond_and_say("PLAY_RADIO", name=name)
             _send_music_after_tts(protocol.play_radio, station, seq=seq, base_seq=bseq)
 
-        # ── 3. Оценки текущего трека ───────────────────────────────────────────────
         elif action == "like_current":
+            if result.get("empty"):
+                _respond_and_say("NO_TRACK_PLAYING")
+                return
             from brain import liked_tracks as _lt
             artist = result.get("artist", "")
             title = result.get("title", "")
@@ -411,6 +422,9 @@ class MusicSkill(Skill):
                 _respond_and_say("LIKE_ALREADY", artist=artist, title=title)
 
         elif action == "dislike_current":
+            if result.get("empty"):
+                _respond_and_say("NO_TRACK_PLAYING")
+                return
             from brain import liked_tracks as _lt
             artist = result.get("artist", "")
             title = result.get("title", "")

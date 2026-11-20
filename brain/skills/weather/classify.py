@@ -18,6 +18,13 @@
 # FIX (gradus): добавлено согласование «градус/градуса/градусов».
 #   Раньше: «{temp} градусов» → «4 градусов» (неправильно).
 #   Теперь: «{temp} {gradus}» → «4 градуса» (правильно).
+#
+# FIX (2026-11-20): 511 (ледяной дождь) проверяется ДО 5xx.
+#   Раньше: wid == 511 попадал в общий диапазон 500 <= wid < 600
+#   и классифицировался по rain_mm как drizzle/rain/heavy_rain/cloudy.
+#   Ветка `if wid == 511: return "ice"` стояла ПОСЛЕ этой проверки и
+#   была недостижима. Теперь 511 → "ice" до 5xx, как и 611-613
+#   (дождь со снегом) — до 6xx.
 
 RAIN_THRESHOLD_MM = 1.0
 SNOW_THRESHOLD_MM = 1.0
@@ -57,18 +64,17 @@ def _precip_kind(wid, rain_mm=0.0, snow_mm=0.0):
     if 200 <= wid < 300:
         return "storm"
 
+    # Ледяной дождь (511) — проверяем ДО общего диапазона 5xx
+    if wid == 511:
+        return "ice"
+
     # Морось / дождь (3xx, 5xx)
     if 300 <= wid < 400 or 500 <= wid < 600:
         if rain_mm < RAIN_THRESHOLD_MM:
-            # Если осадков почти нет — не считаем дождём
             return "drizzle" if rain_mm > 0 else "cloudy"
         if rain_mm > HEAVY_RAIN_MM:
             return "heavy_rain"
         return "rain"
-
-    # Ледяной дождь (511)
-    if wid == 511:
-        return "ice"
 
     # Дождь со снегом (611-613)
     if 611 <= wid <= 613:

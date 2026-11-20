@@ -61,6 +61,17 @@
 # ── APP_OPEN / APP_CLOSE (2026-11-19) ───────────────────────────
 #   Зарегистрированы AppExtractor и AppsDecisionEngine в
 #   _load_extractors() / _load_decisions().
+#
+# ── FIX (2026-11-20): CLARIFY(CANCELLED) при отмене pending ──────
+#   Раньше: при «отмена» / «не надо» в ответ на pending-вопрос
+#   (_try_fill_pending) мы делали clear_pending + return None.
+#   Pipeline шёл обычным путём → intent_resolver не распознавал
+#   «отмена» как известный intent → FALLBACK → router → LLM
+#   (~6 сек на пустой ответ). Пользователь слышал что-то странное.
+#   Теперь: возвращаем Decision(CLARIFY) с ClarifyRequest
+#   phrase_set="CANCELLED". Router отвечает коротким
+#   «Хорошо, отменил» (или что там в responses/*.json для
+#   CANCELLED) и НЕ уходит в LLM. Быстро и предсказуемо.
 
 import time
 from typing import Optional
@@ -73,7 +84,8 @@ from brain.nlu.context import (
     NLUContext, PendingCommand, get as get_context,
 )
 from brain.nlu.types import (
-    Command, Decision, DecisionAction, Entity, EntityState, Intent,
+    ClarifyRequest, Command, Decision, DecisionAction, Entity, EntityState,
+    Intent,
 )
 from shared.log import log
 
@@ -316,12 +328,35 @@ def _try_fill_pending(
 
     FIX (2026-11-13): при ABSENT не строим CLARIFY (цикл «На когда?»).
     Сбрасываем pending, return None.
+
+    FIX (2026-11-20): при отмене возвращаем CLARIFY(CANCELLED), чтобы
+    router ответил короткой фразой и не уходил в LLM.
     """
-    # Отмена
+    # Отмена: возвращаем CLARIFY с phrase_set="CANCELLED", чтобы router
+    # подтвердил отмену и НЕ отправлял «отмена» / «не надо» в LLM.
     if context.is_cancel(normalized):
         nlu_log.info("context", "cancelled", pending_intent=pending.intent.value)
         context.clear_pending()
-        return None
+        cmd = Command(
+            intent=pending.intent,
+            entity=Entity.absent(),
+            skill_name=None,
+            action="cancel",
+            confidence=1.0,
+            normalized_text=normalized,
+            original_text=original,
+        )
+        return Decision(
+            command=cmd,
+            action=DecisionAction.CLARIFY,
+            reason="pending cancelled by user",
+            confidence=1.0,
+            clarify=ClarifyRequest(
+                phrase_set="CANCELLED",
+                kwargs={},
+                reason="pending_cancelled",
+            ),
+        )
 
     # Есть ли экстрактор для pending.intent?
     extractor = _get_extractors().get(pending.intent)

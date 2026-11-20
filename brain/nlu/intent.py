@@ -1,50 +1,5 @@
 # brain/nlu/intent.py
 # IntentResolver: ONNX (SetFit, fp32) → Intent + confidence.
-#
-# Приоритет:
-#   1. Exact-match с фразой из config/intent_routes.json → (intent, 1.0).
-#   2. ONNX (models/setfit_intents_onnx/model.onnx) → (intent, confidence).
-#   3. Пост-правила (VOLUME_UP/DOWN, CLEANUP_DISK/RECYCLE,
-#      SMALLTALK/SYSTEM_STATUS, LLM_QUESTION/MUSIC_NOW_PLAYING,
-#      APP_OPEN/APP_CLOSE).
-#   4. Fuzzy fallback (difflib, порог 0.8) — если ONNX не уверен.
-#
-# UNKNOWN — если всё ниже порога.
-# warmup() — прогреть ONNX в фоне при старте brain.
-#
-# ── ONNX (2026-11-11): замена PyTorch SetFit ──────────────────
-#   Было: from setfit import SetFitModel → 29.5с импорт, 35с warmup.
-#   Стало: onnxruntime + tokenizers.Tokenizer + labels.json.
-#     - import brain.main: 0.1с (setfit не тянется при старте)
-#     - загрузка ONNX: 0.7с
-#     - warmup: 1-2с (вместо 35)
-#     - инференс: 5-10мс (было 20)
-#
-#   Модель: models/setfit_intents_onnx/model.onnx (111 МБ, fp32).
-#   Токенизатор: models/setfit_intents/tokenizer.json (2.4 МБ).
-#   Labels: models/setfit_intents_onnx/labels.json (18 классов).
-#
-#   ВАЖНО: onnxruntime может вернуть labels (строки) или probs
-#   (числа). Обрабатываем оба случая. Для набора данных SetFit
-#   обычно отдаёт labels, поэтому conf=1.0 — это нормально.
-#
-# ── FIX (2026-11-13): «ведр» в _RECYCLE_WORDS ──────────────────
-#   Раньше: _RECYCLE_WORDS = ("корзин", "мусорк"). «Почисти ведро»,
-#   «очисти мусорное ведро» → CLEANUP_DISK (мусор = диск?).
-#   Теперь: + "ведр" — «ведро» → CLEANUP_RECYCLE.
-#   CV показал: CLEANUP_RECYCLE F1 0.705 (std 0.373), 3 ошибки
-#   RECYCLE → DISK на «ведро»/«мусорное ведро». Пост-правила чинят
-#   «мусорк», но «ведро» — нет. Теперь чинят.
-#
-# ── APP_OPEN / APP_CLOSE (2026-11-19) ──────────────────────────
-#   Пост-правило разводит APP_OPEN и APP_CLOSE по глаголу:
-#   «открой/запусти/подними/стартуй» → APP_OPEN,
-#   «закрой/выключи/заверши/убей/сверни» → APP_CLOSE.
-#   Срабатывает только если ONNX уже выбрал один из этих двух
-#   интентов — чтобы не перехватывать чужие («включи музыку» →
-#   MUSIC_PLAY). Порядок: CLOSE проверяется первым, потому что
-#   «выключи» содержит подстроку «включи» (не пересекается, но
-#   на всякий случай).
 
 import json
 import threading
@@ -62,37 +17,36 @@ _lock = threading.Lock()
 
 _ROUTES_FILE = cfg.CONFIG_DIR / "intent_routes.json"
 
-# ONNX + tokenizer + labels
 _ONNX_DIR = cfg.DATA_DIR.parent / "models" / "setfit_intents_onnx"
 _ONNX_MODEL = _ONNX_DIR / "model.onnx"
 _ONNX_LABELS = _ONNX_DIR / "labels.json"
 _TOKENIZER_FILE = cfg.DATA_DIR.parent / "models" / "setfit_intents" / "tokenizer.json"
 
-# Порог уверенности: ниже — пробуем fuzzy, потом UNKNOWN.
 _THRESHOLD = 0.5
 _FUZZY_FALLBACK_THRESHOLD = 0.80
 
 
-# ── Загрузка routes ────────────────────────────────────────
-def _load_routes() -> dict[Intent, list[str]]:
+def _load_routes() -> tuple[dict[Intent, list[str]], dict[str, Intent]]:
     if not _ROUTES_FILE.exists():
         log(f"intent: {_ROUTES_FILE} не найден — routes пустые",
             tag="BRAIN", level="ERROR")
-        return {}
+        return {}, {}
     try:
         with open(_ROUTES_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
     except Exception as e:
         log(f"intent: ошибка чтения {_ROUTES_FILE}: {e} — routes пустые",
             tag="BRAIN", level="ERROR")
-        return {}
+        return {}, {}
 
     if not isinstance(data, dict):
         log(f"intent: {_ROUTES_FILE} — не dict — routes пустые",
             tag="BRAIN", level="ERROR")
-        return {}
+        return {}, {}
 
     routes: dict[Intent, list[str]] = {}
+    exact_map: dict[str, Intent] = {}
+
     for intent_name, phrases in data.items():
         try:
             intent = Intent(intent_name)
@@ -105,80 +59,92 @@ def _load_routes() -> dict[Intent, list[str]]:
         cleaned = [p.strip() for p in phrases if isinstance(p, str) and p.strip()]
         if cleaned:
             routes[intent] = cleaned
+            for p in cleaned:
+                pl = p.lower()
+                if pl not in exact_map:
+                    exact_map[pl] = intent
+
     log(f"intent: routes загружены: {len(routes)} интентов, "
-        f"{sum(len(v) for v in routes.values())} фраз", tag="BRAIN")
-    return routes
+        f"{len(exact_map)} уникальных фраз", tag="BRAIN")
+    return routes, exact_map
 
 
-_ROUTES: dict[Intent, list[str]] = _load_routes()
+_ROUTES, _EXACT_MAP = _load_routes()
 
 
-# ── Exact-match ────────────────────────────────────────────
 def _exact_match(text: str) -> tuple[Intent, float] | None:
     if not text:
         return None
     text_norm = text.lower().strip()
     if not text_norm:
         return None
-    for intent, phrases in _ROUTES.items():
-        for phrase in phrases:
-            if phrase.lower().strip() == text_norm:
-                return intent, 1.0
+    intent = _EXACT_MAP.get(text_norm)
+    if intent is not None:
+        return intent, 1.0
     return None
 
 
-# ── Fuzzy fallback ─────────────────────────────────────────
-_fuzzy_index: list[tuple[str, Intent]] | None = None
+_fuzzy_phrases: list[str] | None = None
+_fuzzy_intents: list[Intent] | None = None
 
 
-def _build_fuzzy_index() -> list[tuple[str, Intent]]:
-    index: list[tuple[str, Intent]] = []
-    for intent, phrases in _ROUTES.items():
-        for phrase in phrases:
-            p = phrase.lower().strip()
-            if p:
-                index.append((p, intent))
-    return index
+def _ensure_fuzzy_index() -> None:
+    global _fuzzy_phrases, _fuzzy_intents
+    if _fuzzy_phrases is not None:
+        return
+    phrases: list[str] = []
+    intents: list[Intent] = []
+    for phrase, intent in _EXACT_MAP.items():
+        phrases.append(phrase)
+        intents.append(intent)
+    _fuzzy_phrases = phrases
+    _fuzzy_intents = intents
 
 
 def _fuzzy_fallback(text: str) -> tuple[Intent, float] | None:
-    global _fuzzy_index
     if not text:
         return None
     text_norm = text.lower().strip()
     if not text_norm:
         return None
-    if _fuzzy_index is None:
-        _fuzzy_index = _build_fuzzy_index()
-    if not _fuzzy_index:
+    _ensure_fuzzy_index()
+    if not _fuzzy_phrases or not _fuzzy_intents:
         return None
 
-    best_score = 0.0
-    best_intent: Intent | None = None
-    for phrase, intent in _fuzzy_index:
-        score = difflib.SequenceMatcher(None, text_norm, phrase).ratio()
-        if score > best_score:
-            best_score = score
-            best_intent = intent
-    if best_score >= _FUZZY_FALLBACK_THRESHOLD and best_intent is not None:
-        return best_intent, best_score
-    return None
+    try:
+        from rapidfuzz import process as rf_process, fuzz as rf_fuzz
+        res = rf_process.extractOne(text_norm, _fuzzy_phrases, scorer=rf_fuzz.ratio)
+        if res is not None:
+            _, score_100, idx = res
+            score = float(score_100) / 100.0
+            if score >= _FUZZY_FALLBACK_THRESHOLD:
+                return _fuzzy_intents[idx], score
+        return None
+    except ImportError:
+        best_score = 0.0
+        best_intent: Intent | None = None
+        for phrase, intent in zip(_fuzzy_phrases, _fuzzy_intents):
+            score = difflib.SequenceMatcher(None, text_norm, phrase).ratio()
+            if score > best_score:
+                best_score = score
+                best_intent = intent
+        if best_score >= _FUZZY_FALLBACK_THRESHOLD and best_intent is not None:
+            return best_intent, best_score
+        return None
 
 
-# ── Пост-правила ───────────────────────────────────────────
 _VOLUME_DOWN_WORDS = ("уменьши", "убавь", "тише", "потише", "прикрути", "минимум")
 _VOLUME_UP_WORDS = ("увеличь", "прибавь", "громче", "погромче", "максимум")
-_RECYCLE_WORDS = ("корзин", "мусорк", "ведр")   # FIX: + "ведр"
+_RECYCLE_WORDS = ("корзин", "мусорк", "ведр")
 _DISK_WORDS = ("диск",)
 _SMALLTALK_AS_SYSTEM = ("как дела", "как жизнь", "как настроение", "как ты")
 _LLM_QUESTION_WORDS = ("что такое", "что значит", "объясни", "почему")
-# APP_OPEN / APP_CLOSE (2026-11-19): разводим по глаголу.
 _APP_OPEN_WORDS = ("открой", "открыть", "запусти", "запустить", "подними", "стартуй")
 _APP_CLOSE_WORDS = ("закрой", "закрыть", "выключи", "выключить", "заверши", "убей", "сверни")
+_WAVE_MARKERS = ("мою волну", "моя волна", "русскую волну", "русская волна")
 
 
 def _apply_post_rules(text: str, intent: Intent) -> Intent:
-    """Чинит известные пары, где модель стабильно путается."""
     t = text.lower()
 
     if intent in (Intent.VOLUME_UP, Intent.VOLUME_DOWN):
@@ -201,21 +167,19 @@ def _apply_post_rules(text: str, intent: Intent) -> Intent:
         if any(w in t for w in _LLM_QUESTION_WORDS):
             return Intent.LLM_QUESTION
 
-    # APP_OPEN / APP_CLOSE (2026-11-19): только если ONNX уже выбрал
-    # один из этих двух интентов. CLOSE — первым: «выключи» не должно
-    # улететь в OPEN.
     if intent in (Intent.APP_OPEN, Intent.APP_CLOSE):
         if any(w in t for w in _APP_CLOSE_WORDS):
             return Intent.APP_CLOSE
         if any(w in t for w in _APP_OPEN_WORDS):
             return Intent.APP_OPEN
 
+    if intent == Intent.MUSIC_PLAY and any(m in t for m in _WAVE_MARKERS):
+        return Intent.MUSIC_WAVE
+
     return intent
 
 
-# ── ONNX ───────────────────────────────────────────────────
 def _init_setfit():
-    """Загрузить ONNX-модель + tokenizers + labels."""
     global _onnx_session, _onnx_tokenizer, _onnx_labels
     if _onnx_session is not None:
         return _onnx_session
@@ -259,7 +223,6 @@ def _init_setfit():
 
 
 def _setfit_predict(text: str) -> tuple[Intent, float] | None:
-    """ONNX-инференс + confidence."""
     session = _init_setfit()
     if session is None:
         return None
@@ -301,12 +264,10 @@ def _setfit_predict(text: str) -> tuple[Intent, float] | None:
         return None
 
 
-# ── resolve ────────────────────────────────────────────────
 def resolve(text: str) -> tuple[Intent, float]:
     if not text:
         return Intent.UNKNOWN, 0.0
 
-    # 1. Exact-first.
     exact = _exact_match(text)
     if exact is not None:
         intent, conf = exact
@@ -314,11 +275,9 @@ def resolve(text: str) -> tuple[Intent, float]:
             tag="BRAIN")
         return intent, conf
 
-    # 2. ONNX.
     setfit = _setfit_predict(text)
     if setfit is not None:
         intent, conf = setfit
-        # 3. Пост-правила.
         intent_fixed = _apply_post_rules(text, intent)
         if intent_fixed != intent:
             log(f"intent: «{text}» → {intent.value} → {intent_fixed.value} "
@@ -328,7 +287,6 @@ def resolve(text: str) -> tuple[Intent, float]:
             log(f"intent: «{text}» → {intent.value} "
                 f"(onnx, conf={conf:.2f})", tag="BRAIN")
             return intent, conf
-        # 4. Fuzzy fallback, если ONNX не уверен.
         fuzzy = _fuzzy_fallback(text)
         if fuzzy is not None:
             fi, fc = fuzzy
@@ -337,7 +295,6 @@ def resolve(text: str) -> tuple[Intent, float]:
             return fi, fc
         return Intent.UNKNOWN, conf
 
-    # ONNX недоступен — сразу fuzzy.
     fuzzy = _fuzzy_fallback(text)
     if fuzzy is not None:
         fi, fc = fuzzy
@@ -348,13 +305,11 @@ def resolve(text: str) -> tuple[Intent, float]:
 
 
 def warmup() -> bool:
-    """Прогреть ONNX (загрузить сессию + tokenizer + первый predict)."""
     try:
         session = _init_setfit()
         if session is None:
             log("intent: warmup — ONNX не загрузился", tag="BRAIN", level="WARN")
             return False
-        # первый predict — прогрев ONNX-сессии
         _ = _setfit_predict("прогрев")
         log("intent: warmup — ONNX готов", tag="BRAIN")
         return True

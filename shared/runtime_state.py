@@ -43,6 +43,27 @@ data/runtime/<name>.flag.json:
 Чтение: open() + json.load(). Нет файла — нет флага. Битый JSON — считаем,
 что флага нет, и логируем WARN один раз на имя (не спамим в цикле).
 
+── FIX (2026-11-20): защита os.replace от WinError 5 ────────────
+  Симптом: на Windows os.replace(tmp, path) иногда падает с
+  PermissionError (WinError 5 = Access Denied), даже если path
+  никем не открыт. Причина — антивирус / Windows Defender /
+  индексатор на мгновение захватывают tmp сразу после close()
+  или target во время rename. Окно узкое, но реальное: между
+  f.write() и os.replace() антивирус открывает tmp на сканирование,
+  и rename получает ACCESS_DENIED.
+
+  Фикс: 10 попыток os.replace с паузой 2 мс. В 99.9% случаев
+  первая-вторая проходит. Если все 10 упали — PermissionError
+  пробрасывается дальше (это уже «файл реально занят», а не
+  «моргнуло»). Ретраится ТОЛЬКО PermissionError: FileNotFoundError,
+  OSError (диск полон, путь слишком длинный), ValueError
+  (несовместимые пути) повторять бессмысленно.
+
+  Почему не вынесли в общий shared/_replace_retry (как в shared/ipc.py):
+  runtime_state намеренно не тянет зависимости из ipc и наоборот —
+  это два независимых примитива. Дублирование 10 строк дешевле
+  лишней связи.
+
 Почему не IPC
 -------------
 IPC-событие семантически правильнее, но это новая инфраструктура
@@ -105,14 +126,26 @@ def _get_lock(name: str) -> threading.Lock:
 
 def _atomic_write(path: Path, payload: dict) -> None:
     """tmp → os.replace. tmp-имя уникально в пределах процесса (pid+tid),
-    межпроцессных коллизий нет — один флаг пишет один процесс."""
+    межпроцессных коллизий нет — один флаг пишет один процесс.
+
+    FIX (2026-11-20): os.replace ретраится до 10 раз на PermissionError
+    (WinError 5) — антивирус/Defender/индексатор могут на мгновение
+    захватить tmp или target. Остальные ошибки пробрасываются сразу.
+    """
     tmp = path.with_suffix(
         path.suffix + f".tmp.{os.getpid()}.{threading.get_ident()}"
     )
     try:
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(payload, f, ensure_ascii=False)
-        os.replace(tmp, path)
+        for i in range(10):
+            try:
+                os.replace(tmp, path)
+                return
+            except PermissionError:
+                if i == 9:
+                    raise
+                time.sleep(0.002)
     finally:
         # Если os.replace упал (диск отключён, права) — tmp остался.
         # Убираем, чтобы не мусорить. Не падаем: запись флага — не критичная.

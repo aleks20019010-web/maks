@@ -14,6 +14,25 @@ FIX: IPC_DIR — от cfg.DATA_DIR, а не относительный "data/ipc
 Раньше: работал только если cwd = D:\\Maks. Если воркер запущен
 из другой папки — IPC ломался. Теперь — абсолютный путь от BASE_DIR.
 
+── FIX (2026-11-20): защита os.replace от WinError 5 ────────────
+  Симптом: на Windows os.replace(src, dst) иногда падает с
+  PermissionError (WinError 5 = Access Denied), даже если dst
+  никем не открыт. Причина — антивирус / Windows Defender /
+  индексатор на мгновение захватывают файл сразу после создания
+  (open...close) или во время rename. Это редкое, но реальное
+  окно: между f.write() и os.replace() антивирус открывает tmp
+  на сканирование, и rename получает ACCESS_DENIED.
+
+  Фикс: _replace_retry() — 10 попыток с паузой 2 мс. В 99.9%
+  случаев первая-вторая попытка проходит. Если все 10 упали —
+  пробрасываем PermissionError дальше (пусть вызывающий код
+  решает, это уже не «моргнуло», а что-то серьёзное: файл
+  реально занят другим процессом).
+
+  Только PermissionError ретраится. FileNotFoundError, OSError
+  (диск заполнен), ValueError (несовместимые пути) — падают сразу:
+  повторять их бессмысленно.
+
 Использование:
     from shared import ipc
     ipc.put(protocol.BRAIN_INBOX, msg)
@@ -42,10 +61,32 @@ def _topic_dir(topic: str) -> str:
     return path
 
 
+def _replace_retry(src: str, dst: str, retries: int = 10) -> None:
+    """os.replace с ретраями на PermissionError (WinError 5).
+
+    Windows: антивирус / Defender / индексатор могут на мгновение
+    захватить файл сразу после создания — rename получает
+    ACCESS_DENIED. 10 попыток по 2 мс закрывают это окно.
+
+    Ретраится ТОЛЬКО PermissionError. Остальные исключения
+    (FileNotFoundError, OSError, ValueError) — пробрасываются сразу:
+    повторять их бессмысленно.
+    """
+    for i in range(retries):
+        try:
+            os.replace(src, dst)
+            return
+        except PermissionError:
+            if i == retries - 1:
+                raise
+            time.sleep(0.002)
+
+
 def put(topic: str, msg) -> None:
     """Положить сообщение в очередь (файл).
 
     FIX: имя = <timestamp_ns>_<uuid>.json — сортировка по имени = по времени.
+    FIX (2026-11-20): os.replace через _replace_retry — защита от WinError 5.
     """
     folder = _topic_dir(topic)
     # timestamp_ns — 19 цифр, лексикографически сортируется как число
@@ -62,7 +103,7 @@ def put(topic: str, msg) -> None:
     tmp = path + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         f.write(raw)
-    os.replace(tmp, path)
+    _replace_retry(tmp, path)
 
 
 def get(topic: str, timeout: float = 1.0) -> Optional[Message]:

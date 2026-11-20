@@ -1,31 +1,5 @@
 # brain/nlu/logging.py
 # Запись DiagnosticEvent в logs/nlu.log.
-#
-# ПОЧЕМУ ОТДЕЛЬНЫЙ ФАЙЛ, А НЕ shared/log.py:
-#   shared/log.py — общий лог (data/logs/jarvis.log). NLU — отдельный,
-#   структурированный поток: stage / intent / entity_state / decision /
-#   confidence. Его хочется грепать отдельно (`grep "stage=entity" nlu.log`),
-#   не мешая с TTS/ASR/MUSIC. Плюс — формат отличается: не «текст», а
-#   key=value пары, чтобы парсить.
-#
-# ЧЕГО НЕ ДЕЛАЕТ:
-#   - не форматирует текст для пользователя (это responses/*.json)
-#   - не пишет в jarvis.log (это shared/log.py)
-#   - не хранит историю (это NLUContext.history)
-#   Только: DiagnosticEvent → строка → logs/nlu.log + stderr.
-#
-# УРОВНИ:
-#   DEBUG — каждый этап (normalizer, intent, entity, decision) для отладки.
-#   INFO  — итог pipeline (intent + decision + confidence).
-#   WARN  — UNRESOLVED, AMBIGUOUS, FALLBACK, TTL истёк.
-#   ERROR — исключение в pipeline.
-#
-# ФОРМАТ:
-#   [2026-10-30 14:23:11] [INFO] [stage=pipeline] [intent=MUSIC_PLAY]
-#     [decision=EXECUTE] [conf=0.87] reason=FOUND artist='Ария' → play_artist
-#
-#   data-поля (intent, decision, conf, entity_state) — key=value, чтобы
-#   `grep "intent=MUSIC_PLAY" nlu.log` работал.
 
 import os
 import threading
@@ -35,29 +9,19 @@ from shared import config as cfg
 from brain.nlu.types import DiagnosticEvent
 
 
-# ── Файл ────────────────────────────────────────────────────
-# Отдельно от data/logs/jarvis.log — чтобы NLU грепался независимо.
 NLU_LOG_FILE = cfg.LOGS_DIR / "nlu.log"
+_MAX_LOG_BYTES = 5 * 1024 * 1024  # 5 МБ
 
-# Порог: ниже — не пишем. Можно поднять до "WARN" в проде, чтобы не
-# раздувать лог. По умолчанию "DEBUG" — как в architecture.md.
 _MIN_LEVEL = os.environ.get("MAKS_NLU_LOG_LEVEL", "DEBUG").upper()
-
 _LEVEL_ORDER = {"DEBUG": 0, "INFO": 1, "WARN": 2, "ERROR": 3}
-
 _write_lock = threading.Lock()
 
 
 def _should_log(level: str) -> bool:
-    """Проверить, писать ли событие этого уровня."""
     return _LEVEL_ORDER.get(level, 1) >= _LEVEL_ORDER.get(_MIN_LEVEL, 0)
 
 
 def _format_data(data: dict) -> str:
-    """dict → key=value пары. None и пустые — пропускаем.
-
-    Строки с пробелами — в кавычках: artist='Король и Шут'.
-    """
     if not data:
         return ""
     parts = []
@@ -71,11 +35,18 @@ def _format_data(data: dict) -> str:
     return " ".join(parts)
 
 
-def log_diagnostic(event: DiagnosticEvent) -> None:
-    """Записать DiagnosticEvent в logs/nlu.log и stderr.
+def _rotate_if_needed() -> None:
+    try:
+        if NLU_LOG_FILE.exists() and NLU_LOG_FILE.stat().st_size >= _MAX_LOG_BYTES:
+            backup = NLU_LOG_FILE.with_suffix(".log.1")
+            if backup.exists():
+                backup.unlink()
+            NLU_LOG_FILE.replace(backup)
+    except Exception:
+        pass
 
-    Не бросает. Если файл недоступен — пишет в stderr, молча.
-    """
+
+def log_diagnostic(event: DiagnosticEvent) -> None:
     if event is None:
         return
     level = (event.level or "INFO").upper()
@@ -93,22 +64,20 @@ def log_diagnostic(event: DiagnosticEvent) -> None:
     if msg:
         line += f" {msg}"
 
-    # stderr — всегда (для живой отладки)
     try:
         print(line, flush=True)
     except Exception:
         pass
 
-    # Файл — с локом, атомарно не нужно (append).
     try:
         with _write_lock:
+            _rotate_if_needed()
             with open(NLU_LOG_FILE, "a", encoding="utf-8") as f:
                 f.write(line + "\n")
     except Exception:
         pass
 
 
-# ── Удобные обёртки ─────────────────────────────────────────
 def debug(stage: str, message: str = "", **data) -> None:
     log_diagnostic(DiagnosticEvent(stage=stage, level="DEBUG",
                                    message=message, data=data))

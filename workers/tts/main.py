@@ -52,8 +52,15 @@ def _synth(text, out_path, rate=None, pitch=None, emotion=None, cache=True) -> t
     if cache and tts_cache.cache_hit(engine, text, out_path, rate, pitch, emotion):
         return True, True
 
+    if tts_engine.is_network_blocked():
+        if cache:
+            tts_pending.add(text, rate, pitch, emotion)
+        return False, False
+
     t0 = time.time()
     for attempt in range(SYNTH_MAX_ATTEMPTS):
+        if tts_engine.is_network_blocked():
+            break
         if time.time() - t0 >= SYNTH_TOTAL_BUDGET_SEC:
             log(f"tts: бюджет синтеза ({SYNTH_TOTAL_BUDGET_SEC:.1f}с) исчерпан",
                 tag="TTS", level="WARN")
@@ -69,6 +76,8 @@ def _synth(text, out_path, rate=None, pitch=None, emotion=None, cache=True) -> t
                 if cache:
                     tts_cache.cache_save(engine, text, out_path, rate, pitch, emotion)
                 return True, False
+            if tts_engine.is_network_blocked():
+                break
             log(f"tts: попытка {attempt + 1}/{SYNTH_MAX_ATTEMPTS}: не удалось",
                 tag="TTS", level="WARN")
         except Exception as e:
@@ -98,7 +107,7 @@ def _play_with_watchdog(path: str, rate) -> bool:
 
     if t.is_alive():
         log(f"tts: play_tts_file завис >{PLAY_HARD_TIMEOUT_SEC:.0f}с — "
-            f"принудительный выход из _say_one (VLC-поток остаётся)",
+            f"принудительный выход из _say_one",
             tag="TTS", level="ERROR")
         return False
 
@@ -116,15 +125,16 @@ def _say_one(text, rate=None, pitch=None, emotion=None, cache=True) -> bool:
     t_total = time.time()
 
     try:
-        tts_state.set_speaking(True, text)
-        spoke = True
-
         t_synth = time.time()
         ok, from_cache = _synth(text, temp, None, pitch, emotion, cache=cache)
         dt_synth = time.time() - t_synth
         if not ok:
-            log(f"tts: синтез не удался ({dt_synth:.2f}s), пропуск", tag="TTS", level="WARN")
+            if not tts_engine.is_network_blocked():
+                log(f"tts: синтез не удался ({dt_synth:.2f}s), пропуск", tag="TTS", level="WARN")
             return False
+
+        tts_state.set_speaking(True, text)
+        spoke = True
 
         t_play = time.time()
         played = _play_with_watchdog(temp, rate)

@@ -6,9 +6,11 @@ import json
 import time
 
 from shared import config as cfg
+from shared.log import log
 
 
 PENDING_FILE = os.path.join(cfg.DATA_DIR, 'pending_phrases.json')
+_MAX_PENDING = 100
 os.makedirs(os.path.dirname(PENDING_FILE), exist_ok=True)
 
 
@@ -25,10 +27,12 @@ def load() -> list:
 
 def save(items: list):
     try:
-        with open(PENDING_FILE, 'w', encoding='utf-8') as f:
-            json.dump(items, f, ensure_ascii=False, indent=2)
+        tmp = PENDING_FILE + ".tmp"
+        with open(tmp, 'w', encoding='utf-8') as f:
+            json.dump(items[-_MAX_PENDING:], f, ensure_ascii=False, indent=2)
+        os.replace(tmp, PENDING_FILE)
     except Exception as e:
-        print(f"⚠ tts: не могу сохранить pending: {e}")
+        log(f"tts: не могу сохранить pending: {e}", tag="TTS", level="WARN")
 
 
 def add(text, rate=None, pitch=None, emotion=None):
@@ -47,4 +51,5 @@ def add(text, rate=None, pitch=None, emotion=None):
         "added_at": time.time(),
     })
     save(items)
-    print(f"   📝 pending: +1 фраза (всего: {len(items)})")
+    log(f"tts: pending +1 фраза (всего: {min(len(items), _MAX_PENDING)})",
+        tag="TTS", level="DEBUG")

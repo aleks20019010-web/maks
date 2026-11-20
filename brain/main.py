@@ -26,6 +26,21 @@ brain/main.py — ядро Макса.
 ── UI_BRIDGE (2026-11-18): чат-лог команд пользователя ──────────
   В _handle_command() сразу после log(...) добавляется append_chat("user", ...)
   — все распознанные команды попадают в UI-чат с meta=source.
+  Дополнительно update_avatar_telemetry(last_active_ts=time.time()) —
+  аватар в UI «оживает» на каждую команду.
+
+── YANDEX IMPORT BATCH (2026-11-20) ─────────────────────────────
+  Раньше: _do_yandex_import() звал short.fetch_track() на каждый лайк —
+  N сетевых запросов. На 500 лайках это минуты и риск rate-limit.
+  Теперь: сначала фильтруем по existing_ids (что уже есть локально),
+  затем качаем метаданные пачками по 50 через client.tracks(batch) —
+  ~N/50 запросов вместо N. Ошибка одной пачки не валит импорт.
+
+── EXIT (2026-11-20): корректное завершение воркеров ────────────
+  При result == "exit" сначала reminders.stop_worker(), потом
+  _write_exit_flag() и sys.exit(0). Иначе фоновый поток reminders
+  может дописать что-то в файл уже после выхода и оставить мусор
+  или зависнуть на shutdown.
 """
 
 import sys
@@ -175,20 +190,36 @@ def _do_yandex_import():
             log("brain: импорт лайков — пусто", tag="BRAIN")
             return
 
+        # Фильтруем только те track_id, которых ещё нет в локальных лайках
+        existing_ids = {
+            str(item.get("track_id", ""))
+            for item in _lt.get_liked()
+            if item.get("track_id")
+        }
+        missing_ids = [
+            str(s.id) for s in liked.tracks
+            if getattr(s, "id", None) and str(s.id) not in existing_ids
+        ]
+        if not missing_ids:
+            log(f"brain: импорт лайков — новых нет (всего {len(_lt.get_liked())})",
+                tag="BRAIN", level="DEBUG")
+            return
+
         tracks = []
-        for short in liked.tracks:
+        # Загружаем метаданные пачками по 50 треков за 1 запрос вместо N одиночных
+        for i in range(0, len(missing_ids), 50):
+            batch = missing_ids[i:i + 50]
             try:
-                t = short.fetch_track()
-                if not t:
-                    continue
-                artist = ', '.join(a.name for a in t.artists) if t.artists else ""
-                tracks.append({
-                    "artist": artist,
-                    "title": t.title or "",
-                    "track_id": str(t.id) if t.id else "",
-                })
-            except Exception:
-                continue
+                fetched = client.tracks(batch)
+                for t in fetched or []:
+                    artist = ', '.join(a.name for a in t.artists) if t.artists else ""
+                    tracks.append({
+                        "artist": artist,
+                        "title": t.title or "",
+                        "track_id": str(t.id) if t.id else "",
+                    })
+            except Exception as e:
+                log(f"brain: импорт лайков batch: {e}", tag="BRAIN", level="WARN")
 
         added = _lt.merge_from_yandex(tracks)
         log(f"brain: импорт лайков: +{added}, всего {len(_lt.get_liked())}",
@@ -236,9 +267,10 @@ def _handle_command(msg: protocol.Message):
     metrics.inc("commands")
     log(f"brain: команда «{text}» (source={source.value})", tag="BRAIN")
 
-    # ── UI_BRIDGE (2026-11-18): чат-лог команды пользователя ──
-    from shared.ui_bridge import append_chat
+    # ── UI_BRIDGE (2026-11-18): чат-лог команды + телеметрия аватара ──
+    from shared.ui_bridge import append_chat, update_avatar_telemetry
     append_chat("user", text, meta=source.value)
+    update_avatar_telemetry(last_active_ts=time.time())
 
     try:
         result = process_command(text, source=source)
@@ -256,6 +288,11 @@ def _handle_command(msg: protocol.Message):
 
         if result == "exit":
             log("brain: команда exit — остановка", tag="BRAIN")
+            try:
+                from brain import reminders
+                reminders.stop_worker()
+            except Exception:
+                pass
             _write_exit_flag()
             sys.exit(0)
     except SystemExit:

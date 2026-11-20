@@ -1,30 +1,18 @@
 # brain/skills/weather/handlers.py
 # Обработка запросов погоды.
-# Все фразы — через brain/skills/_helpers.
-#
-# A5 (день 29): parse_intent(text) → "now" | "tomorrow".
-#   now → WEATHER_NOW (composer мапит по temp_bucket × precip).
-#   tomorrow → WEATHER_TOMORROW_* (по temp_bucket × precip).
-#
-# FIX (gradus): передаём gradus в respond_and_say.
-#   Фразы «{temp} градусов» → «{temp} {gradus}» → «4 градуса».
 
 from brain.skills._helpers import respond_and_say as _respond_and_say
 from brain.skills.weather.sources import fetch_weather
 from brain.skills.weather.classify import classify
 from brain.skills.weather.intent import parse_intent
+from shared.log import log
 
 
 def _tomorrow_phrase_set(vars_out: dict) -> str:
-    """Выбрать WEATHER_TOMORROW_* по temp_bucket × precip.
-
-    Приоритет: storm/fog/ice/hail/sleet/heavy_rain > snow/rain > clear/cloudy.
-    """
     precip = vars_out.get("precip", "")
     bucket = vars_out.get("temp_bucket", "")
     wind = vars_out.get("wind", "")
 
-    # Экстремальные — всегда
     if precip == "storm":
         return "WEATHER_TOMORROW_STORM"
     if precip == "fog":
@@ -38,11 +26,9 @@ def _tomorrow_phrase_set(vars_out: dict) -> str:
     if precip == "heavy_rain":
         return "WEATHER_TOMORROW_HEAVY_RAIN"
 
-    # Сильный ветер
     if wind in ("strong", "very_strong") and precip in ("clear", "cloudy"):
         return "WEATHER_TOMORROW_WINDY"
 
-    # Дождь/снег по температуре
     if precip == "rain":
         if bucket in ("cold", "freeze"):
             return "WEATHER_TOMORROW_COLD_RAIN"
@@ -54,7 +40,6 @@ def _tomorrow_phrase_set(vars_out: dict) -> str:
     if precip == "drizzle":
         return "WEATHER_TOMORROW_DRIZZLE"
 
-    # Ясно/облачно по температуре
     if bucket == "hot":
         return "WEATHER_TOMORROW_HOT"
     if bucket in ("warm", "mild"):
@@ -73,12 +58,17 @@ def handle_weather_query(text=None):
     """Обработать запрос погоды. Возвращает True, если сработало."""
     when = parse_intent(text)
     data = fetch_weather(when=when)
+    if data is None:
+        log(f"weather: нет данных (when={when})", tag="BRAIN", level="WARN")
+        _respond_and_say("ERROR_GENERIC")
+        return True
+
     vars_out = classify(data)
 
-    print(f"   🌤 weather: when={when} temp={vars_out['temp']} "
-          f"bucket={vars_out['temp_bucket']} "
-          f"precip={vars_out['precip']} "
-          f"wind={vars_out['wind']}")
+    log(f"weather: when={when} temp={vars_out['temp']} "
+        f"bucket={vars_out['temp_bucket']} "
+        f"precip={vars_out['precip']} "
+        f"wind={vars_out['wind']}", tag="BRAIN", level="DEBUG")
 
     if when == "tomorrow":
         phrase_set = _tomorrow_phrase_set(vars_out)
@@ -88,7 +78,7 @@ def handle_weather_query(text=None):
     _respond_and_say(
         phrase_set,
         temp=vars_out["temp"],
-        gradus=vars_out["gradus"],   # новое: «градус/градуса/градусов»
+        gradus=vars_out["gradus"],
         sky=vars_out["sky"],
         wind=vars_out["wind_ru"],
         advice=vars_out["advice"],

@@ -1,47 +1,5 @@
 # brain/skills/llm/skill.py
 # LLM-скил — точка входа.
-#
-# ── АРХИТЕКТУРА (потоки) ──────────────────────────────────────────
-#   FIX (этап 1.7): _tts_worker удалён. Раньше:
-#     brain (главный) → _llm_queue → _llm_worker → _tts_queue →
-#     _tts_worker → _respond_and_say → TTS_INBOX
-#   Теперь:
-#     brain (главный) → _llm_queue → _llm_worker → _respond_and_say
-#     → TTS_INBOX
-#
-#   Почему _tts_worker был лишним:
-#     - _llm_worker ОДИН поток. Параллельности с _tts_worker не было
-#       (последовательная обработка: llm_worker → tts_worker → next).
-#     - _tts_worker держал buffer[req_id] и next_id (ожидание
-#       последовательных req_id). При падении _llm_worker buffer
-#       залипал (next_id не приходил) — «TTS не отвечает».
-#     - 60 строк кода ради ничего.
-#
-#   Что теряем: ничего. respond_and_say (из _helpers) — ipc.put
-#   (файл на диск, 0.01 сек) + engine.respond (1–3 сек композер).
-#   Раньше _tts_worker ждал эти 1–3 сек, теперь _llm_worker ждёт —
-#   разницы нет (оба один поток).
-#
-#   Backpressure: не нужен. ipc.put — не очередь, а папка
-#   (atomic replace). Переполнения нет.
-#
-# ── FIX (этап 0.1): session_open через runtime_state ─────────────
-#   Раньше: flag.write_text(str(time.time())), float(read_text()),
-#   TTL 20.0 в _in_dialog. Работало, но это единственный флаг,
-#   который сделал всё правильно — и то руками.
-#   Теперь: rt.set(FLAG_SESSION_OPEN, True, ttl=20),
-#   rt.exists(FLAG_SESSION_OPEN). TTL внутри runtime_state.
-#
-# FIX 1: очередь TTS не зависает (устарело — _tts_worker удалён).
-# FIX 2 (ПРАВИЛЬНЫЙ): отмена через generation_id.
-# FIX 3: cancel_all() очищает историю диалога напрямую.
-#
-# A2/B1 (день 29): убран "громкость " из COMMAND_PREFIXES (_whitelist.py).
-#   Плюс — страховка в _llm_worker: если LLM вернул ТУ ЖЕ команду, что
-#   пользователь сказал (cmd == user_text), не выполняем повторно.
-#
-# FIX (2026-10-27): _llm_worker — внешний try/except вокруг тела.
-# A3 (день 29): в внешнем except — put СНАЧАЛА (в try/except), log ПОТОМ.
 
 import queue
 import threading
@@ -53,27 +11,27 @@ from shared import runtime_state as rt
 from shared.log import log
 from shared import config as cfg
 from shared.sources import CommandSource
+from shared.ui_bridge import append_chat
 
 from brain.skills.llm import _prompt, _parser, _history, _whitelist
 
 
-# FIX (этап 1.7): _llm_queue — без req_id. _llm_worker сам _respond_and_say.
 _llm_queue: "queue.Queue[tuple[str, bool, int]]" = queue.Queue()
 
 _generation = 0
 _generation_lock = threading.Lock()
 
 _history_lock = threading.Lock()
-
-_engine_ref = None
+_client_lock = threading.Lock()
 
 _workers_started = False
 _workers_lock = threading.Lock()
 
+_NET_COOLDOWN_SEC = 30.0
+_net_blocked_until = 0.0
 
-def set_engine(engine):
-    global _engine_ref
-    _engine_ref = engine
+_client = None
+_client_error = None
 
 
 def cancel_all():
@@ -102,58 +60,54 @@ def _is_cancelled(gen: int) -> bool:
         return _generation != gen
 
 
-_client = None
-_client_error = None
-
-
 def _get_client():
     global _client, _client_error
     if _client is not None:
         return _client
-    if _client_error:
-        return None
 
-    try:
-        from openai import OpenAI
-    except ImportError as e:
-        _client_error = f"openai not installed: {e}"
-        log(f"llm: {_client_error}", tag="BRAIN", level="ERROR")
-        return None
+    with _client_lock:
+        if _client is not None:
+            return _client
+        if _client_error:
+            return None
 
-    key_file = cfg.CONFIG_DIR / "llm_key.txt"
-    if not key_file.exists():
-        _client_error = f"llm_key.txt not found: {key_file}"
-        log(f"llm: {_client_error}", tag="BRAIN", level="ERROR")
-        return None
+        try:
+            from openai import OpenAI
+        except ImportError as e:
+            _client_error = f"openai not installed: {e}"
+            log(f"llm: {_client_error}", tag="BRAIN", level="ERROR")
+            return None
 
-    try:
-        with open(key_file, "r", encoding="utf-8") as f:
-            key = f.read().strip()
-    except Exception as e:
-        _client_error = f"read llm_key.txt: {e}"
-        log(f"llm: {_client_error}", tag="BRAIN", level="ERROR")
-        return None
+        key_file = cfg.CONFIG_DIR / "llm_key.txt"
+        if not key_file.exists():
+            _client_error = f"llm_key.txt not found: {key_file}"
+            log(f"llm: {_client_error}", tag="BRAIN", level="ERROR")
+            return None
 
-    if not key:
-        _client_error = "llm_key.txt is empty"
-        log(f"llm: {_client_error}", tag="BRAIN", level="ERROR")
-        return None
+        try:
+            with open(key_file, "r", encoding="utf-8") as f:
+                key = f.read().strip()
+        except Exception as e:
+            _client_error = f"read llm_key.txt: {e}"
+            log(f"llm: {_client_error}", tag="BRAIN", level="ERROR")
+            return None
 
-    try:
-        _client = OpenAI(api_key=key, base_url="https://api.aitunnel.ru/v1/", timeout=15.0)
-    except Exception as e:
-        _client_error = f"OpenAI init: {e}"
-        log(f"llm: {_client_error}", tag="BRAIN", level="ERROR")
-        return None
+        if not key:
+            _client_error = "llm_key.txt is empty"
+            log(f"llm: {_client_error}", tag="BRAIN", level="ERROR")
+            return None
 
-    return _client
+        try:
+            _client = OpenAI(api_key=key, base_url="https://api.aitunnel.ru/v1/", timeout=15.0)
+        except Exception as e:
+            _client_error = f"OpenAI init: {e}"
+            log(f"llm: {_client_error}", tag="BRAIN", level="ERROR")
+            return None
+
+        return _client
 
 
 def _in_dialog() -> bool:
-    """Диалог открыт после ответа LLM (TTL 20 в runtime_state).
-
-    FIX (этап 0.1): было float(read_text()) < 20.0, стало rt.exists.
-    """
     return rt.exists(rt.FLAG_SESSION_OPEN)
 
 
@@ -206,12 +160,17 @@ def _build_context() -> dict:
 
 
 def _call_llm(user_text: str, detail: bool = False) -> str | None:
+    global _net_blocked_until
+    if time.time() < _net_blocked_until:
+        return None
+
     client = _get_client()
     if client is None:
         return None
 
     t0 = time.time()
-    history = _history.get().get_messages()
+    with _history_lock:
+        history = _history.get().get_messages()
     context = _build_context()
     messages = _prompt.build_messages(user_text, history=history, context=context, detail=detail)
     t1 = time.time()
@@ -230,26 +189,23 @@ def _call_llm(user_text: str, detail: bool = False) -> str | None:
             },
         )
         t3 = time.time()
+        _net_blocked_until = 0.0
         log(f"llm: create {t3-t2:.2f}s", tag="LLM")
         raw = resp.choices[0].message.content
         log(f"llm: raw_len={len(raw) if raw else 0}", tag="LLM")
         return raw
     except Exception as e:
-        log(f"llm: request failed: {e}", tag="BRAIN", level="WARN")
+        err_name = type(e).__name__
+        if "Connection" in err_name or "Timeout" in err_name:
+            _net_blocked_until = time.time() + _NET_COOLDOWN_SEC
+            log(f"llm: нет связи с API ({err_name}) — пауза {_NET_COOLDOWN_SEC:.0f}с",
+                tag="BRAIN", level="WARN")
+        else:
+            log(f"llm: request failed: {e}", tag="BRAIN", level="WARN")
         return None
 
 
 def _llm_worker():
-    """FIX (этап 1.7): без req_id и _tts_queue. Сам _respond_and_say.
-
-    Раньше: _llm_worker → _tts_queue.put((req_id, response)) →
-    _tts_worker (buffer[next_id]) → _respond_and_say.
-    Теперь: _llm_worker → _respond_and_say напрямую.
-
-    При _is_cancelled(gen) — continue (раньше — _tts_queue.put(NO_TTS),
-    чтобы _tts_worker не залип на next_id). Теперь NO_TTS не нужен:
-    следующего req_id нет, _llm_worker просто берёт следующий из очереди.
-    """
     log("llm: llm_worker запущен", tag="BRAIN")
     while True:
         try:
@@ -260,6 +216,10 @@ def _llm_worker():
         try:
             if _is_cancelled(gen):
                 log(f"llm: cancelled before start (gen={gen})", tag="BRAIN")
+                continue
+
+            if time.time() < _net_blocked_until:
+                _respond_and_say("LLM_ERROR")
                 continue
 
             log(f"llm: worker text={user_text!r} detail={detail}", tag="LLM")
@@ -291,10 +251,8 @@ def _llm_worker():
                 cmd = parsed.get("text", "")
                 log(f"llm: command → {cmd!r}", tag="BRAIN")
 
-                # B1: если LLM вернул ту же команду, что пользователь сказал —
-                # не выполняем повторно (router её уже отверг, зацикливание).
                 if cmd.strip().lower() == user_text.strip().lower():
-                    log(f"llm: command == user_text, не выполняем повторно",
+                    log("llm: command == user_text, не выполняем повторно",
                         tag="BRAIN", level="WARN")
                     _respond_and_say("NOT_UNDERSTOOD")
                     continue
@@ -335,11 +293,8 @@ def _llm_worker():
                         _history.get().add("user", user_text)
                         _history.get().add("assistant", text)
 
-                    # FIX (этап 0.1): session_open через runtime_state.
                     rt.set(rt.FLAG_SESSION_OPEN, True, ttl=rt.TTL_SESSION_OPEN)
 
-                    # FIX (этап 1.7): напрямую ipc.put(TTS_INBOX, response).
-                    # Раньше: _tts_queue.put((req_id, response)) → _tts_worker.
                     if response is not None:
                         _send_response(response)
                 except Exception as e:
@@ -362,14 +317,13 @@ def _llm_worker():
 
 
 def _send_response(response):
-    """Отправить response (из process_llm_answer) в TTS.
-
-    FIX (этап 1.7): вынесено из _tts_worker. Раньше _tts_worker делал
-    ipc.put(protocol.say(...)) для response. Теперь _llm_worker.
-    """
     if response is None:
         _respond_and_say("LLM_ERROR")
         return
+    try:
+        append_chat("assistant", response.text, meta="llm")
+    except Exception:
+        pass
     from shared import ipc, protocol
     ipc.put(protocol.TTS_INBOX, protocol.say(
         text=response.text,
@@ -398,9 +352,18 @@ class LLMSkill(Skill):
     priority = 100
 
     def can_handle(self, text: str) -> bool:
-        return False  # LLM — только через _try_llm_fallback, не fast-path
+        return False
 
-    def handle(self, text: str) -> bool:
+    def handle(self, text_or_command) -> bool:
+        from brain.nlu.types import Command
+        if isinstance(text_or_command, Command):
+            text = text_or_command.original_text or text_or_command.normalized_text
+        else:
+            text = text_or_command
+
+        if not text or not isinstance(text, str):
+            return False
+
         _start_workers()
 
         gen = _current_gen()

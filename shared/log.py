@@ -16,8 +16,28 @@
 # потому что jarvis.log пишут все воркеры одновременно (это by design,
 # ротация может «промахнуться» на одном воркере — не страшно, следующий
 # вызов догонит).
+#
+# ── FIX (2026-11-20): ротация на Windows без PermissionError ─────
+#   Симптом: ротация падала с PermissionError (WinError 32/5) —
+#   jarvis.log открыт другими воркерами (brain, asr, tts, music, ui),
+#   os.replace не может переименовать файл, открытый кем-то ещё.
+#   В итоге jarvis.log рос без границы, ротация «проглатывалась»
+#   в except Exception: pass, и лог через неделю — 500 МБ.
+#
+#   Фикс: replace старого jarvis.log → .1 заменён на
+#     shutil.copyfile(jarvis.log, jarvis.log.1) + truncate(jarvis.log).
+#   copyfile читает файл (даже открытый на запись другими процессами —
+#   NTFS разрешает concurrent read), а truncate в "w" — обнуляет
+#   содержимое, оставляя тот же inode. Другие воркеры продолжают
+#   писать в тот же файл (их _file handle валиден), новые строки
+#   идут уже в чистый jarvis.log.
+#
+#   Остальные .1 → .2 → .3 — по-прежнему os.replace: эти файлы
+#   никто не держит открытыми, replace проходит. Если вдруг упадёт
+#   (антивирус, права) — глотаем, не валим логирование.
 
 import os
+import shutil
 import sys
 import threading
 import time
@@ -62,7 +82,13 @@ def _open_file():
 
 def _rotate_if_needed():
     """Проверить размер и ротировать. Под _file_lock, потому что
-    закрывает/открывает _file и делает os.replace."""
+    закрывает/открывает _file и делает os.replace/copyfile.
+
+    FIX (2026-11-20): для Windows — не os.replace старого jarvis.log
+    (его держат открытыми другие воркеры → PermissionError), а
+    copyfile + truncate. Остальные бэкапы (.1 → .2 → .3) — replace,
+    их никто не держит.
+    """
     global _file, _calls_since_check, _last_check_ts
 
     now = time.time()
@@ -94,14 +120,23 @@ def _rotate_if_needed():
 
         # jarvis.log → .1, .1 → .2, ... .N-1 → .N (N = _BACKUP_COUNT)
         try:
-            for i in range(_BACKUP_COUNT, 0, -1):
-                src = _LOG_FILE if i == 1 else _LOG_FILE.with_suffix(f".log.{i - 1}")
-                # with_suffix даёт "jarvis.log.1" — не "jarvis.1". Проверим:
-                # jarvis.log.with_suffix(".log.1") == "jarvis.log.1" — да,
-                # потому что suffix = ".log", замена на ".log.1".
+            # Сдвигаем старые бэкапы: .1 → .2, .2 → .3 (если есть).
+            # Эти файлы никто не держит открытыми — os.replace безопасен.
+            for i in range(_BACKUP_COUNT, 1, -1):
+                src = _LOG_FILE.with_suffix(f".log.{i - 1}")
                 dst = _LOG_FILE.with_suffix(f".log.{i}")
                 if src.exists():
                     os.replace(src, dst)
+
+            # FIX (2026-11-20): jarvis.log → .1 через copyfile + truncate.
+            # os.replace(jarvis.log, jarvis.log.1) на Windows падает с
+            # PermissionError, потому что jarvis.log открыт на запись
+            # другими воркерами. copyfile читает (concurrent read OK),
+            # truncate в "w" обнуляет содержимое, оставляя тот же inode —
+            # другие воркеры продолжают писать в тот же (уже пустой) файл.
+            shutil.copyfile(_LOG_FILE, _LOG_FILE.with_suffix(".log.1"))
+            with open(_LOG_FILE, "w", encoding="utf-8"):
+                pass
         except Exception:
             # Ротация — вспомогательная операция. Если упала (диск,
             # права) — пишем дальше в тот же файл, он вырастет, ну и ладно.
