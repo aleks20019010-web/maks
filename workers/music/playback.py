@@ -1,68 +1,6 @@
 # workers/music/playback.py
 # Воспроизведение: play_index, play_next, play_prev, monitor_player.
 # Плюс refill_one / refill_to_target / warm_up_prefetch.
-#
-# VLC реальный. Music worker играет.
-#
-# ── A2 (день 29): music_playing — живёт в shared/runtime_state ──
-#
-# ── FIX (этап 0.5): warm_up_prefetch ─────────────────────────────
-#   При старте music (и после _reset_playback_state) кладёт локальный
-#   трек в playlist[0] заранее — play_index(0) не ищет 10 сек.
-#
-# ── FIX (этап 0.5): print → log(tag="MUSIC") ────────────────────
-#
-# ── FIX (этап 2.6): music_playing — heartbeat, один писатель ────
-#   Симптом: hot words («дальше», «стоп») без wake работали первые
-#   30 сек трека, потом — только с wake. Причина: TTL_MUSIC_PLAYING
-#   = 30 сек, а set_music_playing() вызывался только в play_index
-#   (старт трека). Трек 3 мин → флаг протухал через 30 сек → ASR
-#   _is_music_playing() = False → hot words не шли в brain.
-#
-#   Архитектурно правильно: music_playing — heartbeat.
-#   Писатели (только в этом файле):
-#     - play_index — ИНИЦИАЛИЗАЦИЯ: set_music_playing() после
-#       mark_ready (первый heartbeat, hot words в первую секунду).
-#     - monitor_player — ПОДДЕРЖАНИЕ: пока state == Playing, раз в
-#       MUSIC_HEARTBEAT_SEC продлевает TTL. При != Playing
-#       (Paused/Stopped/Ended/Opening/Buffering/Error/None) —
-#       clear_music_playing() (если флаг был).
-#   Music упал → monitor_player умер → TTL протухнет за
-#   TTL_MUSIC_PLAYING (= 3 × heartbeat). Music играет → heartbeat →
-#   флаг жив → ASR hot words без wake.
-#
-#   main.py / _reset_playback_state / play_next / play_prev — флаг НЕ
-#   трогают. Только управляют плеером (pause/stop/resume/next/prev).
-#   monitor_player видит результат и обновляет флаг. Единственный
-#   источник правды по поддержанию — monitor_player.
-#
-#   TTL выводится из heartbeat: runtime_state.TTL_MUSIC_PLAYING =
-#   MUSIC_HEARTBEAT_SEC * 3. Не магическое число.
-#
-# ── LIKED_TRACK (v6.5) ──────────────────────────────────────────
-#   В play_index добавлена ветка isinstance(track, LikedTrack) ПЕРЕД
-#   LocalTrack. LikedTrack — ленивая ссылка на лайк (artist, title, id).
-#     - сначала search_local(artist + title) → локальный файл;
-#     - нет локального → download_by_id(track.id) → файл.
-#     - не скачался → skip (idx += 1, attempts += 1).
-#     - memory.remember_play(...) один раз после выбора файла.
-#   Импорт: from workers.music.local import LocalTrack, LikedTrack.
-#
-# ── LOCAL_SEARCH_NEXT (2026-11-11) ──────────────────────────────
-#   play_next: при переходе «дальше» из режимов local_search / single
-#   сбрасывает playlist_mode в "local_search_next" ДО play_index.
-#   Зачем: brain/main.py в music_started говорит PLAY_SEARCH_FOUND
-#   только для mode in ("single", "local_search"). Если после
-#   play_search (mode="local_search") пользователь нажал «дальше»,
-#   без сброса режима TTS снова сказал бы «Нашёл: {artist} — {title}».
-#   С "local_search_next" TTS молчит (не входит в список).
-#
-# ── UI_BRIDGE (2026-11-18) ──────────────────────────────────────
-#   play_index: после старта трека сохраняем в state артиста, название,
-#   обложку (cover_uri/og_image → https URL) и путь к файлу.
-#   monitor_player: раз в секунду публикует прогресс (playing/paused,
-#   artist/title/mode, volume, cover_url, file_path, pos_ms, dur_ms,
-#   eq_preset, eq_name) через shared.ui_bridge.write_music_ui для UI.
 
 import os
 import time
@@ -90,15 +28,10 @@ PREFETCH_WAIT_SEC = 10.0
 MAX_PLAY_ATTEMPTS = 3
 
 DISCOVERY_WAIT_SEC = 3.0
-
-# FIX (этап 2.6): heartbeat music_playing. Единый источник — runtime_state.
-# monitor_player продлевает флаг раз в MUSIC_HEARTBEAT_SEC, пока Playing.
-# TTL = 3 × heartbeat (30 сек), с запасом на 2 пропущенных тика.
 MUSIC_HEARTBEAT_SEC = rt.MUSIC_HEARTBEAT_SEC
 
-
-# ── FIX (2026-11-07): явный vlc.Instance для music ────────────────
 _music_instance = None
+_audio_meta_cache: tuple[str, dict] = ("", {})
 
 
 def _get_music_instance():
@@ -115,9 +48,65 @@ def _get_music_instance():
     return _music_instance
 
 
-# ── FIX (этап 0.1): music_playing через runtime_state ─────────────
-# Единственные вызывающие — play_index (инициализация) и
-# monitor_player (поддержание/снятие). См. шапку модуля.
+def _get_track_audio_meta(file_path: str) -> dict:
+    """Прочитать реальные (bitrate, sample_rate, codec, album, year) из аудиофайла."""
+    global _audio_meta_cache
+    if not file_path:
+        return {}
+    if _audio_meta_cache[0] == file_path:
+        return _audio_meta_cache[1]
+
+    meta: dict = {}
+    if os.path.exists(file_path):
+        ext = os.path.splitext(file_path)[1].lstrip(".").upper()
+        if ext:
+            meta["codec"] = ext
+        try:
+            import mutagen
+            raw = mutagen.File(file_path)
+            info = getattr(raw, "info", None)
+            if info:
+                br = int(getattr(info, "bitrate", 0) or 0)
+                sr = int(getattr(info, "sample_rate", 0) or 0)
+                if br > 0:
+                    meta["bitrate"] = f"{round(br / 1000)} kbps"
+                elif ext:
+                    meta["bitrate"] = ext
+                if sr > 0:
+                    sr_khz = f"{sr / 1000:.1f}".rstrip("0").rstrip(".")
+                    meta["sample_rate"] = f"{sr_khz} kHz"
+
+            easy = mutagen.File(file_path, easy=True)
+            if easy:
+                album = easy.get("album")
+                date = easy.get("date")
+                if album:
+                    meta["album"] = str(album[0]).strip()
+                if date:
+                    meta["year"] = str(date[0]).strip()[:4]
+        except Exception:
+            pass
+
+    if ("bitrate" not in meta or "sample_rate" not in meta) and music._media is not None:
+        try:
+            tracks = music._media.get_tracks_info() or []
+            for t in tracks:
+                if getattr(t, "type", None) == vlc.TrackType.audio:
+                    br = int(getattr(t, "bitrate", 0) or 0)
+                    sr = int(getattr(t, "rate", 0) or 0)
+                    if br > 0 and "bitrate" not in meta:
+                        meta["bitrate"] = f"{round(br / 1000)} kbps"
+                    if sr > 0 and "sample_rate" not in meta:
+                        sr_khz = f"{sr / 1000:.1f}".rstrip("0").rstrip(".")
+                        meta["sample_rate"] = f"{sr_khz} kHz"
+                    break
+        except Exception:
+            pass
+
+    _audio_meta_cache = (file_path, meta)
+    return meta
+
+
 def set_music_playing():
     rt.set(rt.FLAG_MUSIC_PLAYING, True, ttl=rt.TTL_MUSIC_PLAYING)
 
@@ -152,7 +141,6 @@ def _wait_discovery_tts(timeout: float = DISCOVERY_WAIT_SEC) -> bool:
     return False
 
 
-# ── FIX (этап 0.5): warm_up_prefetch ────────────────────────
 def warm_up_prefetch():
     if not cfg.MUSIC_AVAILABLE:
         return
@@ -209,14 +197,7 @@ def refill_to_target():
 
 
 def play_index(idx, announce=False):
-    """Воспроизвести трек по индексу. Под state.play_lock.
-
-    Возвращает True, если трек реально начал играть, False — если не удалось.
-
-    FIX (этап 2.6): флаг music_playing ставит ТОЛЬКО этот метод (после
-    mark_ready) и monitor_player (heartbeat). При неудаче — НЕ сбрасываем
-    здесь: monitor_player увидит != Playing (Ended/None) и сбросит.
-    """
+    """Воспроизвести трек по индексу. Под state.play_lock."""
     with state.play_lock:
         attempts = 0
         while attempts < MAX_PLAY_ATTEMPTS:
@@ -232,7 +213,6 @@ def play_index(idx, announce=False):
             _title_for_mind = ""
             _is_discovery = getattr(track, "_is_discovery", False)
 
-            # ── LikedTrack (лайк, ленивый) ──────────────────────
             if isinstance(track, LikedTrack):
                 from workers.music.search import search_local
                 query = f"{track.artist} {track.title}".strip()
@@ -374,9 +354,6 @@ def play_index(idx, announce=False):
                 return False
 
             music.mark_ready()
-            # FIX (этап 2.6): ИНИЦИАЛИЗАЦИЯ флага. Первый heartbeat —
-            # hot words в первую секунду. Дальше monitor_player раз в
-            # MUSIC_HEARTBEAT_SEC продлевает TTL (пока Playing).
             set_music_playing()
 
             state.current_track_title = title
@@ -384,7 +361,6 @@ def play_index(idx, announce=False):
             state.playlist_index = idx
             state.last_play_start_time = time.time()
 
-            # ── UI_BRIDGE (2026-11-18): метаданные текущего трека ──
             cover_url = ""
             raw_cover = getattr(track, "cover_uri", None) or getattr(track, "og_image", None)
             if isinstance(raw_cover, str) and raw_cover:
@@ -417,16 +393,6 @@ def play_index(idx, announce=False):
 
 
 def play_next(from_finish=False):
-    """Перейти к следующему треку.
-
-    FIX (этап 2.6): флаг music_playing НЕ трогаем — monitor_player увидит
-    результат (Playing → set, Ended/None → clear).
-
-    FIX (2026-11-11): при переходе «дальше» из режимов local_search /
-    single сбрасываем playlist_mode в "local_search_next" ДО play_index.
-    Иначе brain/main.py::_handle_event("music_started", mode=...) снова
-    сказал бы PLAY_SEARCH_FOUND («Нашёл: ...») при каждом next.
-    """
     now = time.time()
     if now - state.last_next_time < cfg.NEXT_DEBOUNCE_SEC:
         log("debounce", tag="MUSIC", level="DEBUG")
@@ -470,9 +436,6 @@ def play_next(from_finish=False):
         except Exception as e:
             log(f"mind_stream.on_skip: {e}", tag="MUSIC", level="WARN")
 
-    # FIX (2026-11-11): TTS PLAY_SEARCH_FOUND — только для первого
-    # трека после play_search. При «дальше»/play_next — сбрасываем
-    # режим, чтобы TTS не срабатывал повторно.
     if state.playlist_mode in ("local_search", "single"):
         state.playlist_mode = "local_search_next"
 
@@ -520,19 +483,7 @@ def play_prev():
 
 
 def monitor_player():
-    """Мониторинг плеера + heartbeat music_playing.
-
-    FIX (этап 2.6): единственный писатель music_playing по поддержанию.
-    - state == Playing: раз в MUSIC_HEARTBEAT_SEC → set_music_playing()
-      (продление TTL). Первый раз — сразу, если флага не было.
-    - state != Playing (Paused/Stopped/Ended/Opening/Buffering/Error):
-      clear_music_playing() (если флаг был).
-    - st is None (плеера нет): clear_music_playing() (если был).
-    - Ended (переход): play_next — как раньше.
-
-    UI_BRIDGE (2026-11-18): раз в секунду публикует прогресс трека
-    в shared.ui_bridge.write_music_ui, включая eq_preset/eq_name.
-    """
+    """Мониторинг плеера + heartbeat music_playing + публикация реальных метаданных."""
     last_state = None
     last_playing_refresh = 0.0
     last_flag_alive = False
@@ -552,7 +503,6 @@ def monitor_player():
             last_state = None
             continue
 
-        # ── UI_BRIDGE (2026-11-18): публикация прогресса для UI ──
         try:
             from shared.ui_bridge import write_music_ui
             pos_ms = 0
@@ -563,11 +513,17 @@ def monitor_player():
                     dur_ms = max(0, int(music.player.get_length()))
                 except Exception:
                     pass
+            audio_meta = _get_track_audio_meta(state.current_file_path)
             write_music_ui({
                 "playing": st == vlc.State.Playing,
                 "paused": st == vlc.State.Paused,
                 "artist": state.current_artist,
                 "title": state.current_title_only,
+                "album": audio_meta.get("album", ""),
+                "year": audio_meta.get("year", ""),
+                "bitrate": audio_meta.get("bitrate", ""),
+                "sample_rate": audio_meta.get("sample_rate", ""),
+                "codec": audio_meta.get("codec", ""),
                 "mode": state.playlist_mode or "",
                 "volume": music.get_volume(),
                 "cover_url": state.current_cover_url,
@@ -582,20 +538,16 @@ def monitor_player():
 
         now = time.time()
 
-        # ── Heartbeat: Playing → продлевать TTL ──
         if st == vlc.State.Playing:
             if (not last_flag_alive) or ((now - last_playing_refresh) >= MUSIC_HEARTBEAT_SEC):
                 set_music_playing()
                 last_playing_refresh = now
                 last_flag_alive = True
         else:
-            # Paused / Stopped / Ended / Opening / Buffering / Error —
-            # музыка не играет. clear (если флаг был).
             if last_flag_alive:
                 clear_music_playing()
                 last_flag_alive = False
 
-        # ── Ended: переход к следующему треку ──
         if st == vlc.State.Ended and last_state != vlc.State.Ended:
             log("⏭ Трек закончился...", tag="MUSIC")
 

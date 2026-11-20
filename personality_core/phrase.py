@@ -31,6 +31,7 @@ import os
 import json
 import math
 import random
+import re
 from typing import Optional
 from datetime import datetime
 
@@ -227,12 +228,14 @@ class PhrasePicker:
         return result
 
     def _substitute(self, text: str, kw: dict) -> str:
-        if not text:
-            return ""
+        if not text or "{" not in text:
+            return text
         subs = {
             "greeting": _time_of_day_greeting(),
         }
         subs.update({k: str(v) if v is not None else "" for k, v in kw.items()})
-        for k, v in subs.items():
-            text = text.replace("{" + k + "}", v)
-        return text
+        return re.sub(
+            r"\{([a-zA-Z0-9_]+)\}",
+            lambda m: subs[m.group(1)] if m.group(1) in subs else m.group(0),
+            text,
+        )

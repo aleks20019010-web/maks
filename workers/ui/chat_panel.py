@@ -1,6 +1,6 @@
 # workers/ui/chat_panel.py
-# Нижняя компактная панель окна (1/4 высоты): лента диалога,
-# индикаторы состояния воркеров, быстрые чипсы-команды и поле ввода.
+# Нижняя панель диалога: быстрые команды с иконками, лента сообщений с аватарками,
+# поле ввода и нижний мини-визуализатор.
 
 import json
 import os
@@ -17,57 +17,61 @@ from shared.log import log
 from shared.sources import CommandSource
 from shared.ui_bridge import CHAT_LOG_FILE
 from workers.ui.theme import make_vector_icon
-from workers.ui.widgets import ChatBubble
+from workers.ui.widgets import ChatBubble, SpectrumVisualizerWidget
 
 
-class ChatPanel(QFrame):
-    """Компактная панель диалога, занимающая 1/4 высоты окна."""
+class ChatPanel(QWidget):
+    """Нижняя панель диалога в неоново-космическом стиле."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setObjectName("glassCard")
         self._chat_offset = 0
         self._build_ui()
         self._load_initial_chat()
 
     def _build_ui(self):
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 8, 12, 10)
-        layout.setSpacing(6)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
 
-        # Компактная шапка: заголовок + чипсы + статус воркеров в одну строку
-        top_row = QHBoxLayout()
-        top_row.setSpacing(6)
+        # 1. Стеклянная карточка ленты диалога (справа место под неоновый скрипичный ключ)
+        chat_row = QHBoxLayout()
+        chat_row.setContentsMargins(0, 0, 56, 0)
 
-        chat_header = QLabel("Диалог")
-        chat_header.setStyleSheet(
-            "color: #cbd5e1; font-size: 11px; font-weight: 700; padding-left: 2px; background: transparent;"
-        )
-        top_row.addWidget(chat_header)
+        chat_card = QFrame()
+        chat_card.setObjectName("glassCard")
+        card_lay = QVBoxLayout(chat_card)
+        card_lay.setContentsMargins(10, 8, 10, 8)
+        card_lay.setSpacing(6)
+
+        chips_row = QHBoxLayout()
+        chips_row.setSpacing(6)
 
         quick_commands = [
-            ("Волна", "включи мою волну"),
-            ("Лайки", "включи мою музыку"),
-            ("Трек?", "что сейчас играет"),
-            ("Стоп", "стоп"),
+            ("Музыка", "note", "включи музыку"),
+            ("Волна", "wave", "включи мою волну"),
+            ("Погода", "weather", "какая погода"),
+            ("Радио", "radio", "включи радио"),
         ]
-        for label, cmd in quick_commands:
-            chip = QPushButton(label)
-            chip.setObjectName("chipBtn")
+        for label, icon_kind, cmd in quick_commands:
+            chip = QPushButton(f" {label}")
+            chip.setObjectName("quickCmdChip")
+            chip.setIcon(make_vector_icon(icon_kind, 14, "#7dd3fc"))
+            chip.setIconSize(QSize(14, 14))
             chip.setCursor(Qt.CursorShape.PointingHandCursor)
+            chip.setToolTip(f"Отправить команду: «{cmd}»")
             chip.clicked.connect(lambda _, c=cmd: self._send_brain_cmd(c))
-            top_row.addWidget(chip)
+            chips_row.addWidget(chip)
 
-        top_row.addStretch(1)
+        chips_row.addStretch(1)
 
         self.lbl_workers = QLabel("ASR ●  MUSIC ●  TTS ●")
         self.lbl_workers.setStyleSheet(
-            "color: rgba(148, 163, 184, 0.65); font-size: 10px; font-weight: 600; background: transparent;"
+            "color: rgba(148, 163, 184, 0.72); font-size: 10px; font-weight: 600; background: transparent;"
         )
-        top_row.addWidget(self.lbl_workers)
-        layout.addLayout(top_row)
+        chips_row.addWidget(self.lbl_workers)
+        card_lay.addLayout(chips_row)
 
-        # Компактная лента сообщений
         self.scroll = QScrollArea()
         self.scroll.setObjectName("chatScroll")
         self.scroll.setWidgetResizable(True)
@@ -76,16 +80,19 @@ class ChatPanel(QFrame):
         self.chat_container = QWidget()
         self.chat_container.setStyleSheet("background: transparent;")
         self.chat_layout = QVBoxLayout(self.chat_container)
-        self.chat_layout.setContentsMargins(2, 1, 2, 1)
-        self.chat_layout.setSpacing(4)
+        self.chat_layout.setContentsMargins(2, 2, 2, 2)
+        self.chat_layout.setSpacing(6)
         self.chat_layout.addStretch(1)
 
         self.scroll.setWidget(self.chat_container)
-        layout.addWidget(self.scroll, 1)
+        card_lay.addWidget(self.scroll, 1)
 
-        # Строка ввода текста
+        chat_row.addWidget(chat_card, 1)
+        layout.addLayout(chat_row, 1)
+
+        # 2. Строка ввода текста с круглой неоновой кнопкой отправки
         input_row = QHBoxLayout()
-        input_row.setSpacing(6)
+        input_row.setSpacing(8)
 
         self.input_box = QLineEdit()
         self.input_box.setObjectName("chatInput")
@@ -94,15 +101,47 @@ class ChatPanel(QFrame):
 
         btn_send = QPushButton()
         btn_send.setObjectName("sendBtn")
-        btn_send.setIcon(make_vector_icon("send", 16, "#ffffff"))
-        btn_send.setIconSize(QSize(16, 16))
-        btn_send.setFixedSize(32, 32)
+        btn_send.setIcon(make_vector_icon("send", 17, "#ffffff"))
+        btn_send.setIconSize(QSize(17, 17))
+        btn_send.setFixedSize(36, 36)
         btn_send.setCursor(Qt.CursorShape.PointingHandCursor)
         btn_send.clicked.connect(self._on_send_input)
 
         input_row.addWidget(self.input_box, 1)
         input_row.addWidget(btn_send)
         layout.addLayout(input_row)
+
+        # 3. Нижний компактный спектроанализатор + реальные бейджи качества
+        footer_card = QFrame()
+        footer_card.setObjectName("glassCard")
+        footer_lay = QHBoxLayout(footer_card)
+        footer_lay.setContentsMargins(12, 6, 12, 6)
+        footer_lay.setSpacing(10)
+
+        self.bottom_visualizer = SpectrumVisualizerWidget(24, compact=True)
+        footer_lay.addWidget(self.bottom_visualizer, 1)
+
+        self.lbl_bitrate = QLabel("")
+        self.lbl_bitrate.setObjectName("qualityBadge")
+        self.lbl_bitrate.setVisible(False)
+
+        self.lbl_sr = QLabel("")
+        self.lbl_sr.setObjectName("qualityBadge")
+        self.lbl_sr.setVisible(False)
+
+        footer_lay.addWidget(self.lbl_bitrate)
+        footer_lay.addWidget(self.lbl_sr)
+        layout.addWidget(footer_card)
+
+    def set_audio_info(self, bitrate: str, sample_rate: str, active: bool):
+        br = (bitrate or "").strip()
+        sr = (sample_rate or "").strip()
+        self.lbl_bitrate.setVisible(active and bool(br))
+        self.lbl_sr.setVisible(active and bool(sr))
+        if br:
+            self.lbl_bitrate.setText(f"♫  {br}")
+        if sr:
+            self.lbl_sr.setText(f"ılı  {sr}")
 
     def _send_brain_cmd(self, text: str):
         try:

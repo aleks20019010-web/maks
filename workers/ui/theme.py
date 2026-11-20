@@ -1,6 +1,7 @@
 # workers/ui/theme.py
-# Векторные иконки, обработка обложек, извлечение акцентного цвета и стили приложения.
+# Векторные иконки, обработка обложек, извлечение акцентного цвета и неоново-космические стили.
 
+import math
 import os
 from PySide6.QtCore import Qt, QPointF, QRectF
 from PySide6.QtGui import (
@@ -12,7 +13,7 @@ from shared import config as cfg
 def extract_accent_color(pix: QPixmap) -> QColor:
     """Вычислить насыщенный акцентный цвет из обложки для фонового свечения."""
     if pix.isNull():
-        return QColor("#6366f1")
+        return QColor("#38bdf8")
     img = pix.scaled(
         24, 24,
         Qt.AspectRatioMode.IgnoreAspectRatio,
@@ -31,7 +32,7 @@ def extract_accent_color(pix: QPixmap) -> QColor:
             weight_sum += w
 
     if weight_sum <= 0:
-        return QColor("#6366f1")
+        return QColor("#38bdf8")
 
     color = QColor(
         int(min(255, r_sum / weight_sum)),
@@ -39,7 +40,7 @@ def extract_accent_color(pix: QPixmap) -> QColor:
         int(min(255, b_sum / weight_sum)),
     )
     h, s, v, _ = color.getHsvF()
-    color.setHsvF(h, max(0.45, min(0.85, s)), max(0.45, min(0.78, v)))
+    color.setHsvF(h, max(0.50, min(0.88, s)), max(0.50, min(0.85, v)))
     return color
 
 
@@ -92,26 +93,60 @@ def make_vector_icon(kind: str, size: int = 22, color: str = "#f8fafc") -> QIcon
         path.closeSubpath()
         p.drawPath(path)
 
-    elif kind == "like":
-        pen = QPen(c, 1.8)
+    elif kind == "shuffle":
+        pen = QPen(c, 1.7)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
         pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
         p.setPen(pen)
         p.setBrush(Qt.BrushStyle.NoBrush)
-        w, h = float(size), float(size)
+        p.drawLine(QPointF(size * 0.20, size * 0.32), QPointF(size * 0.42, size * 0.32))
+        p.drawLine(QPointF(size * 0.42, size * 0.32), QPointF(size * 0.62, size * 0.68))
+        p.drawLine(QPointF(size * 0.62, size * 0.68), QPointF(size * 0.80, size * 0.68))
+
+        p.drawLine(QPointF(size * 0.20, size * 0.68), QPointF(size * 0.42, size * 0.68))
+        p.drawLine(QPointF(size * 0.42, size * 0.68), QPointF(size * 0.62, size * 0.32))
+        p.drawLine(QPointF(size * 0.62, size * 0.32), QPointF(size * 0.80, size * 0.32))
+
+        p.drawLine(QPointF(size * 0.72, size * 0.24), QPointF(size * 0.80, size * 0.32))
+        p.drawLine(QPointF(size * 0.72, size * 0.40), QPointF(size * 0.80, size * 0.32))
+        p.drawLine(QPointF(size * 0.72, size * 0.60), QPointF(size * 0.80, size * 0.68))
+        p.drawLine(QPointF(size * 0.72, size * 0.76), QPointF(size * 0.80, size * 0.68))
+
+    elif kind == "like":
+        pen = QPen(c, 1.8)
+        pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        p.setPen(pen)
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawRoundedRect(QRectF(size * 0.22, size * 0.44, size * 0.14, size * 0.34), 2.5, 2.5)
         path = QPainterPath()
-        path.moveTo(w * 0.50, h * 0.78)
-        path.cubicTo(w * 0.14, h * 0.54, w * 0.18, h * 0.22, w * 0.36, h * 0.24)
-        path.cubicTo(w * 0.44, h * 0.25, w * 0.48, h * 0.31, w * 0.50, h * 0.35)
-        path.cubicTo(w * 0.52, h * 0.31, w * 0.56, h * 0.25, w * 0.64, h * 0.24)
-        path.cubicTo(w * 0.82, h * 0.22, w * 0.86, h * 0.54, w * 0.50, h * 0.78)
+        path.moveTo(size * 0.36, size * 0.48)
+        path.lineTo(size * 0.48, size * 0.24)
+        path.cubicTo(size * 0.54, size * 0.22, size * 0.56, size * 0.30, size * 0.53, size * 0.42)
+        path.lineTo(size * 0.74, size * 0.42)
+        path.cubicTo(size * 0.80, size * 0.42, size * 0.80, size * 0.50, size * 0.76, size * 0.54)
+        path.lineTo(size * 0.73, size * 0.72)
+        path.cubicTo(size * 0.71, size * 0.77, size * 0.66, size * 0.78, size * 0.58, size * 0.78)
+        path.lineTo(size * 0.36, size * 0.78)
         p.drawPath(path)
 
     elif kind == "dislike":
         pen = QPen(c, 1.8)
+        pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
         pen.setCapStyle(Qt.PenCapStyle.RoundCap)
         p.setPen(pen)
-        p.drawLine(QPointF(size * 0.28, size * 0.28), QPointF(size * 0.72, size * 0.72))
-        p.drawLine(QPointF(size * 0.72, size * 0.28), QPointF(size * 0.28, size * 0.72))
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawRoundedRect(QRectF(size * 0.64, size * 0.22, size * 0.14, size * 0.34), 2.5, 2.5)
+        path = QPainterPath()
+        path.moveTo(size * 0.64, size * 0.52)
+        path.lineTo(size * 0.52, size * 0.76)
+        path.cubicTo(size * 0.46, size * 0.78, size * 0.44, size * 0.70, size * 0.47, size * 0.58)
+        path.lineTo(size * 0.26, size * 0.58)
+        path.cubicTo(size * 0.20, size * 0.58, size * 0.20, size * 0.50, size * 0.24, size * 0.46)
+        path.lineTo(size * 0.27, size * 0.28)
+        path.cubicTo(size * 0.29, size * 0.23, size * 0.34, size * 0.22, size * 0.42, size * 0.22)
+        path.lineTo(size * 0.64, size * 0.22)
+        p.drawPath(path)
 
     elif kind == "send":
         p.setBrush(c)
@@ -144,11 +179,139 @@ def make_vector_icon(kind: str, size: int = 22, color: str = "#f8fafc") -> QIcon
         p.drawArc(QRectF(size * 0.44, size * 0.32, size * 0.28, size * 0.36), -45 * 16, 90 * 16)
         p.drawArc(QRectF(size * 0.42, size * 0.20, size * 0.44, size * 0.60), -45 * 16, 90 * 16)
 
+    elif kind == "settings":
+        pen = QPen(c, 1.7)
+        p.setPen(pen)
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        ctr = QPointF(size * 0.5, size * 0.5)
+        p.drawEllipse(ctr, size * 0.16, size * 0.16)
+        p.drawEllipse(ctr, size * 0.30, size * 0.30)
+
+    elif kind == "eq":
+        pen = QPen(c, 1.7)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        p.setPen(pen)
+        for idx, x_k in enumerate((0.28, 0.50, 0.72)):
+            p.drawLine(QPointF(size * x_k, size * 0.22), QPointF(size * x_k, size * 0.78))
+            y_knob = size * (0.36 if idx == 0 else (0.62 if idx == 1 else 0.44))
+            p.setBrush(c)
+            p.drawEllipse(QPointF(size * x_k, y_knob), 2.4, 2.4)
+
+    elif kind == "note":
+        p.setBrush(c)
+        p.setPen(Qt.PenStyle.NoPen)
+        p.drawEllipse(QPointF(size * 0.36, size * 0.68), size * 0.13, size * 0.10)
+        p.drawEllipse(QPointF(size * 0.68, size * 0.62), size * 0.13, size * 0.10)
+        p.drawRoundedRect(QRectF(size * 0.45, size * 0.26, size * 0.07, size * 0.42), 1.5, 1.5)
+        p.drawRoundedRect(QRectF(size * 0.77, size * 0.20, size * 0.07, size * 0.42), 1.5, 1.5)
+        path = QPainterPath()
+        path.moveTo(size * 0.45, size * 0.26)
+        path.lineTo(size * 0.84, size * 0.20)
+        path.lineTo(size * 0.84, size * 0.29)
+        path.lineTo(size * 0.45, size * 0.35)
+        path.closeSubpath()
+        p.drawPath(path)
+
+    elif kind == "star":
+        p.setBrush(c)
+        p.setPen(Qt.PenStyle.NoPen)
+        path = QPainterPath()
+        cx, cy = size * 0.5, size * 0.5
+        r_out, r_in = size * 0.37, size * 0.16
+        for i in range(10):
+            ang = -math.pi / 2 + i * math.pi / 5
+            r = r_out if i % 2 == 0 else r_in
+            pt = QPointF(cx + math.cos(ang) * r, cy + math.sin(ang) * r)
+            if i == 0:
+                path.moveTo(pt)
+            else:
+                path.lineTo(pt)
+        path.closeSubpath()
+        p.drawPath(path)
+
+    elif kind == "rock":
+        # Жест «коза» / рок
+        pen = QPen(c, 1.7)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+        p.setPen(pen)
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawRoundedRect(QRectF(size * 0.30, size * 0.46, size * 0.40, size * 0.32), 4.0, 4.0)
+        p.drawRoundedRect(QRectF(size * 0.30, size * 0.20, size * 0.11, size * 0.28), 3.0, 3.0)
+        p.drawRoundedRect(QRectF(size * 0.59, size * 0.22, size * 0.11, size * 0.26), 3.0, 3.0)
+        p.drawLine(QPointF(size * 0.41, size * 0.46), QPointF(size * 0.59, size * 0.46))
+
+    elif kind == "sax":
+        # Саксофон для джаза
+        pen = QPen(c, 1.9)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+        p.setPen(pen)
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        path = QPainterPath()
+        path.moveTo(size * 0.36, size * 0.22)
+        path.lineTo(size * 0.48, size * 0.26)
+        path.lineTo(size * 0.48, size * 0.66)
+        path.cubicTo(size * 0.48, size * 0.78, size * 0.68, size * 0.78, size * 0.68, size * 0.60)
+        path.lineTo(size * 0.74, size * 0.54)
+        p.drawPath(path)
+
+    elif kind == "wave":
+        pen = QPen(c, 1.8)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        p.setPen(pen)
+        heights = (0.20, 0.46, 0.30, 0.56, 0.24)
+        for i, hk in enumerate(heights):
+            x = size * (0.22 + i * 0.14)
+            p.drawLine(QPointF(x, size * (0.5 - hk * 0.5)), QPointF(x, size * (0.5 + hk * 0.5)))
+
+    elif kind == "bars":
+        p.setBrush(c)
+        p.setPen(Qt.PenStyle.NoPen)
+        heights = (0.34, 0.58, 0.44, 0.64)
+        for i, hk in enumerate(heights):
+            x = size * (0.22 + i * 0.15)
+            h_bar = size * hk
+            p.drawRoundedRect(QRectF(x, size * 0.78 - h_bar, size * 0.09, h_bar), 1.5, 1.5)
+
+    elif kind == "user":
+        p.setBrush(c)
+        p.setPen(Qt.PenStyle.NoPen)
+        p.drawEllipse(QPointF(size * 0.5, size * 0.35), size * 0.16, size * 0.16)
+        path = QPainterPath()
+        path.moveTo(size * 0.24, size * 0.76)
+        path.cubicTo(size * 0.24, size * 0.56, size * 0.76, size * 0.56, size * 0.76, size * 0.76)
+        path.closeSubpath()
+        p.drawPath(path)
+
+    elif kind == "weather":
+        # Солнце + облако для команды «Погода»
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QColor("#fbbf24"))
+        p.drawEllipse(QPointF(size * 0.38, size * 0.38), size * 0.16, size * 0.16)
+        p.setBrush(c)
+        p.drawEllipse(QPointF(size * 0.44, size * 0.56), size * 0.16, size * 0.14)
+        p.drawEllipse(QPointF(size * 0.62, size * 0.58), size * 0.14, size * 0.12)
+        p.drawRoundedRect(QRectF(size * 0.30, size * 0.54, size * 0.44, size * 0.16), 5.0, 5.0)
+
+    elif kind == "radio":
+        # Радиовышка / волны для команды «Радио»
+        pen = QPen(c, 1.7)
+        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        p.setPen(pen)
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        ctr = QPointF(size * 0.5, size * 0.46)
+        p.drawArc(QRectF(size * 0.20, size * 0.18, size * 0.60, size * 0.56), 35 * 16, 110 * 16)
+        p.drawArc(QRectF(size * 0.30, size * 0.28, size * 0.40, size * 0.36), 35 * 16, 110 * 16)
+        p.setBrush(c)
+        p.drawEllipse(ctr, 2.5, 2.5)
+        p.drawLine(QPointF(size * 0.5, size * 0.48), QPointF(size * 0.5, size * 0.78))
+
     p.end()
     return QIcon(pix)
 
 
-def make_rounded_pixmap(pix: QPixmap, size: int, radius: int = 22) -> QPixmap:
+def make_rounded_pixmap(pix: QPixmap, size: int, radius: int = 16) -> QPixmap:
     scaled = pix.scaled(
         size, size,
         Qt.AspectRatioMode.KeepAspectRatioByExpanding,
@@ -177,25 +340,25 @@ def make_default_cover(size: int) -> QPixmap:
     p.setRenderHint(QPainter.RenderHint.Antialiasing)
 
     path = QPainterPath()
-    path.addRoundedRect(0, 0, size, size, 22, 22)
+    path.addRoundedRect(0, 0, size, size, 16, 16)
     p.setClipPath(path)
 
     grad = QLinearGradient(0, 0, size, size)
-    grad.setColorAt(0.0, QColor("#1e293b"))
-    grad.setColorAt(0.5, QColor("#312e81"))
-    grad.setColorAt(1.0, QColor("#0f172a"))
+    grad.setColorAt(0.0, QColor("#0f172a"))
+    grad.setColorAt(0.5, QColor("#1e3a8a"))
+    grad.setColorAt(1.0, QColor("#312e81"))
     p.fillRect(0, 0, size, size, grad)
 
     center = QPointF(size / 2, size / 2)
-    p.setPen(QPen(QColor(165, 180, 252, 35), 1.2))
+    p.setPen(QPen(QColor(56, 189, 248, 55), 1.4))
     p.drawEllipse(center, size * 0.36, size * 0.36)
     p.drawEllipse(center, size * 0.24, size * 0.24)
 
-    p.setBrush(QColor("#a5b4fc"))
+    p.setBrush(QColor("#7dd3fc"))
     p.setPen(Qt.PenStyle.NoPen)
-    p.drawEllipse(QPointF(size * 0.44, size * 0.60), 8.5, 6.5)
-    p.drawRoundedRect(QRectF(size * 0.48, size * 0.34, 3.6, size * 0.26), 1.5, 1.5)
-    p.drawRoundedRect(QRectF(size * 0.48, size * 0.34, 14.0, 4.5), 1.5, 1.5)
+    p.drawEllipse(QPointF(size * 0.44, size * 0.60), 7.5, 5.5)
+    p.drawRoundedRect(QRectF(size * 0.48, size * 0.34, 3.2, size * 0.26), 1.5, 1.5)
+    p.drawRoundedRect(QRectF(size * 0.48, size * 0.34, 12.0, 4.0), 1.5, 1.5)
 
     p.end()
     return out
@@ -260,194 +423,253 @@ def make_app_icon() -> QIcon:
 
 APP_STYLESHEET = """
     QWidget#rootWidget {
-        background: qlineargradient(
-            x1:0, y1:0, x2:1, y2:1,
-            stop:0 #070b14, stop:0.5 #0d1526, stop:1 #080d19
-        );
+        background-color: #050a18;
         font-family: "Segoe UI", sans-serif;
     }
     QFrame#glassCard {
-        background-color: rgba(22, 30, 46, 0.74);
-        border: 1px solid rgba(148, 163, 184, 0.16);
-        border-radius: 20px;
+        background-color: rgba(11, 21, 46, 0.72);
+        border: 1px solid rgba(56, 189, 248, 0.45);
+        border-radius: 18px;
     }
     QLabel#modeBadge {
-        background-color: rgba(99, 102, 241, 0.22);
-        color: #c7d2fe;
-        border: 1px solid rgba(129, 140, 248, 0.35);
-        border-radius: 10px;
-        padding: 2px 10px;
+        background-color: rgba(15, 29, 64, 0.85);
+        color: #e0f2fe;
+        border: 1px solid rgba(56, 189, 248, 0.55);
+        border-radius: 12px;
+        padding: 3px 12px;
         font-size: 11px;
         font-weight: 600;
     }
     QLabel#sourceBadge {
-        background-color: rgba(14, 165, 233, 0.18);
-        color: #7dd3fc;
-        border: 1px solid rgba(56, 189, 248, 0.30);
-        border-radius: 10px;
-        padding: 2px 9px;
+        background-color: rgba(14, 116, 144, 0.45);
+        color: #bae6fd;
+        border: 1px solid rgba(56, 189, 248, 0.65);
+        border-radius: 12px;
+        padding: 3px 12px;
         font-size: 11px;
         font-weight: 600;
     }
+    QLabel#qualityBadge {
+        background-color: rgba(15, 29, 64, 0.82);
+        color: #cbd5e1;
+        border: 1px solid rgba(56, 189, 248, 0.40);
+        border-radius: 11px;
+        padding: 2px 10px;
+        font-size: 11px;
+        font-weight: 500;
+    }
     QLabel#trackTitle {
-        color: #f8fafc;
-        font-size: 18px;
+        color: #ffffff;
+        font-size: 19px;
         font-weight: 700;
         background: transparent;
-        padding-top: 2px;
     }
     QLabel#trackArtist {
-        color: #94a3b8;
+        color: #cbd5e1;
         font-size: 13px;
+        font-weight: 500;
+        background: transparent;
+    }
+    QLabel#trackAlbum {
+        color: #94a3b8;
+        font-size: 11px;
         background: transparent;
     }
     QPushButton#playCircleBtn {
         background: qlineargradient(
             x1:0, y1:0, x2:1, y2:1,
-            stop:0 #6366f1, stop:1 #3b82f6
+            stop:0 #2563eb, stop:0.5 #4f46e5, stop:1 #7c3aed
         );
-        border: 1px solid rgba(199, 210, 254, 0.50);
-        border-radius: 27px;
+        border: 2px solid #7dd3fc;
+        border-radius: 30px;
     }
     QPushButton#playCircleBtn:hover {
         background: qlineargradient(
             x1:0, y1:0, x2:1, y2:1,
-            stop:0 #818cf8, stop:1 #60a5fa
+            stop:0 #3b82f6, stop:0.5 #6366f1, stop:1 #8b5cf6
         );
+        border-color: #ffffff;
     }
     QPushButton#playCircleBtn:pressed {
-        background-color: #4f46e5;
+        background-color: #1d4ed8;
     }
     QPushButton#iconBtn {
-        background-color: rgba(51, 65, 85, 0.58);
-        border: 1px solid rgba(148, 163, 184, 0.18);
+        background-color: rgba(15, 31, 68, 0.82);
+        border: 1.5px solid rgba(56, 189, 248, 0.65);
         border-radius: 21px;
     }
     QPushButton#iconBtn:hover {
-        background-color: rgba(71, 85, 105, 0.85);
-        border-color: rgba(165, 180, 252, 0.45);
+        background-color: rgba(30, 58, 138, 0.85);
+        border-color: #bae6fd;
+    }
+    QPushButton#iconBtnLike {
+        background-color: rgba(15, 31, 68, 0.82);
+        border: 1.5px solid rgba(56, 189, 248, 0.70);
+        border-radius: 21px;
+    }
+    QPushButton#iconBtnLike:hover {
+        background-color: rgba(14, 116, 144, 0.75);
+        border-color: #7dd3fc;
+    }
+    QPushButton#iconBtnDislike {
+        background-color: rgba(45, 18, 38, 0.72);
+        border: 1.5px solid rgba(244, 63, 94, 0.70);
+        border-radius: 21px;
+    }
+    QPushButton#iconBtnDislike:hover {
+        background-color: rgba(136, 19, 55, 0.70);
+        border-color: #fda4af;
     }
     QPushButton#iconBtnSubtle {
-        background-color: rgba(30, 41, 59, 0.48);
-        border: 1px solid rgba(148, 163, 184, 0.14);
-        border-radius: 18px;
+        background-color: rgba(15, 31, 68, 0.72);
+        border: 1px solid rgba(129, 140, 248, 0.45);
+        border-radius: 17px;
     }
     QPushButton#iconBtnSubtle:hover {
-        background-color: rgba(51, 65, 85, 0.72);
-        border-color: rgba(148, 163, 184, 0.30);
+        background-color: rgba(49, 46, 129, 0.75);
+        border-color: #a5b4fc;
     }
     QPushButton#chipBtn {
-        background-color: rgba(30, 41, 59, 0.75);
-        color: #cbd5e1;
-        border: 1px solid rgba(148, 163, 184, 0.20);
-        border-radius: 10px;
-        padding: 2px 8px;
-        font-size: 10px;
-        font-weight: 500;
+        background-color: rgba(15, 29, 64, 0.85);
+        color: #e2e8f0;
+        border: 1px solid rgba(56, 189, 248, 0.52);
+        border-radius: 12px;
+        padding: 3px 11px;
+        font-size: 11px;
+        font-weight: 600;
     }
     QPushButton#chipBtn:hover {
-        background-color: rgba(79, 70, 229, 0.38);
+        background-color: rgba(37, 99, 235, 0.55);
         color: #ffffff;
-        border-color: rgba(129, 140, 248, 0.48);
+        border-color: #7dd3fc;
+    }
+    QPushButton#quickCmdChip {
+        background: qlineargradient(
+            x1:0, y1:0, x2:1, y2:1,
+            stop:0 rgba(18, 38, 82, 0.88), stop:1 rgba(30, 27, 75, 0.88)
+        );
+        color: #e0f2fe;
+        border: 1px solid rgba(56, 189, 248, 0.48);
+        border-radius: 11px;
+        padding: 3px 9px;
+        font-size: 10px;
+        font-weight: 600;
+    }
+    QPushButton#quickCmdChip:hover {
+        background: qlineargradient(
+            x1:0, y1:0, x2:1, y2:1,
+            stop:0 rgba(37, 99, 235, 0.72), stop:1 rgba(109, 40, 217, 0.72)
+        );
+        color: #ffffff;
+        border: 1px solid #7dd3fc;
+    }
+    QPushButton#quickCmdChip:pressed {
+        background-color: #1d4ed8;
     }
     QPushButton#sendBtn {
         background: qlineargradient(
             x1:0, y1:0, x2:1, y2:1,
-            stop:0 #6366f1, stop:1 #4f46e5
+            stop:0 #38bdf8, stop:1 #2563eb
         );
-        border: 1px solid rgba(165, 180, 252, 0.42);
-        border-radius: 16px;
+        border: 1.5px solid #bae6fd;
+        border-radius: 18px;
     }
     QPushButton#sendBtn:hover {
-        background-color: #818cf8;
+        background: qlineargradient(
+            x1:0, y1:0, x2:1, y2:1,
+            stop:0 #7dd3fc, stop:1 #3b82f6
+        );
     }
     QComboBox#eqCombo {
-        background-color: rgba(30, 41, 59, 0.78);
+        background-color: rgba(15, 29, 64, 0.85);
         color: #e2e8f0;
-        border: 1px solid rgba(148, 163, 184, 0.22);
-        border-radius: 10px;
+        border: 1px solid rgba(56, 189, 248, 0.48);
+        border-radius: 12px;
         padding: 3px 10px;
         font-size: 11px;
         font-weight: 600;
-        min-width: 124px;
+        min-width: 110px;
     }
     QComboBox#eqCombo:hover {
-        border-color: rgba(129, 140, 248, 0.50);
+        border-color: #7dd3fc;
     }
     QComboBox#eqCombo::drop-down {
         border: none;
         width: 18px;
     }
     QComboBox#eqCombo QAbstractItemView {
-        background-color: #0f172a;
+        background-color: #09132b;
         color: #f8fafc;
-        border: 1px solid rgba(129, 140, 248, 0.35);
-        selection-background-color: #4f46e5;
+        border: 1px solid #38bdf8;
+        selection-background-color: #2563eb;
     }
     QSlider#trackSlider::groove:horizontal {
-        height: 5px;
-        background: rgba(51, 65, 85, 0.85);
-        border-radius: 2px;
+        height: 6px;
+        background: rgba(30, 41, 75, 0.90);
+        border: 1px solid rgba(56, 189, 248, 0.25);
+        border-radius: 3px;
     }
     QSlider#trackSlider::sub-page:horizontal {
-        background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #6366f1, stop:1 #22d3ee);
-        border-radius: 2px;
+        background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #2563eb, stop:0.6 #38bdf8, stop:1 #a5f3fc);
+        border-radius: 3px;
     }
     QSlider#trackSlider::handle:horizontal {
-        width: 11px;
-        height: 11px;
-        margin: -3px 0;
-        border-radius: 5px;
-        background: #f8fafc;
+        width: 14px;
+        height: 14px;
+        margin: -5px 0;
+        border-radius: 7px;
+        background: #ffffff;
+        border: 2px solid #38bdf8;
     }
     QSlider#volSlider::groove:horizontal {
-        height: 4px;
-        background: rgba(51, 65, 85, 0.75);
+        height: 5px;
+        background: rgba(30, 41, 75, 0.90);
         border-radius: 2px;
     }
     QSlider#volSlider::sub-page:horizontal {
-        background: rgba(148, 163, 184, 0.85);
+        background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #2563eb, stop:1 #38bdf8);
         border-radius: 2px;
     }
     QSlider#volSlider::handle:horizontal {
-        width: 10px;
-        height: 10px;
-        margin: -3px 0;
-        border-radius: 5px;
-        background: #e2e8f0;
+        width: 12px;
+        height: 12px;
+        margin: -4px 0;
+        border-radius: 6px;
+        background: #ffffff;
+        border: 2px solid #38bdf8;
     }
     QScrollArea#chatScroll {
         border: none;
         background: transparent;
     }
     QFrame#userBubble {
-        background-color: rgba(79, 70, 229, 0.46);
-        border: 1px solid rgba(129, 140, 248, 0.35);
-        border-radius: 12px;
+        background-color: rgba(23, 45, 96, 0.78);
+        border: 1px solid rgba(56, 189, 248, 0.45);
+        border-radius: 14px;
     }
     QFrame#botBubble {
-        background-color: rgba(30, 41, 59, 0.88);
-        border: 1px solid rgba(148, 163, 184, 0.18);
-        border-radius: 12px;
+        background-color: rgba(15, 29, 64, 0.84);
+        border: 1px solid rgba(129, 140, 248, 0.42);
+        border-radius: 14px;
     }
     QLineEdit#chatInput {
-        background-color: rgba(15, 23, 42, 0.82);
+        background-color: rgba(9, 19, 43, 0.85);
         color: #f8fafc;
-        border: 1px solid rgba(148, 163, 184, 0.24);
-        border-radius: 16px;
-        padding: 0 12px;
-        height: 32px;
+        border: 1.5px solid rgba(56, 189, 248, 0.48);
+        border-radius: 18px;
+        padding: 0 14px;
+        height: 36px;
         font-size: 12px;
     }
     QLineEdit#chatInput:focus {
-        border-color: #6366f1;
+        border-color: #7dd3fc;
     }
     QScrollBar:vertical {
         background: transparent;
         width: 5px;
     }
     QScrollBar::handle:vertical {
-        background: rgba(148, 163, 184, 0.3);
+        background: rgba(56, 189, 248, 0.4);
         border-radius: 2px;
     }
 """

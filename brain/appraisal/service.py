@@ -1,14 +1,7 @@
 # brain/appraisal/service.py
 # Оркестратор appraisal: event → history → policy → фраза.
-#
-# Знает про History, Policy, PhrasePicker (через _respond_and_say).
-# Не знает про очередь и потоки — это reaction.py.
-# Передаёт artist в фразу, чтобы {artist} подставился.
-#
-# I (relationship): после реакции понижаем вес артиста (penalize_artist),
-# чтобы «запомнил» стало правдой.
 
-from brain.appraisal.events import Event
+from brain.appraisal.events import Event, KIND_SKIP
 from brain.appraisal.history import History
 from brain.appraisal.policy import Policy
 from shared.log import log
@@ -21,6 +14,13 @@ class AppraisalService:
 
     def handle(self, event: Event) -> None:
         """Обработать событие. Если policy решил — сказать фразу и сбросить."""
+        if event.kind == KIND_SKIP:
+            try:
+                from personality_core import self_state as _self_state
+                _self_state.get().on_event("music_skipped")
+            except Exception:
+                pass
+
         try:
             decision = self._policy.evaluate(event)
         except Exception as e:
@@ -49,7 +49,6 @@ class AppraisalService:
         self._history.reset(decision.key)
         log(f"appraisal: реакция сказана, reset key={decision.key}", tag="BRAIN")
 
-        # I: понизить вес артиста (запомнил)
         if decision.artist:
             try:
                 from memory import memory

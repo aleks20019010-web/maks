@@ -1,27 +1,5 @@
 # personality_core/self_state.py
 # Внутреннее состояние Макса: mood, energy, valence, arousal.
-#
-# valence — это ОТКЛОНЕНИЕ от базового настроения. База зависит от энергии:
-#   energy >= 0.8 → +0.4 (довольный)
-#   energy >= 0.5 → +0.2 (спокойный)
-#   energy >= 0.2 → 0.0 (нейтральный)
-#   energy < 0.2  → -0.2 (уставший)
-#
-# События (похвала, неудачи) меняют valence временно. Потом затухает к 0.
-# mood вычисляется из (base_valence + valence) × arousal.
-#
-# Сохраняется в data/self_state.json при каждом изменении.
-# Загружается из data/self_state.json при старте.
-#
-# FIX: ENERGY_PER_COMMAND снижен с 0.01 до 0.0003. Макс создан для команд —
-#      команды не должны истощать. 0.0003 × 100 команд = 0.03 (мягко).
-# FIX: ENERGY_PER_TICK_NIGHT увеличен, чтобы за ночь (9 часов, 1080 тиков)
-#      восстанавливаться с 0 до 1.0. 1.0 / 1080 = 0.000926, округлено до 0.00093.
-#
-# P1: on_event(kind) — valence/arousal реально меняются от событий.
-#     user_praise, user_insult, music_liked, music_skipped, music_disliked,
-#     silence, morning, night. Границы [-1, +1] из констант, мягкие сдвиги.
-#     Затухание (_decay) возвращает к базе — «спасибо» приятно на пару минут.
 
 from dataclasses import dataclass, field, asdict
 import json
@@ -29,26 +7,22 @@ import os
 import time
 
 from shared import config as cfg
+from shared.log import log
 
 
-# ============================================================
-# КОНСТАНТЫ
-# ============================================================
 ENERGY_PER_TICK_DAY      = 0.000400  # 1.0 → 0.15 за 15 часов (1800 тиков)
 ENERGY_PER_TICK_NIGHT    = -0.00093  # 0.0 → 1.0 за 9 часов (1080 тиков)
-ENERGY_PER_COMMAND       = 0.0003    # от команд падает (было 0.01, потом 0.003)
+ENERGY_PER_COMMAND       = 0.0003    # от команд падает
 ENERGY_PER_SKIP          = 0.0005    # тратим за скип
 ENERGY_RECOVER_THANKS    = 0.05      # восстанавливаем от "спасибо"
 ENERGY_RESET_HELLO       = 1.0       # сбрасываем при "привет" (если >6ч)
 ENERGY_RESET_HELLO_HOURS = 6.0
 
-# Drowsy
 DROWSY_ENERGY_THRESHOLD  = 0.15
 DROWSY_IDLE_SEC          = 900.0
 DROWSY_HOUR_START        = 21
 DROWSY_HOUR_END          = 5
 
-# Отклонения
 VALENCE_POSITIVE = 0.15
 VALENCE_NEGATIVE = -0.05
 
@@ -77,7 +51,6 @@ def _is_drowsy_time_now() -> bool:
 
 
 def _base_valence(energy: float) -> float:
-    """Базовое настроение от энергии. Дворецкий доволен, если выспался."""
     if energy >= 0.8:
         return 0.4
     if energy >= 0.5:
@@ -87,9 +60,6 @@ def _base_valence(energy: float) -> float:
     return -0.2
 
 
-# ============================================================
-# SELF-STATE
-# ============================================================
 @dataclass
 class SelfState:
     mood: str = "neutral"
@@ -112,9 +82,6 @@ class SelfState:
         if not self.session_start_ts:
             self.session_start_ts = time.time()
 
-    # ========================================================
-    # СОХРАНЕНИЕ / ЗАГРУЗКА
-    # ========================================================
     def save(self):
         try:
             data = asdict(self)
@@ -123,7 +90,7 @@ class SelfState:
             with open(STATE_FILE, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
         except Exception as e:
-            print(f"⚠ self_state.save: {e}")
+            log(f"self_state.save: {e}", tag="PC", level="WARN")
 
     @classmethod
     def load(cls) -> "SelfState":
@@ -138,12 +105,9 @@ class SelfState:
             data = {k: v for k, v in data.items() if k in allowed}
             return cls(**data)
         except Exception as e:
-            print(f"⚠ self_state.load: {e}")
+            log(f"self_state.load: {e}", tag="PC", level="WARN")
             return cls()
 
-    # ========================================================
-    # ОБНОВЛЕНИЕ — команда
-    # ========================================================
     def on_command(self, intent: str = "", **kw):
         now = time.time()
         self.commands_answered += 1
@@ -179,15 +143,7 @@ class SelfState:
         self._recompute_drowsy()
         self.save()
 
-    # ========================================================
-    # ОБНОВЛЕНИЕ — событие (P1: valence/arousal реально меняются)
-    # ========================================================
     def on_event(self, kind: str, **kw):
-        """Мягкие сдвиги отклонения. Затухание (_decay) вернёт к базе.
-
-        valence — ОТКЛОНЕНИЕ от базы (см. _base_valence), не абсолют.
-        Поэтому числа маленькие: +0.08 = «чуть приятнее», не телепорт.
-        """
         if kind == "user_praise":
             self.valence = min(MAX_VALENCE, self.valence + 0.08)
             self.arousal = min(MAX_AROUSAL, self.arousal + 0.04)
@@ -195,6 +151,9 @@ class SelfState:
         elif kind == "user_insult":
             self.valence = max(MIN_VALENCE, self.valence - 0.12)
             self.arousal = min(MAX_AROUSAL, self.arousal + 0.06)
+
+        elif kind == "curious":
+            self.arousal = min(MAX_AROUSAL, self.arousal + 0.12)
 
         elif kind == "music_liked":
             self.valence = min(MAX_VALENCE, self.valence + 0.05)
@@ -223,9 +182,6 @@ class SelfState:
         self._recompute_drowsy()
         self.save()
 
-    # ========================================================
-    # ОБНОВЛЕНИЕ — тик
-    # ========================================================
     def on_tick(self, **kw):
         self.last_tick_ts = time.time()
 
@@ -247,9 +203,6 @@ class SelfState:
             self.recent_said = self.recent_said[-RECENT_SAID_MAX:]
         self.save()
 
-    # ========================================================
-    # ВНУТРЕННЕЕ
-    # ========================================================
     def _recompute_drowsy(self):
         idle = (time.time() - self.last_command_ts) if self.last_command_ts else 9999
         tired = self.energy < DROWSY_ENERGY_THRESHOLD
@@ -258,7 +211,6 @@ class SelfState:
         self.is_drowsy = bool(tired and idle_long and is_evening_night)
 
     def _decay(self):
-        """Затухание отклонения valence и arousal к базе/нейтрали."""
         if self.valence > 0:
             self.valence = max(0.0, self.valence - DECAY_RATE)
         elif self.valence < 0:
@@ -281,7 +233,6 @@ class SelfState:
             self.arousal = min(0.4, self.arousal + TICK_DECAY_RATE)
 
     def _recompute_mood(self):
-        """Mood = база (от энергии) + отклонение (valence) × arousal."""
         base_v = _base_valence(self.energy)
         v = base_v + self.valence
         a = self.arousal
@@ -309,11 +260,7 @@ class SelfState:
         else:
             self.mood = "neutral"
 
-    # ========================================================
-    # ЧТЕНИЕ
-    # ========================================================
     def effective_valence(self) -> float:
-        """Итоговое настроение с учётом базы."""
         return _base_valence(self.energy) + self.valence
 
     def is_tired(self) -> bool:
@@ -339,9 +286,6 @@ class SelfState:
                 f"cmds={self.commands_answered}{drowsy}")
 
 
-# ============================================================
-# СИНГЛТОН
-# ============================================================
 _state: SelfState | None = None
 
 

@@ -15,6 +15,14 @@
 #   берёт аппаратный OpenGL встроенной графики (Intel/AMD/NVIDIA)
 #   через ANGLE/D3D11 по умолчанию. Если понадобится аварийный
 #   обход — задать QT_OPENGL=software в окружении снаружи.
+#
+# ── COSMIC BACKDROP + MIRROR VISUALIZER (2026-11-20) ───────────
+#   Корневой виджет — CosmicBackdropWidget (звёздный фон/градиент).
+#   Верхний SpectrumVisualizerWidget (в PlayerPanel) зеркалит нижний
+#   визуализатор ChatPanel через set_mirror_visualizer(...) — оба
+#   показывают один и тот же спектр в одной «строке».
+#   Пропорция плеер/чат: 3:2 (было 3:1) — нижний визуализатор
+#   получает больше места.
 
 import os
 import signal
@@ -37,6 +45,7 @@ from shared.ui_bridge import read_music_ui, read_avatar_telemetry
 from workers.ui.chat_panel import ChatPanel
 from workers.ui.player_panel import PlayerPanel
 from workers.ui.theme import APP_STYLESHEET, make_app_icon
+from workers.ui.widgets import CosmicBackdropWidget
 
 
 class MaksMainWindow(QMainWindow):
@@ -62,20 +71,19 @@ class MaksMainWindow(QMainWindow):
         self._tick_timer.start(200)
 
     def _build_ui(self):
-        root = QWidget()
-        root.setObjectName("rootWidget")
+        root = CosmicBackdropWidget()
         self.setCentralWidget(root)
 
         layout = QVBoxLayout(root)
-        layout.setContentsMargins(14, 14, 14, 14)
-        layout.setSpacing(12)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(10)
 
         self.player_panel = PlayerPanel()
         self.chat_panel = ChatPanel()
+        self.player_panel.visualizer.set_mirror_visualizer(self.chat_panel.bottom_visualizer)
 
-        # Пропорция 3:1 — 75% плееру, 25% компактному чату
         layout.addWidget(self.player_panel, 3)
-        layout.addWidget(self.chat_panel, 1)
+        layout.addWidget(self.chat_panel, 2)
 
     def _setup_tray(self):
         self.tray = QSystemTrayIcon(self._app_icon, self)

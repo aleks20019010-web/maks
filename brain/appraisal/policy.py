@@ -1,19 +1,11 @@
 # brain/appraisal/policy.py
 # Правила appraisal: когда событие превращается в реакцию.
-#
-# Сейчас одно правило: 3 SKIP одного ключа за эпизод → REACT.
-# Кулдаун — чтобы не реагировать каждым следующим скипом.
-# «Не реагировал» хранится как None, а не 0.0 — чтобы не ловить
-# ложный кулдаун в тестах с маленьким now.
-#
-# Решение, не действие. Сброс history — в service.py.
-# artist передаётся в Decision, чтобы service мог подставить {artist} в фразу.
 
 import threading
 import time
 from dataclasses import dataclass
 
-from brain.appraisal.events import Event, KIND_SKIP
+from brain.appraisal.events import Event, KIND_SKIP, KIND_PLAY, KIND_DISLIKE
 from brain.appraisal.history import History
 
 
@@ -44,11 +36,18 @@ class Policy:
         self._last_reaction: dict[str, float] = {}
 
     def evaluate(self, event: Event, now: float | None = None) -> Decision:
-        if event.kind != KIND_SKIP:
-            return Decision(reaction=False, key=event.key())
+        key = event.key()
+
+        # Если трек дослушан или уже дизлайкнут — сбрасываем серию скипов этого ключа
+        if event.kind in (KIND_PLAY, KIND_DISLIKE):
+            if key != "unknown":
+                self._history.reset(key)
+            return Decision(reaction=False, key=key)
+
+        if event.kind != KIND_SKIP or key == "unknown":
+            return Decision(reaction=False, key=key)
 
         now = time.time() if now is None else now
-        key = event.key()
 
         count = self._history.record(event, now=now)
         if count < self._threshold:
@@ -64,5 +63,5 @@ class Policy:
             reaction=True,
             phrase_set=APPRAISAL_SKIP_PHRASE_SET,
             key=key,
-            artist=event.artist,
+            artist=event.artist.strip(),
         )

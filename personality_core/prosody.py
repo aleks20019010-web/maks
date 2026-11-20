@@ -1,43 +1,25 @@
 # personality_core/prosody.py
 # Prosody: rate, pitch, emotion, паузы, ударения, акценты.
-#
-# Не зависит от LLM. Работает по self_state.
-#
-# get_answer_style(self_state, explicit_detail) → "full" / "short" / "minimal"
-# get_rate_pitch_emotion(self_state, style) → dict
-# apply_prosody(text) → текст с разметкой Яндекса
-#
-# Словарь ударений — в personality_core/stress_words.json.
-# Загружается при импорте. Можно пополнять без правки кода.
-#
-# FIX: запятая и точка МЕЖДУ ЦИФРАМИ (4,6 / 4.6) — десятичный разделитель,
-# не пауза. Раньше «4,6» → «4 sil<[50]> 6», TTS читал «четыре, пауза, шесть».
-# Теперь: re.sub(r'(?<!\d),(?!\d)') и re.sub(r'(?<!\d)\.(?!\d)').
 
 import os
 import json
 import re
 
+from shared.log import log
 
-# ============================================================
-# ПУТИ
-# ============================================================
+
 _BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _STRESS_FILE = os.path.join(_BASE_DIR, "personality_core", "stress_words.json")
 
 
-# ============================================================
-# СЛОВАРЬ УДАРЕНИЙ
-# ============================================================
 def _load_stress_words() -> dict:
-    """Загрузить словарь ударений из JSON."""
     if not os.path.exists(_STRESS_FILE):
         return {}
     try:
         with open(_STRESS_FILE, "r", encoding="utf-8") as f:
             return json.load(f)
     except Exception as e:
-        print(f"⚠ prosody: не загрузил stress_words.json: {e}")
+        log(f"prosody: не загрузил stress_words.json: {e}", tag="PC", level="WARN")
         return {}
 
 
@@ -45,22 +27,11 @@ STRESS_WORDS = _load_stress_words()
 
 
 def reload_stress_words():
-    """Перезагрузить словарь (для отладки)."""
     global STRESS_WORDS
     STRESS_WORDS = _load_stress_words()
 
 
-# ============================================================
-# ВЫБОР ВАРИАНТА ОТВЕТА
-# ============================================================
 def get_answer_style(self_state, explicit_detail: bool = False) -> str:
-    """Выбрать full / short / minimal.
-
-    explicit_detail → full (пользователь сам попросил подробно).
-    is_drowsy → minimal.
-    energy < 0.5 → short.
-    energy >= 0.5 → full.
-    """
     if explicit_detail:
         return "full"
     if self_state is None:
@@ -72,23 +43,17 @@ def get_answer_style(self_state, explicit_detail: bool = False) -> str:
     return "full"
 
 
-# ============================================================
-# RATE / PITCH / EMOTION
-# ============================================================
 def get_rate_pitch_emotion(self_state, style: str) -> dict:
-    """Вернуть rate, pitch, emotion по self_state и стилю."""
     result = {"rate": None, "pitch": None, "emotion": None}
     if self_state is None:
         return result
 
-    # Ночь
     if style == "night":
         result["rate"] = "-12%"
         result["pitch"] = "-10Hz"
         result["emotion"] = "neutral"
         return result
 
-    # Усталость / дремлет
     if getattr(self_state, "is_drowsy", False):
         result["rate"] = "-15%"
         result["pitch"] = "-12Hz"
@@ -100,7 +65,6 @@ def get_rate_pitch_emotion(self_state, style: str) -> dict:
         result["emotion"] = "tired"
         return result
 
-    # Настроение
     mood = getattr(self_state, "mood", "neutral")
     if mood == "ironic":
         result["pitch"] = "-5Hz"
@@ -116,15 +80,14 @@ def get_rate_pitch_emotion(self_state, style: str) -> dict:
     elif mood == "excited":
         result["rate"] = "+8%"
         result["emotion"] = "good"
+    elif mood == "focused":
+        result["emotion"] = "curious"
     else:
         result["emotion"] = "neutral"
 
     return result
 
 
-# ============================================================
-# РАЗМЕТКА ТЕКСТА
-# ============================================================
 PAUSE_COMMA = "sil<[50]>"
 PAUSE_DOT = "sil<[100]>"
 PAUSE_DASH = "sil<[75]>"
@@ -132,9 +95,7 @@ PAUSE_SEMICOLON = "sil<[100]>"
 
 
 def _apply_stress(text: str) -> str:
-    """Заменить слова на ударные варианты."""
     for word, stressed in STRESS_WORDS.items():
-        # только целые слова, регистронезависимо
         text = re.sub(
             r'\b' + re.escape(word) + r'\b',
             stressed,
@@ -145,29 +106,18 @@ def _apply_stress(text: str) -> str:
 
 
 def apply_prosody(text: str) -> str:
-    """Добавить разметку: паузы вместо знаков, ударения."""
     if not text:
         return text
 
-    # ── Паузы вместо знаков ──
-    # FIX: запятая МЕЖДУ ЦИФРАМИ (4,6) — десятичный разделитель, не пауза.
     text = re.sub(r'(?<!\d),(?!\d)', f' {PAUSE_COMMA} ', text)
-
     text = text.replace(";", f" {PAUSE_SEMICOLON} ")
     text = text.replace("—", f" {PAUSE_DASH} ")
     text = text.replace("–", f" {PAUSE_DASH} ")
-
-    # FIX: точка МЕЖДУ ЦИФРАМИ (4.6) — десятичный разделитель, не пауза.
-    # Но точка в конце предложения (не между цифрами) — заменяется.
     text = re.sub(r'(?<!\d)\.(?!\d)', f' {PAUSE_DOT} ', text)
 
-    # Ударения
     text = _apply_stress(text)
-
-    # Убрать двойные пробелы
     text = re.sub(r'\s+', ' ', text).strip()
 
-    # Убрать паузу в конце (TTS сам делает паузу)
     if text.endswith(PAUSE_DOT):
         text = text[:-len(PAUSE_DOT)].strip()
     elif text.endswith(PAUSE_COMMA):

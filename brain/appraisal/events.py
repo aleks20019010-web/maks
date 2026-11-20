@@ -1,10 +1,5 @@
 # brain/appraisal/events.py
 # Нормализованное событие для appraisal.
-# Только данные, никакой логики. Логика — в history/policy/service.
-#
-# kind: SKIP, DISLIKE, PLAY
-# source: откуда пришло ("controls", "music")
-# artist / track: могут быть пустыми (например, SKIP без известного трека)
 
 from dataclasses import dataclass, field
 import time
@@ -30,11 +25,13 @@ class Event:
             raise ValueError(f"Event: неизвестный kind={self.kind!r}")
 
     def key(self) -> str:
-        """Ключ для группировки: артист, иначе трек, иначе пусто."""
-        if self.artist:
-            return f"artist:{self.artist}"
-        if self.track:
-            return f"track:{self.track}"
+        """Нормализованный ключ для группировки: артист, иначе трек, иначе unknown."""
+        norm_artist = self.artist.strip().lower()
+        if norm_artist:
+            return f"artist:{norm_artist}"
+        norm_track = self.track.strip().lower()
+        if norm_track:
+            return f"track:{norm_track}"
         return "unknown"
 
     def __str__(self) -> str:

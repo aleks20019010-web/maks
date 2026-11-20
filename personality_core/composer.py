@@ -1,41 +1,17 @@
 # personality_core/composer.py
 # Composer: сборка ответа из слотов (opening + core + closing).
-#
-# Не заменяет PhrasePicker — использует его для выбора фраз по слотам.
-# Правила слотов — в responses/composer.json.
-#
-# Новый формат composer.json:
-#   "PLAY_PLAYLIST": {"opening": "OPENING_MUSIC", "core": "PLAY_PLAYLIST", "closing": "CLOSING_MUSIC"}
-# Старый формат (для совместимости):
-#   "PLAY_PLAYLIST": ["opening", "core", "closing"]
-#
-# Между частями добавляется sil<[100]> (пауза), если часть не заканчивается
-# на точку/паузу. Чтобы TTS не склеивал «волну Поехали» в одно слово.
-#
-# FIX: добавлена подстановка {answer} (и любых {key} из subs) в фразы.
-# Нужно для llm_answer: LLM_CORE = "{answer}" → подставляется текст LLM.
-#
-# Если phrase_set нет в composer.json — возвращает None (fallback на ResponseBuilder).
-#
-# NEW (v6): перенесён из brain/composer.py в personality_core.
-#   Причина: personality_core/engine.py импортировал brain.composer —
-#   инверсия зависимостей (PC → brain). Music worker импортирует
-#   personality_core → тянул brain. Теперь composer живёт в PC,
-#   brain.composer — обёртка-реэкспорт для совместимости.
 
 import os
 import json
+import re
 
 from shared.log import log
 
 
 _COMPOSER_FILE = "composer.json"
-
-# Пауза между частями (если предыдущая не заканчивается на точку/паузу)
 _PART_PAUSE = "sil<[100]>"
-
-# Символы, после которых пауза не нужна (TTS сам сделает)
 _END_MARKS = (".", "!", "?", "…", "sil<[")
+_PLACEHOLDER_RE = re.compile(r"\{([a-zA-Z0-9_]+)\}")
 
 
 def _ends_with_pause(text: str) -> bool:
@@ -46,20 +22,23 @@ def _ends_with_pause(text: str) -> bool:
         return True
     if t.endswith(">"):
         idx = t.rfind("sil<[")
-        if idx != -1 and t.endswith(">"):
+        if idx != -1:
             return True
     return False
 
 
 def _substitute(text: str, subs: dict) -> str:
-    """Подставить {key} из subs в text. Неизвестные ключи — оставить как есть."""
+    """Однопроходная подстановка {key} из subs в text."""
     if not text or "{" not in text:
         return text
-    for key, value in subs.items():
-        if value is None:
-            continue
-        text = text.replace("{" + key + "}", str(value))
-    return text
+
+    def _repl(match):
+        key = match.group(1)
+        if key in subs and subs[key] is not None:
+            return str(subs[key])
+        return match.group(0)
+
+    return _PLACEHOLDER_RE.sub(_repl, text)
 
 
 class Composer:
@@ -111,10 +90,6 @@ class Composer:
         return None
 
     def compose(self, policy_result, ctx):
-        """Собрать ответ из слотов.
-
-        Возвращает JarvisResponse или None (если phrase_set нет в правилах).
-        """
         if policy_result is None:
             return None
         if not policy_result.phrase_set:
@@ -124,7 +99,6 @@ class Composer:
         if not slots:
             return None
 
-        # Подстановки: payload из правила + из запроса + identity
         subs = {}
         if hasattr(ctx, "_payload"):
             subs.update(ctx._payload or {})
@@ -151,7 +125,6 @@ class Composer:
             text = phrase.get("text", "")
             if not text:
                 continue
-            # FIX: подстановка {answer} и других {key} из subs
             text = _substitute(text, subs)
             parts.append(text)
             if slot == "core" and core_phrase is None:

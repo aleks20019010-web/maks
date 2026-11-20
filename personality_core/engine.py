@@ -1,26 +1,5 @@
 """
 personality_core/engine.py — PersonalityEngine, оркестратор.
-
-Поток:
-    Event → ContextBuilder → PolicyEngine → Composer → JarvisResponse
-    (fallback: → ResponseBuilder → PhrasePicker)
-
-Engine сам ничего не решает — он склеивает слои.
-Плюс: обновляет self_state (mood, energy, valence, arousal).
-Плюс: обновляет mind_stream (контекст сессии).
-Плюс: отмечает сработавшие правила для cooldown.
-Плюс: process_llm_answer — сборка ответа LLM через composer
-      (opening + core + closing) + prosody на финальный текст.
-
-v6.3 (2026-11-05): emotion из prosody НЕ применяется (кэш = warmup).
-
-v6.4 (2026-11-06): respond_event → event.type="event".
-
-── FIX (этап 0.5): print → log(tag="PC") ────────────────────────
-  Раньше engine.py шёл в stderr (print), в jarvis.log его не было.
-  Теперь: log(tag="PC", level=...).
-    [SELF] / [MIND] — DEBUG (на каждую команду, шумно в INFO).
-    ⚠ engine (ошибки) — WARN.
 """
 
 import os
@@ -80,6 +59,10 @@ class PersonalityEngine:
         from personality_core import style as _style
 
         st = _self_state.get()
+        try:
+            st.on_event("curious")
+        except Exception:
+            pass
 
         if context is not None:
             current_style = _style.pick_style(context)
@@ -104,7 +87,6 @@ class PersonalityEngine:
             if context is not None:
                 ctx = context
             else:
-                from personality_core.types import Event
                 event = Event(type="command", name="llm_answer", data=payload)
                 ctx = self._context_builder.build(event)
 
@@ -124,24 +106,25 @@ class PersonalityEngine:
                 tag="PC", level="WARN")
             composed = None
 
+        rpe = _prosody.get_rate_pitch_emotion(st, current_style)
+
         if composed is not None and composed.text:
             composed.text = _prosody.apply_prosody(composed.text)
-
-            rpe = _prosody.get_rate_pitch_emotion(st, current_style)
             if composed.rate is None and rpe.get("rate"):
                 composed.rate = rpe["rate"]
             if composed.pitch is None and rpe.get("pitch"):
                 composed.pitch = rpe["pitch"]
+            if composed.emotion is None:
+                composed.emotion = rpe.get("emotion") or "curious"
             composed.explain = f"llm_answer style={current_style} (composer+prosody)"
             return composed
 
         marked = _prosody.apply_prosody(text)
-        rpe = _prosody.get_rate_pitch_emotion(st, current_style)
         return JarvisResponse(
             text=marked,
             rate=rpe.get("rate"),
             pitch=rpe.get("pitch"),
-            emotion=None,
+            emotion=rpe.get("emotion") or "curious",
             explain=f"llm_answer style={current_style} (fallback)",
         )
 
@@ -218,6 +201,8 @@ class PersonalityEngine:
                     response.rate = rpe["rate"]
                 if response.pitch is None and rpe.get("pitch"):
                     response.pitch = rpe["pitch"]
+                if response.emotion is None and rpe.get("emotion"):
+                    response.emotion = rpe["emotion"]
             except Exception as e:
                 log(f"engine: prosody для обычной фразы: {e}",
                     tag="PC", level="WARN")
